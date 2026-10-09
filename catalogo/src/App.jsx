@@ -830,7 +830,7 @@ function CategoryDetailSection({ category, allProducts, selectedProduct, onBack,
 
   return (
     <section className="pt-28 pb-16 md:pt-36 md:pb-24 relative z-10 bg-slate-50 dark:bg-slate-900 min-h-screen transition-colors duration-300">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-[96%] 2xl:max-w-[1900px] mx-auto px-4 sm:px-6 lg:px-8">
         <button onClick={onBack} className="flex items-center gap-2 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 font-bold uppercase tracking-widest text-xs mb-8 transition-colors focus:outline-none bg-white dark:bg-slate-800 py-2 px-4 rounded-full shadow-sm border border-slate-200 dark:border-slate-700"><ArrowLeft className="w-4 h-4" /> Volver al catálogo</button>
         <div className="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-6">
           <div><PremiumTitle dark={true} className="text-3xl md:text-5xl font-bold font-exo uppercase tracking-tight mb-2">{category.name}</PremiumTitle><p className="text-slate-500 dark:text-slate-400 font-light text-base md:text-lg transition-colors">{category.description}</p></div>
@@ -859,7 +859,7 @@ function CategoryDetailSection({ category, allProducts, selectedProduct, onBack,
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 auto-rows-fr">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-3 md:gap-4 auto-rows-fr">
                   {displayProducts.map((prod, i) => (<RevealOnScroll key={prod.sku_code + i} delay={`delay-${(i % 3) * 100}`}><ProductCard product={prod} categoryName={category.name} onAddToCart={onAddToCart} onQuickView={onQuickView} isSelected={selectedProduct && selectedProduct.sku_code === prod.sku_code} /></RevealOnScroll>))}
                 </div>
                 {totalPages > 1 && (
