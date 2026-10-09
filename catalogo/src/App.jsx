@@ -134,37 +134,59 @@ function TiltCard({ children, className = "" }) {
    ========================================================================== */
 function ProductCard({ product, categoryName, onAddToCart, onQuickView, isSelected = false }) {
   const brandName = product.brand?.name || 'Multimarca';
-  return (
-    <div onClick={() => onQuickView(product, categoryName)} className={`bg-white dark:bg-slate-800 border rounded-2xl overflow-hidden flex flex-col h-full min-h-[220px] transition-all group cursor-pointer ${isSelected ? 'border-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.2)]' : 'border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-slate-500 hover:shadow-lg'}`}>
-      
-      {/* SECCIÓN DE LA IMAGEN */}
-      <div className="relative h-40 bg-slate-50 dark:bg-slate-900/50 flex items-center justify-center overflow-hidden border-b border-slate-100 dark:border-slate-700">
-        {product.image_url ? (
-          <img src={product.image_url} alt={product.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" loading="lazy" />
-        ) : (
-          <Package className="w-10 h-10 text-slate-300 dark:text-slate-600" />
-        )}
-        <div className="absolute top-3 left-3 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm text-slate-800 dark:text-slate-200 text-[10px] font-bold tracking-widest uppercase font-exo px-2 py-1 rounded shadow-sm">
+ return (
+  <div className="flex flex-col bg-slate-800 rounded-xl border border-slate-700 p-3 h-full shadow-sm hover:border-blue-500 transition-colors">
+    {/* Imagen compacta */}
+    <div 
+      className="aspect-square bg-slate-900/50 rounded-lg flex items-center justify-center mb-3 cursor-pointer overflow-hidden relative group"
+      onClick={() => onQuickView && onQuickView(product)}
+    >
+      {product.image_url ? (
+        <img src={product.image_url} alt={product.name} className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-300" />
+      ) : (
+        <Package className="w-8 h-8 text-slate-600" />
+      )}
+    </div>
+
+    {/* Info del producto comprimida */}
+    <div className="flex-grow flex flex-col">
+      {/* Código y Marca */}
+      <div className="flex items-center gap-1.5 mb-1.5">
+        <span className="text-[10px] bg-blue-900/40 text-blue-400 px-1.5 py-0.5 rounded font-mono font-bold">
           {product.sku_code}
-        </div>
+        </span>
+        {product.brand?.name && (
+          <span className="text-[10px] text-slate-400 font-bold uppercase truncate">
+            {product.brand.name}
+          </span>
+        )}
       </div>
 
-      <div className="p-5 flex flex-col flex-grow">
-        <div className="flex justify-start mb-3">
-          <span className="bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-md border border-blue-100 dark:border-blue-800 truncate max-w-full">
-            {brandName}
-          </span>
-        </div>
-        <h4 className="font-bold text-slate-800 dark:text-white text-sm md:text-base leading-tight flex-grow mb-4 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors line-clamp-2">
-          {product.name}
-        </h4>
-        <button onClick={(e) => { e.stopPropagation(); onAddToCart(product); }} className={`w-full mt-auto text-[10px] md:text-xs font-bold uppercase tracking-widest py-3 rounded-xl transition-all flex items-center justify-center gap-2 focus:outline-none ${isSelected ? 'bg-blue-600 text-white shadow-md hover:bg-slate-900' : 'bg-slate-100 dark:bg-slate-700/50 text-slate-700 dark:text-slate-300 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-500 dark:hover:text-white border border-slate-200 dark:border-slate-700'}`}>
-          <Plus className="w-3 h-3 md:w-4 md:h-4" /> Agregar Cotización
-        </button>
-      </div>
+      {/* Título (Máximo 2 renglones) */}
+      <h3 
+        className="text-xs sm:text-sm font-semibold text-white leading-tight line-clamp-2 mb-2 cursor-pointer hover:text-blue-400 transition-colors" 
+        title={product.name}
+        onClick={() => onQuickView && onQuickView(product)}
+      >
+        {product.name}
+      </h3>
+
+      {/* Precio al fondo */}
+      <p className="text-base sm:text-lg font-bold text-white mt-auto">
+        ${Number(product.price).toLocaleString('es-AR')}
+      </p>
     </div>
-  );
-}
+
+    {/* Botón de Agregar más chico */}
+    <button 
+      onClick={() => onAddToCart && onAddToCart(product)}
+      className="mt-3 w-full bg-slate-700/50 hover:bg-blue-600 text-white text-xs font-semibold py-2 rounded-lg transition-colors flex items-center justify-center gap-1"
+    >
+      <ShoppingCart className="w-3.5 h-3.5" />
+      <span>AGREGAR</span>
+    </button>
+  </div>
+);}
 
 function SkeletonCard() {
   return (
@@ -781,7 +803,7 @@ function CategoryDetailSection({ category, allProducts, selectedProduct, onBack,
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedBrandFilter, setSelectedBrandFilter] = useState('Todas');
-  const itemsPerPage = 12;
+  const itemsPerPage = 24;
 
   // Filtramos la base de datos completa para dejar solo los de esta categoría
   const baseProducts = allProducts.filter(p => p.category_id === category.id);
@@ -825,7 +847,7 @@ function CategoryDetailSection({ category, allProducts, selectedProduct, onBack,
           </div>
           <div className="flex-grow">
             {isLoading ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 auto-rows-fr">{Array.from({ length: 9 }).map((_, i) => (<SkeletonCard key={i} />))}</div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 md:gap-4 auto-rows-fr">{Array.from({ length: 24 }).map((_, i) => (<SkeletonCard key={i} />))}</div>
             ) : displayProducts.length === 0 ? (
               <div className="text-center py-20 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-3xl">
                 <Package className="w-16 h-16 mx-auto mb-4 text-slate-300 dark:text-slate-600" />
