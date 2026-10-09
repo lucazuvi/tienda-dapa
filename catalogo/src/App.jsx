@@ -307,25 +307,118 @@ function AuthModal({ isOpen, onClose, onLogin }) {
   );
 }
 
-function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, onCheckout, currentUser }) {
+import React, { useState } from 'react';
+// Asegurate de importar los iconos que usás: ShoppingCart, X, Package, Minus, Plus, Trash2, MessageSquare, Send, Settings, CheckCircle, etc.
+// Importá supabase según cómo lo tengas en tu proyecto.
+
+function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, onCheckout, currentUser, clearCart }) {
+  const [checkoutMode, setCheckoutMode] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [orderSuccess, setOrderSuccess] = useState(false);
+
   if (!isOpen) return null;
+
+  // Calculamos el total de plata en el carrito (asumiendo que item.product.price es numérico)
+  const cartTotal = cart.reduce((total, item) => total + (item.product.price * item.quantity), 0);
+
+  // Función interna para procesar el pedido
+  const handleProcessOrder = async (metodoDeEnvio) => {
+    setIsSubmitting(true);
+    
+    // Armamos el texto detallado de lo que pidió
+    let orderDetails = cart.map(item => `${item.quantity}x [${item.product.sku_code}] ${item.product.name}`).join('\n');
+    let clienteNombre = currentUser ? currentUser.name : 'Cliente Web';
+    let clienteTelefono = currentUser ? currentUser.phone : 'No registrado';
+
+    try {
+      // 1. GUARDAR EN LA BASE DE DATOS SUPABASE (SIEMPRE)
+      const { data: newOrder, error: orderError } = await supabase
+        .from('orders')
+        .insert([{
+          customer_name: clienteNombre,
+          customer_phone: clienteTelefono,
+          status: metodoDeEnvio === 'WHATSAPP' ? 'Pendiente (Vía WhatsApp)' : 'Pendiente (Vía Web)',
+          total_estimated: cartTotal,
+          notes: `DETALLE DEL PEDIDO:\n${orderDetails}`
+        }])
+        .select()
+        .single();
+
+      if (orderError) throw orderError;
+
+      // 2. ACCIONES SEGÚN EL MÉTODO ELEGIDO
+      if (metodoDeEnvio === 'WHATSAPP') {
+        // Armamos el mensajito para WPP
+        let wppText = `¡Hola DAPA Repuestos! Soy ${clienteNombre}.\n\n`;
+        wppText += `Acabo de generar el pedido web #${newOrder.id}:\n\n`;
+        cart.forEach(item => {
+           wppText += `📦 ${item.quantity}x [${item.product.sku_code}] ${item.product.name}\n`;
+        });
+        wppText += `\n💰 *Total estimado: $${cartTotal.toLocaleString('es-AR')}*`;
+
+        // REEMPLAZAR ESTE NÚMERO POR EL TUYO REAL
+        const numeroVentas = "5492478512620"; 
+        const wppUrl = `https://wa.me/${numeroVentas}?text=${encodeURIComponent(wppText)}`;
+        
+        // Abrimos WhatsApp y limpiamos el carrito
+        window.open(wppUrl, '_blank');
+        if(clearCart) clearCart();
+        onClose();
+        setCheckoutMode(false);
+      } else {
+        // Si eligió pedir por la web, le mostramos el cartel verde de éxito
+        setOrderSuccess(true);
+        if(clearCart) clearCart();
+        // Acá PODRÍAS mandar un mail automático al admin (con Resend/Supabase Edge Functions) si quisieras, 
+        // pero como revisás el panel, ya está guardado ahí.
+      }
+
+    } catch (error) {
+      console.error("Error al procesar el pedido:", error);
+      alert("Hubo un error al procesar el pedido. Por favor intentá de nuevo.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const resetAndClose = () => {
+    setOrderSuccess(false);
+    setCheckoutMode(false);
+    onClose();
+  };
 
   return (
     <div className="fixed inset-0 z-[90] flex justify-end">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity" onClick={onClose}></div>
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity" onClick={resetAndClose}></div>
       <div className="w-full max-w-md bg-white dark:bg-slate-800 h-full shadow-2xl relative z-[91] flex flex-col animate-in slide-in-from-right duration-300 border-l border-slate-200 dark:border-slate-700">
+        
+        {/* Cabecera */}
         <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/80 dark:bg-slate-900/80 backdrop-blur-md">
           <div className="flex items-center gap-3">
             <ShoppingCart className="w-6 h-6 text-slate-900 dark:text-white" />
             <h3 className="font-bold text-xl uppercase tracking-widest font-exo text-slate-900 dark:text-white">Tu Cotización</h3>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 focus:outline-none">
+          <button onClick={resetAndClose} className="text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 focus:outline-none">
             <X className="w-6 h-6" />
           </button>
         </div>
 
+        {/* Contenido principal (Carrito o Mensaje de Éxito) */}
         <div className="flex-1 overflow-y-auto p-6 bg-slate-50/30 dark:bg-slate-900/30 custom-scrollbar">
-          {cart.length === 0 ? (
+          {orderSuccess ? (
+            <div className="h-full flex flex-col items-center justify-center text-center animate-in fade-in zoom-in duration-500">
+              <div className="w-20 h-20 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mb-6">
+                <CheckCircle className="w-10 h-10 text-green-600 dark:text-green-400" />
+              </div>
+              <h3 className="text-2xl font-bold uppercase tracking-widest mb-4 dark:text-white">¡Pedido Registrado!</h3>
+              <p className="text-slate-500 dark:text-slate-400 font-light mb-8 px-4">
+                Ya guardamos tu solicitud en nuestro sistema. A la brevedad uno de nuestros asesores verificará el stock y se comunicará con vos para confirmar la entrega.
+              </p>
+              <button onClick={resetAndClose} className="text-sm font-bold uppercase tracking-widest text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400 pb-1 hover:text-slate-900 dark:hover:text-white transition-colors focus:outline-none">
+                Seguir viendo el catálogo
+              </button>
+            </div>
+          ) : cart.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-slate-400 text-center">
               <Package className="w-16 h-16 mb-4 opacity-20" />
               <p className="font-light">Tu carrito está vacío.</p>
@@ -360,20 +453,50 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, onCheck
           )}
         </div>
 
-        <div className="p-6 border-t border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.05)]">
-          <div className="mb-4 text-xs font-light text-slate-500 dark:text-slate-400 text-center bg-slate-50 dark:bg-slate-900 py-2 rounded-lg border border-slate-100 dark:border-slate-700">
-            {currentUser ? `Cotización a nombre de: ` : ''}
-            {currentUser && <strong className="font-bold text-slate-700 dark:text-slate-200">{currentUser.name}</strong>}
+        {/* Footer: Opciones de Envío */}
+        {!orderSuccess && cart.length > 0 && (
+          <div className="p-6 border-t border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.05)]">
+            <div className="mb-4 text-xs font-light text-slate-500 dark:text-slate-400 text-center bg-slate-50 dark:bg-slate-900 py-2 rounded-lg border border-slate-100 dark:border-slate-700">
+              {currentUser ? `Cotización a nombre de: ` : ''}
+              {currentUser && <strong className="font-bold text-slate-700 dark:text-slate-200">{currentUser.name}</strong>}
+            </div>
+
+            {checkoutMode ? (
+              <div className="flex flex-col gap-3 animate-in slide-in-from-bottom-2">
+                <p className="text-xs font-bold uppercase tracking-widest text-center text-slate-500 mb-2">¿Cómo querés enviar el pedido?</p>
+                <button 
+                  onClick={() => handleProcessOrder('WHATSAPP')}
+                  disabled={isSubmitting}
+                  className="w-full bg-green-500 hover:bg-green-600 text-white font-bold uppercase tracking-widest py-3 rounded-xl transition-colors flex items-center justify-center gap-3 shadow-lg shadow-green-500/20 disabled:opacity-50 focus:outline-none"
+                >
+                  {isSubmitting ? <Settings className="w-4 h-4 animate-spin" /> : <MessageSquare className="w-4 h-4" />} 
+                  Por WhatsApp
+                </button>
+                <button 
+                  onClick={() => handleProcessOrder('WEB')}
+                  disabled={isSubmitting}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-widest py-3 rounded-xl transition-colors flex items-center justify-center gap-3 shadow-lg shadow-blue-600/20 disabled:opacity-50 focus:outline-none"
+                >
+                  {isSubmitting ? <Settings className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />} 
+                  Por la Página Web
+                </button>
+                <button 
+                  onClick={() => setCheckoutMode(false)}
+                  className="w-full mt-2 py-2 text-xs font-bold uppercase tracking-widest text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors"
+                >
+                  Volver atrás
+                </button>
+              </div>
+            ) : (
+              <button 
+                onClick={() => setCheckoutMode(true)}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-widest py-4 rounded-xl transition-colors flex items-center justify-center gap-3 shadow-lg shadow-blue-600/20 focus:outline-none focus:ring-4 focus:ring-blue-300"
+              >
+                Solicitar Cotización
+              </button>
+            )}
           </div>
-          <button 
-            onClick={onCheckout}
-            disabled={cart.length === 0}
-            className="w-full bg-green-500 hover:bg-green-600 text-white font-bold uppercase tracking-widest py-4 rounded-xl transition-colors flex items-center justify-center gap-3 shadow-lg shadow-green-500/20 disabled:opacity-50 disabled:shadow-none disabled:cursor-not-allowed focus:outline-none focus:ring-4 focus:ring-green-300"
-          >
-            <MessageSquare className="w-5 h-5" /> 
-            Enviar por WhatsApp
-          </button>
-        </div>
+        )}
       </div>
     </div>
   );
@@ -947,65 +1070,72 @@ function ProcessSection({ setTutorialOpen }) {
   );
 }
 
-function BrandsSection() {
-  const brands = [
-    { name: 'BOSCH', logo: '/logos/bosch.png' }, { name: 'PHILIPS', logo: '/logos/philips.png' },
-    { name: 'OSRAM', logo: '/logos/osram.png' }, { name: 'NGK', logo: '/logos/ngk.png' },
-    { name: 'SKF', logo: '/logos/skf.png' }, { name: 'VALEO', logo: '/logos/valeo.png' },
-    { name: 'VMG', logo: '/logos/vmg.png' }, { name: 'CALORSTAT', logo: '/logos/calorstat.png' },
-    { name: 'IAEL', logo: '/logos/iael.png' }, { name: 'MOTORA', logo: '/logos/motora.png' },
-    { name: 'ACCESORIOS TEO', logo: '/logos/accesoriosteo.png' }, { name: 'FRAS-LE', logo: '/logos/fras-le.png' }
-  ];
-
-  return (
-    <section id="marcas" className="py-16 md:py-24 bg-slate-50 dark:bg-slate-900/80 relative z-10 border-t border-slate-200 dark:border-slate-800 transition-colors duration-300">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <RevealOnScroll>
-          <div className="text-center mb-10 md:mb-16">
-            <PremiumTitle dark={true} className="text-2xl sm:text-3xl md:text-4xl font-bold mb-2 md:mb-4 uppercase tracking-widest">Marcas Principales</PremiumTitle>
-            <p className="text-sm md:text-lg text-slate-500 dark:text-slate-400 font-light">Calidad original para el máximo rendimiento.</p>
-          </div>
-        </RevealOnScroll>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 md:gap-6 lg:gap-8">
-          {brands.map((marca, i) => (
-            <RevealOnScroll key={marca.name} delay={`delay-${(i % 4) * 100}`}>
-              <TiltCard>
-                <div className="p-6 md:p-8 bg-white dark:bg-slate-800 flex items-center justify-center border border-slate-200 dark:border-slate-700 rounded-3xl shadow-sm hover:shadow-xl hover:border-blue-400 transition-all duration-300 group cursor-default h-24 md:h-32">
-                  <img src={marca.logo} alt={`Logo de ${marca.name}`} className="max-w-full max-h-full object-contain filter grayscale opacity-60 group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-500 scale-90 group-hover:scale-105" loading="lazy" onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'block'; }} />
-                  <span className="hidden font-bold text-slate-400 uppercase tracking-widest text-sm text-center leading-tight">{marca.name}</span>
-                </div>
-              </TiltCard>
-            </RevealOnScroll>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
 
 function ContactSection() {
   const [formStatus, setFormStatus] = useState('idle');
   const [errorMsg, setErrorMsg] = useState('');
-  const [fileName, setFileName] = useState(''); 
+  const [fileName, setFileName] = useState('');
 
   const handleFormSubmit = async (e) => {
-    e.preventDefault(); setFormStatus('submitting'); setErrorMsg('');
+    e.preventDefault();
+    setFormStatus('submitting');
+    setErrorMsg('');
     const form = e.target;
-    if (FORMSPREE_URL.includes("tu-codigo-aqui")) {
-      setErrorMsg("⚠️ Atención: Debes reemplazar 'tu-codigo-aqui' por tu enlace real de Formspree en el código para recibir los correos.");
-      setFormStatus('error'); return;
-    }
-    const formData = new FormData(form);
+    
+    // Obtenemos los valores del formulario
+    const nombre = form.nombre.value;
+    const telefono = form.telefono.value;
+    const repuesto = form.repuesto.value;
+    const marca = form.marca.value;
+    const modelo = form.modelo.value;
+    const anio = form.anio.value;
+    const puertas = form.puertas.value;
+    const mensaje = form.mensaje.value;
+
     try {
-      const response = await fetch(FORMSPREE_URL, { method: 'POST', body: formData, headers: { 'Accept': 'application/json' } });
-      if (response.ok) { setFormStatus('success'); form.reset(); setFileName(''); } 
-      else {
-        const data = await response.json();
-        if (Object.hasOwn(data, 'errors')) setErrorMsg(data["errors"].map(error => error["message"]).join(", "));
-        else setErrorMsg("Oops! Hubo un problema enviando el formulario.");
-        setFormStatus('error');
-      }
-    } catch (error) { setErrorMsg("Error de red. Por favor intenta nuevamente."); setFormStatus('error'); }
+      // 1. GUARDAR EN EL PANEL DE ADMINISTRADOR (SUPABASE)
+      // Usamos la tabla 'orders' con un status especial para diferenciarlo de las compras del carrito
+      const { data: newOrder, error: orderError } = await supabase
+        .from('orders')
+        .insert([{
+          customer_name: nombre,
+          customer_phone: telefono,
+          status: 'Cotización Web', // Así lo identificás rápido en el admin
+          total_estimated: 0,
+          notes: `REPUESTO BUSCADO: ${repuesto}\nVEHÍCULO: ${marca} ${modelo}\nAÑO: ${anio} | PUERTAS: ${puertas}\nOBSERVACIONES: ${mensaje || 'Ninguna'}`
+        }])
+        .select()
+        .single();
+
+      if (orderError) throw orderError;
+
+      // 2. ARMAR EL MENSAJE DE WHATSAPP
+      let wppText = `¡Hola DAPA Repuestos! Soy ${nombre}.\n\n`;
+      wppText += `Estoy buscando cotizar este repuesto por la página web:\n`;
+      wppText += `🔍 *Repuesto:* ${repuesto}\n`;
+      wppText += `🚗 *Vehículo:* ${marca} ${modelo}\n`;
+      wppText += `📅 *Año:* ${anio} | 🚪 *Puertas:* ${puertas}\n`;
+      if (mensaje) wppText += `\n📝 *Notas:* ${mensaje}\n`;
+      wppText += `\n*(Cotización #${newOrder.id})*`;
+
+      // 3. ENVIAR A WHATSAPP
+      // Acá deberías poner el número limpio de DAPA (ej: 5492478512620). 
+      // Por ahora uso un número genérico, reemplazalo por el real.
+      const numeroVentas = "5492478512620"; 
+      const wppUrl = `https://wa.me/${numeroVentas}?text=${encodeURIComponent(wppText)}`;
+      
+      setFormStatus('success');
+      form.reset();
+      setFileName('');
+      
+      // Abrimos WhatsApp en una pestaña nueva
+      window.open(wppUrl, '_blank');
+
+    } catch (error) {
+      console.error(error);
+      setErrorMsg("Hubo un problema al guardar la cotización. Por favor intentá de nuevo.");
+      setFormStatus('error');
+    }
   };
 
   return (
