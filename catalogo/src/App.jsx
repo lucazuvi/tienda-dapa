@@ -534,7 +534,7 @@ function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenAuth, on
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  const isNavbarSolid = isScrolled || activePage !== 'inicio';
+const isNavbarSolid = isScrolled || activePage !== 'inicio' || mobileMenuOpen;
 
   const handleNavClick = (page, section) => { navigateTo(page, section); setMobileMenuOpen(false); setActiveDropdown(null); };
   const handleCategoryClick = (cat) => { onOpenCategory(cat); setActiveDropdown(null); setMobileMenuOpen(false); };
@@ -629,6 +629,8 @@ function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenAuth, on
       </div>
       {mobileMenuOpen && (
         <div className="lg:hidden absolute top-full left-0 w-full bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 p-6 flex flex-col gap-6 shadow-2xl animate-in slide-in-from-top-2 h-[calc(100vh-80px)] overflow-y-auto">
+          
+          {/* Buscador */}
           <div className="relative w-full mb-2">
             <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Search className="h-5 w-5 text-slate-400" /></div>
             <input type="text" value={searchTerm} onChange={handleSearchChange} placeholder="Buscar repuesto..." className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full pl-11 pr-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900" />
@@ -643,19 +645,16 @@ function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenAuth, on
               </div>
             )}
           </div>
+          
           <button onClick={() => handleNavClick('inicio', 'inicio')} className="text-left text-sm font-bold uppercase tracking-widest text-slate-800 dark:text-white">Inicio</button>
+          
           <div className="border-t border-slate-100 dark:border-slate-800 pt-4">
             <button onClick={() => handleNavClick('inicio', 'catálogo')} className="text-left text-sm font-bold uppercase tracking-widest text-blue-600 mb-4 w-full flex justify-between">Catálogo</button>
             <div className="grid grid-cols-2 gap-3 pl-4 border-l-2 border-blue-100 dark:border-slate-800">
               {categories.map(cat => (<button key={cat.id} onClick={() => handleCategoryClick(cat)} className="text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 hover:text-blue-600">{cat.name}</button>))}
             </div>
           </div>
-          <div className="border-t border-slate-100 dark:border-slate-800 pt-4">
-            <button onClick={() => handleNavClick('inicio', 'marcas')} className="text-left text-sm font-bold uppercase tracking-widest text-slate-800 dark:text-white mb-4 w-full flex justify-between">Marcas</button>
-            <div className="grid grid-cols-3 gap-3 pl-4 border-l-2 border-slate-100 dark:border-slate-800">
-              {mainBrands.map(brand => (<button key={brand} onClick={() => handleNavClick('inicio', 'marcas')} className="text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 hover:text-slate-900">{brand}</button>))}
-            </div>
-          </div>
+          
           <button onClick={() => handleNavClick('nosotros')} className="text-left text-sm font-bold uppercase tracking-widest text-slate-800 dark:text-white border-t border-slate-100 dark:border-slate-800 pt-4">Nosotros</button>
         </div>
       )}
