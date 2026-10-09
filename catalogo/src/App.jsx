@@ -132,61 +132,64 @@ function TiltCard({ children, className = "" }) {
 /* ==========================================================================
    COMPONENTES DE PRODUCTO Y MODALES (Tienda Pública)
    ========================================================================== */
-function ProductCard({ product, categoryName, onAddToCart, onQuickView, isSelected = false }) {
-  const brandName = product.brand?.name || 'Multimarca';
- return (
-  <div className="flex flex-col bg-slate-800 rounded-xl border border-slate-700 p-3 h-full shadow-sm hover:border-blue-500 transition-colors">
-    {/* Imagen compacta */}
-    <div 
-      className="aspect-square bg-slate-900/50 rounded-lg flex items-center justify-center mb-3 cursor-pointer overflow-hidden relative group"
-      onClick={() => onQuickView && onQuickView(product)}
-    >
-      {product.image_url ? (
-        <img src={product.image_url} alt={product.name} className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-300" />
-      ) : (
-        <Package className="w-8 h-8 text-slate-600" />
-      )}
-    </div>
-
-    {/* Info del producto comprimida */}
-    <div className="flex-grow flex flex-col">
-      {/* Código y Marca */}
-      <div className="flex items-center gap-1.5 mb-1.5">
-        <span className="text-[10px] bg-blue-900/40 text-blue-400 px-1.5 py-0.5 rounded font-mono font-bold">
-          {product.sku_code}
-        </span>
-        {product.brand?.name && (
-          <span className="text-[10px] text-slate-400 font-bold uppercase truncate">
-            {product.brand.name}
-          </span>
-        )}
-      </div>
-
-      {/* Título (Máximo 2 renglones) */}
-      <h3 
-        className="text-xs sm:text-sm font-semibold text-white leading-tight line-clamp-2 mb-2 cursor-pointer hover:text-blue-400 transition-colors" 
-        title={product.name}
+// Buscá esta función (seguramente en App.jsx) y reemplazala
+function ProductCard({ product, categoryName, onAddToCart, onQuickView, isSelected }) {
+  return (
+    <div className={`flex flex-col bg-slate-800 rounded-xl border p-3 shadow-sm hover:border-blue-500 hover:-translate-y-1 transition-all duration-300 ${isSelected ? 'border-blue-500 shadow-blue-500/20' : 'border-slate-700'}`}>
+      
+      {/* 1. Contenedor de la Imagen: Ahora es más bajito (h-36) en lugar de cuadrado */}
+      <div 
+        className="h-32 sm:h-36 bg-slate-900/50 rounded-lg flex items-center justify-center mb-3 cursor-pointer overflow-hidden relative group"
         onClick={() => onQuickView && onQuickView(product)}
       >
-        {product.name}
-      </h3>
-
-      {/* Precio al fondo */}
-      <p className="text-base sm:text-lg font-bold text-white mt-auto">
-        ${Number(product.price).toLocaleString('es-AR')}
-      </p>
+        {product.image_url ? (
+          // Si es una foto real, usamos object-contain para que no se recorte
+          <img src={product.image_url} alt={product.name} className="object-contain w-full h-full p-2 group-hover:scale-105 transition-transform duration-300" />
+        ) : (
+          <Package className="w-8 h-8 text-slate-600" />
+        )}
+      </div>
+  
+      {/* Info del producto */}
+      <div className="flex-grow flex flex-col">
+        {/* Código y Marca en una línea */}
+        <div className="flex items-center gap-1.5 mb-1.5 overflow-hidden">
+          <span className="text-[10px] bg-blue-900/40 text-blue-400 px-1.5 py-0.5 rounded font-mono font-bold flex-shrink-0">
+            {product.sku_code}
+          </span>
+          {product.brand?.name && (
+            <span className="text-[10px] text-slate-400 font-bold uppercase truncate">
+              {product.brand.name}
+            </span>
+          )}
+        </div>
+  
+        {/* Título: limitamos a 2 renglones con altura fija mínima para que todas las tarjetas se vean iguales */}
+        <h3 
+          className="text-xs sm:text-sm font-semibold text-white leading-tight line-clamp-2 min-h-[2.5rem] mb-2 cursor-pointer hover:text-blue-400 transition-colors" 
+          title={product.name}
+          onClick={() => onQuickView && onQuickView(product)}
+        >
+          {product.name}
+        </h3>
+  
+        {/* Precio pegado abajo */}
+        <p className="text-sm sm:text-base font-bold text-white mt-auto">
+          ${Number(product.price).toLocaleString('es-AR')}
+        </p>
+      </div>
+  
+      {/* Botón de Agregar más discreto */}
+      <button 
+        onClick={() => onAddToCart && onAddToCart(product)}
+        className="mt-3 w-full bg-slate-700/50 hover:bg-blue-600 text-white text-[11px] font-bold py-2 rounded-lg transition-colors flex items-center justify-center gap-1.5 uppercase tracking-wider"
+      >
+        <ShoppingCart className="w-3.5 h-3.5" />
+        <span>Agregar</span>
+      </button>
     </div>
-
-    {/* Botón de Agregar más chico */}
-    <button 
-      onClick={() => onAddToCart && onAddToCart(product)}
-      className="mt-3 w-full bg-slate-700/50 hover:bg-blue-600 text-white text-xs font-semibold py-2 rounded-lg transition-colors flex items-center justify-center gap-1"
-    >
-      <ShoppingCart className="w-3.5 h-3.5" />
-      <span>AGREGAR</span>
-    </button>
-  </div>
-);}
+  );
+}
 
 function SkeletonCard() {
   return (
