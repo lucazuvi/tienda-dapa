@@ -806,7 +806,7 @@ function CategoryDetailSection({ category, allProducts, selectedProduct, onBack,
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedBrandFilter, setSelectedBrandFilter] = useState('Todas');
-  const itemsPerPage = 24;
+  const itemsPerPage = 70;
 
   // Filtramos la base de datos completa para dejar solo los de esta categoría
   const baseProducts = allProducts.filter(p => p.category_id === category.id);
@@ -862,15 +862,28 @@ function CategoryDetailSection({ category, allProducts, selectedProduct, onBack,
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-3 md:gap-4 auto-rows-fr">
                   {displayProducts.map((prod, i) => (<RevealOnScroll key={prod.sku_code + i} delay={`delay-${(i % 3) * 100}`}><ProductCard product={prod} categoryName={category.name} onAddToCart={onAddToCart} onQuickView={onQuickView} isSelected={selectedProduct && selectedProduct.sku_code === prod.sku_code} /></RevealOnScroll>))}
                 </div>
-                {totalPages > 1 && (
-                  <div className="flex justify-center items-center gap-2 md:gap-4 mt-12 mb-8">
-                    <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-2 md:p-3 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 hover:shadow-md disabled:opacity-50 disabled:shadow-none disabled:cursor-not-allowed transition-all bg-transparent"><ChevronLeft className="w-5 h-5" /></button>
-                    <div className="flex items-center gap-1 md:gap-2 overflow-x-auto max-w-[200px] md:max-w-full no-scrollbar">
-                      {Array.from({ length: totalPages }).map((_, i) => (<button key={i} onClick={() => setCurrentPage(i + 1)} className={`min-w-[40px] h-10 rounded-xl text-sm font-bold transition-all ${currentPage === i + 1 ? 'bg-blue-600 text-white shadow-md shadow-blue-500/30' : 'bg-transparent border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 hover:shadow-sm'}`}>{i + 1}</button>))}
-                    </div>
-                    <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="p-2 md:p-3 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 hover:shadow-md disabled:opacity-50 disabled:shadow-none disabled:cursor-not-allowed transition-all bg-transparent"><ChevronRight className="w-5 h-5" /></button>
-                  </div>
-                )}
+            {totalPages > 1 && (
+  <div className="flex justify-center items-center gap-2 md:gap-4 mt-12 mb-8">
+    {/* Botón Atrás */}
+    <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-2 md:p-3 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 hover:shadow-md disabled:opacity-50 disabled:shadow-none disabled:cursor-not-allowed transition-all bg-transparent flex-shrink-0">
+      <ChevronLeft className="w-5 h-5" />
+    </button>
+    
+    {/* Contenedor de Números con FLEX-WRAP */}
+    <div className="flex flex-wrap justify-center items-center gap-2 max-w-full">
+      {Array.from({ length: totalPages }).map((_, i) => (
+        <button key={i} onClick={() => setCurrentPage(i + 1)} className={`min-w-[40px] h-10 rounded-xl text-sm font-bold transition-all ${currentPage === i + 1 ? 'bg-blue-600 text-white shadow-md shadow-blue-500/30' : 'bg-transparent border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 hover:shadow-sm'}`}>
+          {i + 1}
+        </button>
+      ))}
+    </div>
+
+    {/* Botón Siguiente */}
+    <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="p-2 md:p-3 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 hover:shadow-md disabled:opacity-50 disabled:shadow-none disabled:cursor-not-allowed transition-all bg-transparent flex-shrink-0">
+      <ChevronRight className="w-5 h-5" />
+    </button>
+  </div>
+)}
               </>
             )}
           </div>
