@@ -307,9 +307,6 @@ function AuthModal({ isOpen, onClose, onLogin }) {
   );
 }
 
-import React, { useState } from 'react';
-// Asegurate de importar los iconos que usás: ShoppingCart, X, Package, Minus, Plus, Trash2, MessageSquare, Send, Settings, CheckCircle, etc.
-// Importá supabase según cómo lo tengas en tu proyecto.
 
 function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, onCheckout, currentUser, clearCart }) {
   const [checkoutMode, setCheckoutMode] = useState(false);
