@@ -315,20 +315,16 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, onCheck
 
   if (!isOpen) return null;
 
-  // Calculamos el total de plata en el carrito (asumiendo que item.product.price es numérico)
   const cartTotal = cart.reduce((total, item) => total + (item.product.price * item.quantity), 0);
 
-  // Función interna para procesar el pedido
   const handleProcessOrder = async (metodoDeEnvio) => {
     setIsSubmitting(true);
     
-    // Armamos el texto detallado de lo que pidió
-    let orderDetails = cart.map(item => `${item.quantity}x [${item.product.sku_code}] ${item.product.name}`).join('\n');
     let clienteNombre = currentUser ? currentUser.name : 'Cliente Web';
     let clienteTelefono = currentUser ? currentUser.phone : 'No registrado';
 
     try {
-      // 1. GUARDAR EN LA BASE DE DATOS SUPABASE (SIEMPRE)
+      // 1. GUARDAR LA ORDEN PRINCIPAL EN 'orders'
       const { data: newOrder, error: orderError } = await supabase
         .from('orders')
         .insert([{
@@ -336,16 +332,29 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, onCheck
           customer_phone: clienteTelefono,
           status: metodoDeEnvio === 'WHATSAPP' ? 'Pendiente (Vía WhatsApp)' : 'Pendiente (Vía Web)',
           total_estimated: cartTotal,
-          notes: `DETALLE DEL PEDIDO:\n${orderDetails}`
+          notes: 'Pedido generado desde el carrito web.'
         }])
         .select()
         .single();
 
       if (orderError) throw orderError;
 
-      // 2. ACCIONES SEGÚN EL MÉTODO ELEGIDO
+      // 2. GUARDAR LOS PRODUCTOS EN 'order_items' PARA QUE APAREZCAN EN EL PANEL ADMIN
+      const itemsToInsert = cart.map(item => ({
+        order_id: newOrder.id,
+        product_id: item.product.id,
+        quantity: item.quantity,
+        unit_price: item.product.price
+      }));
+
+      const { error: itemsError } = await supabase
+        .from('order_items')
+        .insert(itemsToInsert);
+
+      if (itemsError) throw itemsError;
+
+      // 3. ACCIONES SEGÚN EL MÉTODO ELEGIDO (WhatsApp o Web)
       if (metodoDeEnvio === 'WHATSAPP') {
-        // Armamos el mensajito para WPP
         let wppText = `¡Hola DAPA Repuestos! Soy ${clienteNombre}.\n\n`;
         wppText += `Acabo de generar el pedido web #${newOrder.id}:\n\n`;
         cart.forEach(item => {
@@ -353,21 +362,16 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, onCheck
         });
         wppText += `\n💰 *Total estimado: $${cartTotal.toLocaleString('es-AR')}*`;
 
-        // REEMPLAZAR ESTE NÚMERO POR EL TUYO REAL
-        const numeroVentas = "5492478512620"; 
+        const numeroVentas = "5492478512620"; // Ya dejé tu número oficial
         const wppUrl = `https://wa.me/${numeroVentas}?text=${encodeURIComponent(wppText)}`;
         
-        // Abrimos WhatsApp y limpiamos el carrito
         window.open(wppUrl, '_blank');
         if(clearCart) clearCart();
         onClose();
         setCheckoutMode(false);
       } else {
-        // Si eligió pedir por la web, le mostramos el cartel verde de éxito
         setOrderSuccess(true);
         if(clearCart) clearCart();
-        // Acá PODRÍAS mandar un mail automático al admin (con Resend/Supabase Edge Functions) si quisieras, 
-        // pero como revisás el panel, ya está guardado ahí.
       }
 
     } catch (error) {
@@ -400,7 +404,7 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, onCheck
           </button>
         </div>
 
-        {/* Contenido principal (Carrito o Mensaje de Éxito) */}
+        {/* Contenido principal */}
         <div className="flex-1 overflow-y-auto p-6 bg-slate-50/30 dark:bg-slate-900/30 custom-scrollbar">
           {orderSuccess ? (
             <div className="h-full flex flex-col items-center justify-center text-center animate-in fade-in zoom-in duration-500">
@@ -409,7 +413,7 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, onCheck
               </div>
               <h3 className="text-2xl font-bold uppercase tracking-widest mb-4 dark:text-white">¡Pedido Registrado!</h3>
               <p className="text-slate-500 dark:text-slate-400 font-light mb-8 px-4">
-                Ya guardamos tu solicitud en nuestro sistema. A la brevedad uno de nuestros asesores verificará el stock y se comunicará con vos para confirmar la entrega.
+                Ya guardamos tu solicitud. A la brevedad uno de nuestros asesores verificará el stock y se comunicará con vos.
               </p>
               <button onClick={resetAndClose} className="text-sm font-bold uppercase tracking-widest text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400 pb-1 hover:text-slate-900 dark:hover:text-white transition-colors focus:outline-none">
                 Seguir viendo el catálogo

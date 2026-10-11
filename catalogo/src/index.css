@@ -1,2 +1,12 @@
 @import "tailwindcss";
 @custom-variant dark (&:where(.dark, .dark *));
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Agregar esto justo abajo de las importaciones de Tailwind */
+body {
+  background-color: #0f172a; /* El azul muy oscuro que usás de fondo */
+  color: #ffffff; /* Texto blanco por defecto */
+}
