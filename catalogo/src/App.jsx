@@ -331,10 +331,9 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
 
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
-  const handleSubmit = async () => {
+const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
-      // Armamos un resumen súper completo para tu panel
       const notas = `TIPO DE VENTA: Checkout Web Automático
 MÉTODO DE PAGO: ${formData.metodoPago.toUpperCase()}
 MÉTODO DE ENVÍO: ${formData.metodoEnvio.toUpperCase()}
@@ -377,8 +376,35 @@ ${formData.observaciones || 'Ninguna'}`;
       const { error: itemsError } = await supabase.from('order_items').insert(itemsToInsert);
       if (itemsError) throw itemsError;
 
-      // Terminó con éxito
-      onSuccess();
+      // 3. INTEGRACIÓN CON MERCADO PAGO
+      if (formData.metodoPago === 'mercadopago') {
+        // Llamamos a nuestro puente secreto en Vercel
+        const response = await fetch('/api/createPreference', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            orderId: newOrder.id,
+            items: cart
+          })
+        });
+        
+        const data = await response.json();
+        
+        if (data.init_point) {
+          // Vaciamos el carrito porque la compra ya se registró
+          if(onSuccess) onSuccess(true); 
+          
+          // Magia: Redirigimos al cliente a la página de cobro de Mercado Pago
+          window.location.href = data.init_point;
+          return; // Cortamos la función acá
+        } else {
+          throw new Error("No se pudo conectar con Mercado Pago");
+        }
+      }
+
+      // Si eligió Transferencia o Local, simplemente muestra el cartel verde de éxito
+      onSuccess(false);
+
     } catch (error) {
       console.error(error);
       alert("Error al procesar la compra. Intentá de nuevo.");
@@ -488,11 +514,29 @@ ${formData.observaciones || 'Ninguna'}`;
               </div>
 
               <div className="flex gap-4 mt-6">
-                <button onClick={() => setStep(2)} className="w-1/3 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 font-bold uppercase py-4 rounded-xl" disabled={isSubmitting}>Volver</button>
-                <button onClick={handleSubmit} disabled={isSubmitting} className="w-2/3 bg-green-500 hover:bg-green-600 text-white font-bold uppercase py-4 rounded-xl flex items-center justify-center gap-2">
-                  {isSubmitting ? <Settings className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />}
-                  Finalizar Compra
+                <div className="flex gap-4 mt-6">
+                <button onClick={() => setStep(2)} className="w-1/3 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 font-bold uppercase py-4 rounded-xl" disabled={isSubmitting}>
+                  Volver
                 </button>
+                
+                {formData.metodoPago === 'mercadopago' ? (
+                  <button onClick={handleSubmit} disabled={isSubmitting} className="w-2/3 bg-[#009EE3] hover:bg-[#008ACA] text-white font-bold py-4 rounded-xl flex items-center justify-center gap-3 transition-colors shadow-lg shadow-blue-500/20">
+                    {isSubmitting ? (
+                      <Settings className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <div className="flex items-center gap-2 justify-center">
+                        <svg viewBox="0 0 100 100" className="w-6 h-6 flex-shrink-0 fill-current"><path d="M50 0C22.4 0 0 22.4 0 50s22.4 50 50 50 50-22.4 50-50S77.6 0 50 0zm0 82.5c-17.9 0-32.5-14.6-32.5-32.5S32.1 17.5 50 17.5 82.5 32.1 82.5 50 72.1 82.5 50 82.5zM67.3 43.1c-1.3-1.3-3.4-1.3-4.7 0l-12.8 12.8-5.7-5.7c-1.3-1.3-3.4-1.3-4.7 0-1.3 1.3-1.3 3.4 0 4.7l8 8c.6.6 1.5.9 2.3.9.8 0 1.7-.3 2.3-.9l15.2-15.2c1.4-1.2 1.4-3.3.1-4.6z"/></svg>
+                        <span className="uppercase tracking-wide text-xs sm:text-sm">Pagar con Mercado Pago</span>
+                      </div>
+                    )}
+                  </button>
+                ) : (
+                  <button onClick={handleSubmit} disabled={isSubmitting} className="w-2/3 bg-green-500 hover:bg-green-600 text-white font-bold uppercase py-4 rounded-xl flex items-center justify-center gap-2 transition-colors">
+                    {isSubmitting ? <Settings className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />}
+                    Confirmar Pedido
+                  </button>
+                )}
+              </div>
               </div>
             </div>
           )}
@@ -608,8 +652,7 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, onCheck
     onClose();
   };
 
-// Si showWebCheckout es true, renderizamos el modal de pantalla completa por encima
-  if (showWebCheckout) {
+if (showWebCheckout) {
     return (
       <CheckoutModal 
         isOpen={true}
@@ -617,12 +660,19 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, onCheck
         cartTotal={cartTotal}
         currentUser={currentUser}
         onClose={() => setShowWebCheckout(false)}
-        onSuccess={() => {
-          setOrderSuccess(true); // Mostramos la pantalla verde final en el carrito
-          setShowWebCheckout(false); // Cerramos el modal de los pasos
-          if(clearCart) clearCart(); // Vaciamos el changuito
+        onSuccess={(isMp) => {
+          if (isMp) {
+            // Si es Mercado Pago: solo vaciamos el carrito en silencio.
+            // (La página saltará sola al link de cobro en un instante)
+            if(clearCart) clearCart(); 
+          } else {
+            // Si es Transferencia o Acordar: cerramos el modal y mostramos tu cartel verde
+            setOrderSuccess(true);
+            setShowWebCheckout(false);
+            if(clearCart) clearCart();
+          }
         }}
-      />
+      />  
     );
   }
 
