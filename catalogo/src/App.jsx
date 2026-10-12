@@ -307,11 +307,231 @@ function AuthModal({ isOpen, onClose, onLogin }) {
   );
 }
 
+function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUser }) {
+  const [step, setStep] = useState(1);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formData, setFormData] = useState({
+    email: currentUser?.email || '',
+    nombre: currentUser?.name || '',
+    apellido: '',
+    dni: '',
+    telefono: currentUser?.phone || '',
+    metodoEnvio: 'domicilio',
+    calle: '',
+    numero: '',
+    piso: '',
+    ciudad: 'Arrecifes',
+    provincia: 'Buenos Aires',
+    cp: '2740',
+    metodoPago: 'mercadopago',
+    observaciones: ''
+  });
+
+  if (!isOpen) return null;
+
+  const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
+
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+    try {
+      // Armamos un resumen súper completo para tu panel
+      const notas = `TIPO DE VENTA: Checkout Web Automático
+MÉTODO DE PAGO: ${formData.metodoPago.toUpperCase()}
+MÉTODO DE ENVÍO: ${formData.metodoEnvio.toUpperCase()}
+---------------------------------
+DATOS DEL CLIENTE:
+Nombre: ${formData.nombre} ${formData.apellido}
+DNI: ${formData.dni}
+Teléfono: ${formData.telefono}
+Email: ${formData.email}
+---------------------------------
+DOMICILIO:
+${formData.calle} ${formData.numero} ${formData.piso ? 'Piso/Dpto: ' + formData.piso : ''}
+${formData.ciudad}, ${formData.provincia} (CP: ${formData.cp})
+---------------------------------
+OBSERVACIONES:
+${formData.observaciones || 'Ninguna'}`;
+
+      // 1. Guardar orden en Supabase
+      const { data: newOrder, error: orderError } = await supabase
+        .from('orders')
+        .insert([{
+          customer_name: `${formData.nombre} ${formData.apellido}`,
+          customer_phone: formData.telefono,
+          status: 'Pendiente (Vía Web)',
+          total_estimated: cartTotal,
+          notes: notas
+        }])
+        .select().single();
+
+      if (orderError) throw orderError;
+
+      // 2. Guardar repuestos en order_items
+      const itemsToInsert = cart.map(item => ({
+        order_id: newOrder.id,
+        product_id: item.product.id,
+        quantity: item.quantity,
+        unit_price: item.product.price
+      }));
+
+      const { error: itemsError } = await supabase.from('order_items').insert(itemsToInsert);
+      if (itemsError) throw itemsError;
+
+      // Terminó con éxito
+      onSuccess();
+    } catch (error) {
+      console.error(error);
+      alert("Error al procesar la compra. Intentá de nuevo.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[1000] bg-slate-50 dark:bg-slate-900 overflow-y-auto flex flex-col transition-colors">
+      {/* HEADER DEL CHECKOUT */}
+      <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-4 sticky top-0 z-10 shadow-sm flex items-center justify-between">
+        <h2 className="font-michroma text-xl font-bold text-slate-900 dark:text-white ml-4">D.A.P.A <span className="text-[10px] font-exo tracking-[0.2em] uppercase text-slate-500">Checkout</span></h2>
+        <button onClick={onClose} className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full"><X className="w-6 h-6" /></button>
+      </div>
+
+      <div className="flex-1 max-w-5xl mx-auto w-full p-4 sm:p-6 lg:p-8 flex flex-col lg:flex-row gap-8">
+        {/* COLUMNA IZQUIERDA: FORMULARIO */}
+        <div className="flex-1">
+          {/* BARRA DE PROGRESO */}
+          <div className="flex items-center justify-between mb-8 border-b border-slate-200 dark:border-slate-700 pb-4">
+            <div className={`flex-1 text-center font-bold text-xs uppercase tracking-widest ${step >= 1 ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`}>1. Envío</div>
+            <div className={`flex-1 text-center font-bold text-xs uppercase tracking-widest border-l border-slate-200 dark:border-slate-700 ${step >= 2 ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`}>2. Pago</div>
+            <div className={`flex-1 text-center font-bold text-xs uppercase tracking-widest border-l border-slate-200 dark:border-slate-700 ${step >= 3 ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`}>3. Revisión</div>
+          </div>
+
+          {/* PASO 1: DATOS Y ENVÍO */}
+          {step === 1 && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+              <h3 className="font-bold text-lg text-slate-800 dark:text-white uppercase">Datos de Contacto y Envío</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <input type="email" name="email" value={formData.email} onChange={handleChange} placeholder="Email" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
+                <input type="text" name="telefono" value={formData.telefono} onChange={handleChange} placeholder="Teléfono" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
+                <input type="text" name="nombre" value={formData.nombre} onChange={handleChange} placeholder="Nombre" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
+                <input type="text" name="apellido" value={formData.apellido} onChange={handleChange} placeholder="Apellido" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
+                <input type="text" name="dni" value={formData.dni} onChange={handleChange} placeholder="DNI / CUIT" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
+              </div>
+
+              <h4 className="font-bold text-sm text-slate-800 dark:text-white uppercase mt-6 mb-2">Domicilio de Entrega</h4>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                <input type="text" name="calle" value={formData.calle} onChange={handleChange} placeholder="Calle" className="col-span-2 p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
+                <input type="text" name="numero" value={formData.numero} onChange={handleChange} placeholder="Número" className="p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
+                <input type="text" name="piso" value={formData.piso} onChange={handleChange} placeholder="Piso/Dpto (Opcional)" className="p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
+                <input type="text" name="ciudad" value={formData.ciudad} onChange={handleChange} placeholder="Ciudad" className="p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
+                <input type="text" name="cp" value={formData.cp} onChange={handleChange} placeholder="Cód. Postal" className="p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
+              </div>
+              
+              <button onClick={() => setStep(2)} disabled={!formData.nombre || !formData.calle || !formData.telefono} className="w-full mt-6 bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase py-4 rounded-xl disabled:opacity-50">Siguiente Paso</button>
+            </div>
+          )}
+
+          {/* PASO 2: PAGO */}
+          {step === 2 && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+              <h3 className="font-bold text-lg text-slate-800 dark:text-white uppercase">Método de Pago</h3>
+              
+              <div className="space-y-3">
+                <label className={`flex items-center gap-4 p-4 rounded-xl border cursor-pointer transition-colors ${formData.metodoPago === 'mercadopago' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800'}`}>
+                  <input type="radio" name="metodoPago" value="mercadopago" checked={formData.metodoPago === 'mercadopago'} onChange={handleChange} className="w-5 h-5 text-blue-600" />
+                  <div>
+                    <span className="font-bold text-slate-900 dark:text-white block">Mercado Pago</span>
+                    <span className="text-xs text-slate-500">Tarjetas de crédito, débito o dinero en cuenta</span>
+                  </div>
+                </label>
+                
+                <label className={`flex items-center gap-4 p-4 rounded-xl border cursor-pointer transition-colors ${formData.metodoPago === 'transferencia' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800'}`}>
+                  <input type="radio" name="metodoPago" value="transferencia" checked={formData.metodoPago === 'transferencia'} onChange={handleChange} className="w-5 h-5 text-blue-600" />
+                  <div>
+                    <span className="font-bold text-slate-900 dark:text-white block">Transferencia Bancaria</span>
+                    <span className="text-xs text-slate-500">Alias o CBU (Coordinamos por WhatsApp)</span>
+                  </div>
+                </label>
+                
+                <label className={`flex items-center gap-4 p-4 rounded-xl border cursor-pointer transition-colors ${formData.metodoPago === 'acordar' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800'}`}>
+                  <input type="radio" name="metodoPago" value="acordar" checked={formData.metodoPago === 'acordar'} onChange={handleChange} className="w-5 h-5 text-blue-600" />
+                  <div>
+                    <span className="font-bold text-slate-900 dark:text-white block">Acordar en el local</span>
+                    <span className="text-xs text-slate-500">Pagás en efectivo al retirar en mostrador</span>
+                  </div>
+                </label>
+              </div>
+
+              <textarea name="observaciones" value={formData.observaciones} onChange={handleChange} placeholder="Notas del pedido (Opcional)" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-24 resize-none mt-4"></textarea>
+
+              <div className="flex gap-4 mt-6">
+                <button onClick={() => setStep(1)} className="w-1/3 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 font-bold uppercase py-4 rounded-xl">Volver</button>
+                <button onClick={() => setStep(3)} className="w-2/3 bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase py-4 rounded-xl">Siguiente Paso</button>
+              </div>
+            </div>
+          )}
+
+          {/* PASO 3: REVISIÓN Y FINALIZAR */}
+          {step === 3 && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+              <h3 className="font-bold text-lg text-slate-800 dark:text-white uppercase">Revisión Final</h3>
+              
+              <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 space-y-4">
+                <div>
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Enviar a:</h4>
+                  <p className="text-slate-900 dark:text-white font-medium">{formData.nombre} {formData.apellido} ({formData.telefono})</p>
+                  <p className="text-slate-600 dark:text-slate-400 text-sm">{formData.calle} {formData.numero} {formData.piso && `Piso ${formData.piso}`}, {formData.ciudad}, {formData.provincia}</p>
+                </div>
+                <div className="border-t border-slate-100 dark:border-slate-700 pt-4">
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Método de pago:</h4>
+                  <p className="text-slate-900 dark:text-white font-medium capitalize">{formData.metodoPago.replace('mercadopago', 'Mercado Pago')}</p>
+                </div>
+              </div>
+
+              <div className="flex gap-4 mt-6">
+                <button onClick={() => setStep(2)} className="w-1/3 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 font-bold uppercase py-4 rounded-xl" disabled={isSubmitting}>Volver</button>
+                <button onClick={handleSubmit} disabled={isSubmitting} className="w-2/3 bg-green-500 hover:bg-green-600 text-white font-bold uppercase py-4 rounded-xl flex items-center justify-center gap-2">
+                  {isSubmitting ? <Settings className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />}
+                  Finalizar Compra
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* COLUMNA DERECHA: RESUMEN DEL CARRITO */}
+        <div className="lg:w-96 flex-shrink-0">
+          <div className="bg-slate-100 dark:bg-slate-800 p-6 rounded-2xl sticky top-24">
+            <h3 className="font-bold text-slate-900 dark:text-white uppercase mb-4">Resumen de Compra</h3>
+            <div className="space-y-3 mb-6 max-h-[40vh] overflow-y-auto custom-scrollbar pr-2">
+              {cart.map(item => (
+                <div key={item.product.sku_code} className="flex justify-between items-start gap-4">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800 dark:text-white leading-tight line-clamp-2">{item.quantity}x {item.product.name}</p>
+                    <p className="text-xs text-slate-500">{item.product.sku_code}</p>
+                  </div>
+                  <p className="text-sm font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                    ${(item.product.price * item.quantity).toLocaleString('es-AR')}
+                  </p>
+                </div>
+              ))}
+            </div>
+            <div className="border-t border-slate-300 dark:border-slate-700 pt-4 flex justify-between items-end">
+              <span className="font-bold text-slate-600 dark:text-slate-400">TOTAL</span>
+              <span className="text-2xl font-bold text-slate-900 dark:text-white">${cartTotal.toLocaleString('es-AR')}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, onCheckout, currentUser, clearCart }) {
   const [checkoutMode, setCheckoutMode] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
+  const [showWebCheckout, setShowWebCheckout] = useState(false);
 
   if (!isOpen) return null;
 
@@ -388,10 +608,28 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, onCheck
     onClose();
   };
 
+// Si showWebCheckout es true, renderizamos el modal de pantalla completa por encima
+  if (showWebCheckout) {
+    return (
+      <CheckoutModal 
+        isOpen={true}
+        cart={cart}
+        cartTotal={cartTotal}
+        currentUser={currentUser}
+        onClose={() => setShowWebCheckout(false)}
+        onSuccess={() => {
+          setOrderSuccess(true); // Mostramos la pantalla verde final en el carrito
+          setShowWebCheckout(false); // Cerramos el modal de los pasos
+          if(clearCart) clearCart(); // Vaciamos el changuito
+        }}
+      />
+    );
+  }
+
   return (
-    <div className="fixed inset-0 z-[90] flex justify-end">
+    <div className="fixed inset-0 z-[999] flex justify-end">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity" onClick={resetAndClose}></div>
-      <div className="w-full max-w-md bg-white dark:bg-slate-800 h-full shadow-2xl relative z-[91] flex flex-col animate-in slide-in-from-right duration-300 border-l border-slate-200 dark:border-slate-700">
+      <div className="w-full max-w-md bg-white dark:bg-slate-800 h-full shadow-2xl relative z-[1000] flex flex-col animate-in slide-in-from-right duration-300 border-l border-slate-200 dark:border-slate-700">
         
         {/* Cabecera */}
         <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/80 dark:bg-slate-900/80 backdrop-blur-md">
@@ -474,13 +712,12 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, onCheck
                   Por WhatsApp
                 </button>
                 <button 
-                  onClick={() => handleProcessOrder('WEB')}
-                  disabled={isSubmitting}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-widest py-3 rounded-xl transition-colors flex items-center justify-center gap-3 shadow-lg shadow-blue-600/20 disabled:opacity-50 focus:outline-none"
-                >
-                  {isSubmitting ? <Settings className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />} 
-                  Por la Página Web
-                </button>
+  onClick={() => setShowWebCheckout(true)}
+  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-widest py-3 rounded-xl transition-colors flex items-center justify-center gap-3 shadow-lg shadow-blue-600/20 focus:outline-none"
+>
+  <Send className="w-4 h-4" /> 
+  Por la Página Web 
+</button>
                 <button 
                   onClick={() => setCheckoutMode(false)}
                   className="w-full mt-2 py-2 text-xs font-bold uppercase tracking-widest text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors"
