@@ -267,41 +267,168 @@ function QuickViewModal({ product, categoryName, isOpen, onClose, onAddToCart })
   );
 }
 
-function AuthModal({ isOpen, onClose, onLogin }) {
+
+
+function AuthModal({ isOpen, onClose, onLogin }) { // <-- Agregamos onLogin acá
+  const [isLogin, setIsLogin] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  
+  // Estados del formulario
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [nombre, setNombre] = useState('');
+  const [apellido, setApellido] = useState('');
+  const [telefono, setTelefono] = useState('');
+
   if (!isOpen) return null;
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    const formData = new FormData(e.target);
-    onLogin({ name: formData.get('name'), phone: formData.get('phone') });
+  const handleGoogleLogin = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin
+        }
+      });
+      if (error) throw error;
+    } catch (error) {
+      setError(error.message);
+      setLoading(false);
+    }
   };
 
+  const handleEmailAuth = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      if (isLogin) {
+        // INICIAR SESIÓN CON EMAIL
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (error) throw error;
+        
+        // Le pasamos los datos a tu App.jsx para que actualice la barra superior
+        onLogin({
+          name: data.user.user_metadata.name || email.split('@')[0],
+          phone: data.user.user_metadata.phone || '',
+          email: data.user.email
+        });
+        
+      } else {
+        // CREAR CUENTA NUEVA
+        if (!nombre || !apellido) throw new Error("El nombre y apellido son obligatorios");
+        
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              name: `${nombre} ${apellido}`,
+              phone: telefono || ''
+            }
+          }
+        });
+        
+        if (error) throw error;
+        alert("¡Cuenta creada! Revisa tu email para confirmarla (si está configurado) o iniciá sesión.");
+        setIsLogin(true); // Lo pasamos a la pantalla de login
+      }
+    } catch (error) {
+      setError(error.message === "Invalid login credentials" ? "Email o contraseña incorrectos" : error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ... (De acá para abajo sigue igual el return con el diseño del modal) ...
+
   return (
-    <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-300">
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md p-6 sm:p-8 relative animate-in zoom-in-95 duration-300 border border-slate-100 dark:border-slate-700">
-        <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors focus:outline-none">
-          <X className="w-6 h-6" />
-        </button>
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-blue-50 dark:bg-slate-700 border border-blue-100 dark:border-slate-600 rounded-full flex items-center justify-center mx-auto mb-4">
-            <User className="w-8 h-8 text-blue-600 dark:text-blue-400" />
-          </div>
-          <PremiumTitle dark={true} className="text-2xl font-bold uppercase tracking-widest mb-2">Ingresar Datos</PremiumTitle>
-          <p className="text-sm text-slate-500 dark:text-slate-400 font-light">Para poder armar tu carrito de cotización, necesitamos saber quién sos.</p>
-        </div>
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div className="space-y-2">
-            <label htmlFor="auth_name" className="text-xs font-bold uppercase tracking-widest text-slate-400">Nombre o Taller</label>
-            <input id="auth_name" name="name" required minLength="3" type="text" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-lg outline-none focus:border-blue-500 dark:focus:border-blue-500 focus:bg-white dark:focus:bg-slate-800 transition-colors text-sm text-slate-800 dark:text-white" placeholder="Ej: Juan Pérez" />
-          </div>
-          <div className="space-y-2">
-            <label htmlFor="auth_phone" className="text-xs font-bold uppercase tracking-widest text-slate-400">Teléfono / WhatsApp</label>
-            <input id="auth_phone" name="phone" required minLength="8" type="tel" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-lg outline-none focus:border-blue-500 dark:focus:border-blue-500 focus:bg-white dark:focus:bg-slate-800 transition-colors text-sm text-slate-800 dark:text-white" placeholder="Ej: +54 9 2478..." />
-          </div>
-          <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-widest py-4 rounded-lg transition-colors mt-4 shadow-lg focus:outline-none focus:ring-4 focus:ring-blue-300">
-            Continuar
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 sm:p-0">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose}></div>
+      
+      <div className="bg-white dark:bg-slate-800 w-full max-w-md rounded-2xl shadow-2xl relative z-10 overflow-hidden animate-in zoom-in-95 duration-200">
+        
+        {/* Cabecera */}
+        <div className="flex justify-between items-center p-6 border-b border-slate-100 dark:border-slate-700">
+          <h2 className="text-xl font-bold text-slate-800 dark:text-white uppercase tracking-widest">
+            {isLogin ? 'Iniciar Sesión' : 'Crear Cuenta'}
+          </h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors">
+            <X className="w-6 h-6" />
           </button>
-        </form>
+        </div>
+
+        <div className="p-6">
+          {/* Botón de Google (Siempre visible) */}
+          <button 
+            onClick={handleGoogleLogin} 
+            disabled={loading}
+            className="w-full flex items-center justify-center gap-3 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-white font-bold py-3 px-4 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors focus:outline-none mb-6"
+          >
+            <svg viewBox="0 0 24 24" className="w-5 h-5"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+            Continuar con Google
+          </button>
+
+          <div className="flex items-center gap-4 mb-6">
+            <div className="flex-1 border-t border-slate-200 dark:border-slate-700"></div>
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">o con tu email</span>
+            <div className="flex-1 border-t border-slate-200 dark:border-slate-700"></div>
+          </div>
+
+          {error && (
+            <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-3 rounded-lg text-sm mb-4 font-medium">
+              {error}
+            </div>
+          )}
+
+          {/* Formulario de Email */}
+          <form onSubmit={handleEmailAuth} className="space-y-4">
+            {!isLogin && (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Nombre</label>
+                  <input type="text" required value={nombre} onChange={e => setNombre(e.target.value)} className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:border-blue-500 focus:outline-none" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Apellido</label>
+                  <input type="text" required value={apellido} onChange={e => setApellido(e.target.value)} className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:border-blue-500 focus:outline-none" />
+                </div>
+                <div className="space-y-1 col-span-2">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Teléfono (Opcional)</label>
+                  <input type="text" value={telefono} onChange={e => setTelefono(e.target.value)} className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:border-blue-500 focus:outline-none" />
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Email</label>
+              <input type="email" required value={email} onChange={e => setEmail(e.target.value)} className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:border-blue-500 focus:outline-none" />
+            </div>
+            
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Contraseña</label>
+              <input type="password" required value={password} onChange={e => setPassword(e.target.value)} className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:border-blue-500 focus:outline-none" />
+            </div>
+
+            <button type="submit" disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-widest py-3 rounded-xl transition-colors mt-2">
+              {loading ? 'Cargando...' : isLogin ? 'Ingresar' : 'Crear Cuenta'}
+            </button>
+          </form>
+
+          {/* Toggle entre Login y Register */}
+          <div className="mt-6 text-center">
+            <button onClick={() => {setIsLogin(!isLogin); setError('');}} type="button" className="text-sm text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 font-medium">
+              {isLogin ? '¿No tenés cuenta? Registrate gratis' : '¿Ya tenés cuenta? Iniciá sesión'}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -330,6 +457,31 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
   if (!isOpen) return null;
 
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
+  const handleSiguientePaso = () => {
+    setFormError(''); // Limpiamos errores previos
+    
+    // Validar Email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) return setFormError('Por favor, ingresá un correo electrónico válido.');
+    
+    // Validar Nombre y Apellido (mínimo 3 letras, sin números)
+    if (formData.nombre.trim().length < 3 || formData.apellido.trim().length < 3) return setFormError('El nombre y apellido deben ser reales.');
+    
+    // Validar DNI (7 u 8 números, eliminando puntos si los puso)
+    const dniLimpio = formData.dni.replace(/\D/g, '');
+    if (dniLimpio.length < 7 || dniLimpio.length > 8) return setFormError('El DNI debe tener 7 u 8 números válidos.');
+    
+    // Validar Teléfono (mínimo 10 números para Argentina: cód área + número)
+    const telLimpio = formData.telefono.replace(/\D/g, '');
+    if (telLimpio.length < 10) return setFormError('Ingresá un teléfono válido con código de área (ej: 2478512620).');
+    
+    // Validar Dirección
+    if (formData.calle.trim().length < 3 || formData.numero.trim() === '') return setFormError('Por favor, completá correctamente la dirección.');
+
+    // Si pasó todas las pruebas, avanzamos al pago
+    setStep(2);
+  };
+  const [formError, setFormError] = useState('');
 
 const handleSubmit = async () => {
     setIsSubmitting(true);
@@ -435,24 +587,67 @@ ${formData.observaciones || 'Ninguna'}`;
           {step === 1 && (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
               <h3 className="font-bold text-lg text-slate-800 dark:text-white uppercase">Datos de Contacto y Envío</h3>
+              
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <input type="email" name="email" value={formData.email} onChange={handleChange} placeholder="Email" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
-                <input type="text" name="telefono" value={formData.telefono} onChange={handleChange} placeholder="Teléfono" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
-                <input type="text" name="nombre" value={formData.nombre} onChange={handleChange} placeholder="Nombre" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
-                <input type="text" name="apellido" value={formData.apellido} onChange={handleChange} placeholder="Apellido" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
-                <input type="text" name="dni" value={formData.dni} onChange={handleChange} placeholder="DNI / CUIT" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
+                <div className="space-y-1">
+                  <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Email</label>
+                  <input type="email" name="email" value={formData.email} onChange={handleChange} placeholder="ejemplo@correo.com" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Teléfono</label>
+                  <input type="text" name="telefono" value={formData.telefono} onChange={handleChange} placeholder="Ej: 2478512620" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Nombre</label>
+                  <input type="text" name="nombre" value={formData.nombre} onChange={handleChange} placeholder="Tu nombre" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Apellido</label>
+                  <input type="text" name="apellido" value={formData.apellido} onChange={handleChange} placeholder="Tu apellido" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
+                </div>
+                <div className="space-y-1 sm:col-span-2">
+                  <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">DNI / CUIT</label>
+                  <input type="text" name="dni" value={formData.dni} onChange={handleChange} placeholder="Sin puntos ni guiones" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
+                </div>
               </div>
 
-              <h4 className="font-bold text-sm text-slate-800 dark:text-white uppercase mt-6 mb-2">Domicilio de Entrega</h4>
+              <h4 className="font-bold text-sm text-slate-800 dark:text-white uppercase mt-6 mb-2 border-t border-slate-200 dark:border-slate-700 pt-6">Domicilio de Entrega</h4>
+              
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                <input type="text" name="calle" value={formData.calle} onChange={handleChange} placeholder="Calle" className="col-span-2 p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
-                <input type="text" name="numero" value={formData.numero} onChange={handleChange} placeholder="Número" className="p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
-                <input type="text" name="piso" value={formData.piso} onChange={handleChange} placeholder="Piso/Dpto (Opcional)" className="p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
-                <input type="text" name="ciudad" value={formData.ciudad} onChange={handleChange} placeholder="Ciudad" className="p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
-                <input type="text" name="cp" value={formData.cp} onChange={handleChange} placeholder="Cód. Postal" className="p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
+                <div className="space-y-1 col-span-2">
+                  <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Calle</label>
+                  <input type="text" name="calle" value={formData.calle} onChange={handleChange} placeholder="Ej: San Martín" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Número</label>
+                  <input type="text" name="numero" value={formData.numero} onChange={handleChange} placeholder="Ej: 123" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Piso / Dpto</label>
+                  <input type="text" name="piso" value={formData.piso} onChange={handleChange} placeholder="Opcional" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Ciudad</label>
+                  <input type="text" name="ciudad" value={formData.ciudad} onChange={handleChange} className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none cursor-not-allowed" readOnly />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Cód. Postal</label>
+                  <input type="text" name="cp" value={formData.cp} onChange={handleChange} className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none cursor-not-allowed" readOnly />
+                </div>
               </div>
               
-              <button onClick={() => setStep(2)} disabled={!formData.nombre || !formData.calle || !formData.telefono} className="w-full mt-6 bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase py-4 rounded-xl disabled:opacity-50">Siguiente Paso</button>
+              {formError && (
+                <div className="bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 p-4 mt-4 animate-in fade-in">
+                  <p className="text-red-700 dark:text-red-400 text-sm font-bold">{formError}</p>
+                </div>
+              )}
+              
+              <button 
+                onClick={handleSiguientePaso} 
+                className="w-full mt-6 bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase py-4 rounded-xl transition-colors"
+              >
+                Siguiente Paso
+              </button>
             </div>
           )}
 
@@ -513,30 +708,47 @@ ${formData.observaciones || 'Ninguna'}`;
                 </div>
               </div>
 
-              <div className="flex gap-4 mt-6">
-                <div className="flex gap-4 mt-6">
-                <button onClick={() => setStep(2)} className="w-1/3 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 font-bold uppercase py-4 rounded-xl" disabled={isSubmitting}>
+              {/* BOTONES DEL PASO 3 ESTILIZADOS */}
+              <div className="flex flex-col sm:flex-row gap-4 mt-8">
+                <button 
+                  onClick={() => setStep(2)} 
+                  disabled={isSubmitting}
+                  className="w-full sm:w-1/3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold uppercase tracking-widest py-4 rounded-xl border border-transparent dark:border-slate-600 transition-colors focus:outline-none"
+                >
                   Volver
                 </button>
                 
                 {formData.metodoPago === 'mercadopago' ? (
-                  <button onClick={handleSubmit} disabled={isSubmitting} className="w-2/3 bg-[#009EE3] hover:bg-[#008ACA] text-white font-bold py-4 rounded-xl flex items-center justify-center gap-3 transition-colors shadow-lg shadow-blue-500/20">
+                  <button 
+                    onClick={handleSubmit} 
+                    disabled={isSubmitting} 
+                    className="w-full sm:w-2/3 bg-[#009EE3] hover:bg-[#008ACA] text-white font-bold py-4 rounded-xl flex items-center justify-center gap-3 transition-colors shadow-lg shadow-[#009EE3]/30 focus:outline-none focus:ring-4 focus:ring-[#009EE3]/50 disabled:opacity-70"
+                  >
                     {isSubmitting ? (
                       <Settings className="w-5 h-5 animate-spin" />
                     ) : (
                       <div className="flex items-center gap-2 justify-center">
                         <svg viewBox="0 0 100 100" className="w-6 h-6 flex-shrink-0 fill-current"><path d="M50 0C22.4 0 0 22.4 0 50s22.4 50 50 50 50-22.4 50-50S77.6 0 50 0zm0 82.5c-17.9 0-32.5-14.6-32.5-32.5S32.1 17.5 50 17.5 82.5 32.1 82.5 50 72.1 82.5 50 82.5zM67.3 43.1c-1.3-1.3-3.4-1.3-4.7 0l-12.8 12.8-5.7-5.7c-1.3-1.3-3.4-1.3-4.7 0-1.3 1.3-1.3 3.4 0 4.7l8 8c.6.6 1.5.9 2.3.9.8 0 1.7-.3 2.3-.9l15.2-15.2c1.4-1.2 1.4-3.3.1-4.6z"/></svg>
-                        <span className="uppercase tracking-wide text-xs sm:text-sm">Pagar con Mercado Pago</span>
+                        <span className="uppercase tracking-widest text-sm">Pagar con Mercado Pago</span>
                       </div>
                     )}
                   </button>
                 ) : (
-                  <button onClick={handleSubmit} disabled={isSubmitting} className="w-2/3 bg-green-500 hover:bg-green-600 text-white font-bold uppercase py-4 rounded-xl flex items-center justify-center gap-2 transition-colors">
-                    {isSubmitting ? <Settings className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />}
-                    Confirmar Pedido
+                  <button 
+                    onClick={handleSubmit} 
+                    disabled={isSubmitting} 
+                    className="w-full sm:w-2/3 bg-green-500 hover:bg-green-600 text-white font-bold uppercase tracking-widest py-4 rounded-xl flex items-center justify-center gap-3 transition-colors shadow-lg shadow-green-500/30 focus:outline-none focus:ring-4 focus:ring-green-500/50 disabled:opacity-70"
+                  >
+                    {isSubmitting ? (
+                      <Settings className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <>
+                        <CheckCircle className="w-5 h-5" />
+                        Confirmar Pedido
+                      </>
+                    )}
                   </button>
                 )}
-              </div>
               </div>
             </div>
           )}
@@ -932,12 +1144,13 @@ function FloatingActions() {
 /* ==========================================================================
    NAVBAR CON MENÚS DESPLEGABLES Y BÚSQUEDA
    ========================================================================== */
-function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenAuth, onOpenCart, onLogout, toggleDarkMode, isDarkMode, categories, allProducts, onOpenCategory, onProductSearchSelect }) {
+function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenAuth, onOpenCart, onLogout, toggleDarkMode, isDarkMode, categories, allProducts, onOpenCategory, onProductSearchSelect, onLoginClick }) {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [suggestions, setSuggestions] = useState([]);
+  
 
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 50);
@@ -969,15 +1182,17 @@ const isNavbarSolid = isScrolled || activePage !== 'inicio' || mobileMenuOpen;
 
   const handleSuggestionClick = (prod) => { setSearchTerm(''); setSuggestions([]); setMobileMenuOpen(false); onProductSearchSelect(prod); };
 
-
-
   return (
     <nav className={`fixed w-full z-[100] transition-all duration-300 ${isNavbarSolid ? "bg-white/95 dark:bg-slate-900/95 backdrop-blur-md shadow-sm py-4 border-b border-slate-100 dark:border-slate-800" : "bg-transparent py-6"}`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center gap-4">
+        
+        {/* LOGO */}
         <button onClick={() => handleNavClick('inicio', 'inicio')} className="flex flex-col items-start group text-left focus:outline-none flex-shrink-0">
           <span className={`font-bold text-xl md:text-2xl tracking-tighter font-michroma transition-colors leading-none ${isNavbarSolid ? 'text-slate-900 dark:text-white group-hover:text-blue-600' : 'text-white'}`}>D.A.P.A</span>
           <span className={`text-[8px] md:text-[10px] font-bold tracking-[0.2em] uppercase font-exo mt-1 transition-colors ${isNavbarSolid ? 'text-slate-500 dark:text-slate-400' : 'text-slate-300'}`}>Repuestos Molle</span>
         </button>
+        
+        {/* LINKS (Desktop) */}
         <div className="hidden lg:flex items-center space-x-1">
           <button onClick={() => handleNavClick('inicio', 'inicio')} className={`px-4 py-2 text-xs font-semibold uppercase tracking-widest transition-all hover:text-blue-600 ${isNavbarSolid ? 'text-slate-600 dark:text-slate-300' : 'text-white'}`}>Inicio</button>
           <div className="relative group" onMouseEnter={() => setActiveDropdown('catalog')} onMouseLeave={() => setActiveDropdown(null)}>
@@ -995,17 +1210,20 @@ const isNavbarSolid = isScrolled || activePage !== 'inicio' || mobileMenuOpen;
               </div>
             </div>
           </div>
-          
           <button onClick={() => handleNavClick('nosotros')} className={`px-4 py-2 text-xs font-semibold uppercase tracking-widest transition-all hover:text-blue-600 ${isNavbarSolid ? 'text-slate-600 dark:text-slate-300' : 'text-white'}`}>Nosotros</button>
         </div>
-        <div className="flex items-center gap-1 md:gap-3 flex-grow justify-end">
+
+        {/* ACCIONES DE LA DERECHA (Buscador + Iconos) */}
+        <div className="flex items-center gap-2 md:gap-4 flex-grow justify-end relative z-50">
+          
+          {/* BUSCADOR */}
           <div className="hidden lg:block relative mr-2 w-full max-w-[220px]">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <Search className={`h-4 w-4 ${isNavbarSolid ? 'text-slate-400' : 'text-slate-300'}`} />
             </div>
-            <input type="text" value={searchTerm} onChange={handleSearchChange} placeholder="Buscar repuesto..." className={`w-full pl-9 pr-4 py-2 rounded-full text-xs outline-none transition-all ${isNavbarSolid ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900' : 'bg-white/10 border border-white/20 text-white placeholder-slate-300 focus:bg-white/20 focus:border-white'}`} />
+            <input type="text" value={searchTerm} onChange={handleSearchChange} placeholder="Buscar..." className={`w-full pl-9 pr-4 py-2 rounded-full text-xs outline-none transition-all ${isNavbarSolid ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900' : 'bg-white/10 border border-white/20 text-white placeholder-slate-300 focus:bg-white/20 focus:border-white'}`} />
             {suggestions.length > 0 && (
-              <div className="absolute top-full mt-2 w-full w-[300px] right-0 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-700 overflow-hidden z-50">
+              <div className="absolute top-full mt-2 w-full min-w-[300px] right-0 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-700 overflow-hidden z-[110]">
                 {suggestions.map((prod, idx) => (
                   <button key={idx} onClick={() => handleSuggestionClick(prod)} className="w-full text-left block px-4 py-3 hover:bg-blue-50 dark:hover:bg-slate-700 border-b border-slate-50 dark:border-slate-700 last:border-0 transition-colors focus:outline-none group/sugg">
                     <div className="flex justify-between items-center mb-1">
@@ -1018,30 +1236,60 @@ const isNavbarSolid = isScrolled || activePage !== 'inicio' || mobileMenuOpen;
               </div>
             )}
           </div>
+
+          {/* BOTÓN MODO OSCURO */}
           <button onClick={toggleDarkMode} className={`p-2 rounded-full transition-colors ${isNavbarSolid ? 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800' : 'text-white hover:bg-white/10'}`}>
             {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
           </button>
+
+          {/* BOTÓN USUARIO (LOGIN / PERFIL) */}
           {currentUser ? (
-            <div className="flex items-center gap-1">
-              <span className={`hidden sm:block text-[10px] font-bold uppercase tracking-widest mr-1 ${isNavbarSolid ? 'text-slate-500' : 'text-white/80'}`}>{currentUser.name.split(' ')[0]}</span>
-              <button onClick={onLogout} className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-all"><LogOut className="w-4 h-4 md:w-5 md:h-5" /></button>
+            <div className="relative group cursor-pointer flex items-center gap-2 pr-2">
+              <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold border border-blue-200 dark:border-blue-800">
+                {currentUser.name.charAt(0).toUpperCase()}
+              </div>
+              
+              {/* Menú desplegable oculto para Cerrar Sesión */}
+              <div className="absolute top-full right-0 mt-2 w-48 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[110]">
+                <div className="p-3 border-b border-slate-100 dark:border-slate-700">
+                  <p className="text-sm font-bold text-slate-800 dark:text-white truncate">{currentUser.name}</p>
+                </div>
+                <button 
+                  onClick={onLogout} 
+                  className="w-full text-left px-4 py-3 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 font-medium transition-colors rounded-b-xl"
+                >
+                  Cerrar Sesión
+                </button>
+              </div>
             </div>
           ) : (
-            <button onClick={onOpenAuth} className={`p-2 rounded-full transition-all ${isNavbarSolid ? 'text-slate-600 hover:bg-slate-100' : 'text-white hover:bg-white/10'}`}><User className="w-5 h-5" /></button>
+            <button 
+              onClick={onLoginClick} 
+              className={`p-2 rounded-full transition-all flex items-center gap-2 ${isNavbarSolid ? 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800' : 'text-white hover:bg-white/10'}`}
+              title="Iniciar sesión"
+            >
+              <User className="w-5 h-5" />
+            </button>
           )}
+
+          {/* BOTÓN CARRITO */}
           <button onClick={onOpenCart} className={`relative p-2 rounded-full transition-all ${isNavbarSolid ? 'text-slate-900 dark:text-white hover:bg-slate-100 dark:hover:bg-slate-800' : 'text-white hover:bg-white/10'}`}>
             <ShoppingCart className="w-6 h-6" />
             {cartCount > 0 && <span className="absolute top-0 right-0 bg-blue-600 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center border-2 border-white dark:border-slate-900 animate-in zoom-in">{cartCount}</span>}
           </button>
+
+          {/* BOTÓN HAMBURGUESA (Móvil) */}
           <button className="lg:hidden p-2" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
             {mobileMenuOpen ? <X className={isNavbarSolid ? 'text-slate-900 dark:text-white' : 'text-white'} /> : <Menu className={isNavbarSolid ? 'text-slate-900 dark:text-white' : 'text-white'} />}
           </button>
+          
         </div>
       </div>
+
+      {/* MENÚ MÓVIL DESPLEGABLE */}
       {mobileMenuOpen && (
         <div className="lg:hidden absolute top-full left-0 w-full bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 p-6 flex flex-col gap-6 shadow-2xl animate-in slide-in-from-top-2 h-[calc(100vh-80px)] overflow-y-auto">
           
-          {/* Buscador */}
           <div className="relative w-full mb-2">
             <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Search className="h-5 w-5 text-slate-400" /></div>
             <input type="text" value={searchTerm} onChange={handleSearchChange} placeholder="Buscar repuesto..." className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full pl-11 pr-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900" />
@@ -1658,6 +1906,7 @@ function FAQSection() {
   const [isTutorialOpen, setTutorialOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
   const [isDarkMode, setIsDarkMode] = useState(false);
+  
 
   // NUEVOS ESTADOS PARA SUPABASE
   const [dbCategories, setDbCategories] = useState([]);
@@ -1871,6 +2120,7 @@ const handleWhatsAppCheckout = async () => {
 
   const cartTotalItems = cart.reduce((acc, item) => acc + item.quantity, 0);
 
+
   return (
     <div className="min-h-screen bg-white dark:bg-slate-900 font-montserrat text-slate-800 dark:text-slate-100 overflow-x-hidden selection:bg-slate-900 dark:selection:bg-white selection:text-cyan-400 dark:selection:text-slate-900 relative transition-colors duration-300">
       <GlobalStyles />
@@ -1880,41 +2130,11 @@ const handleWhatsAppCheckout = async () => {
       
       <Toast message={toastMessage} isVisible={!!toastMessage} />
       
-      <AuthModal 
-        isOpen={isAuthModalOpen} 
-        onClose={() => setAuthModalOpen(false)} 
-        onLogin={handleLogin} 
-      />
-
-      <QuickViewModal 
-        isOpen={!!quickViewData} 
-        product={quickViewData?.product}
-        categoryName={quickViewData?.categoryName}
-        onClose={() => setQuickViewData(null)}
-        onAddToCart={handleAddToCart}
-      />
-
-      <CartDrawer 
-        isOpen={isCartOpen}
-        onClose={() => setCartOpen(false)}
-        cart={cart}
-        updateQuantity={updateQuantity}
-        removeItem={removeItem}
-        onCheckout={handleWhatsAppCheckout}
-        currentUser={currentUser}
-      />
-
-      <HowToBuyTutorial 
-        isOpen={isTutorialOpen} 
-        onClose={() => setTutorialOpen(false)} 
-      />
-      
       <Navbar 
         activePage={activePage} 
         navigateTo={navigateTo} 
         currentUser={currentUser}
         cartCount={cartTotalItems}
-        onOpenAuth={() => setAuthModalOpen(true)}
         onOpenCart={() => setCartOpen(true)}
         onLogout={handleLogout}
         toggleDarkMode={toggleDarkMode}
@@ -1922,7 +2142,8 @@ const handleWhatsAppCheckout = async () => {
         categories={dbCategories}
         allProducts={dbProducts}
         onOpenCategory={handleOpenCategory}
-        onProductSearchSelect={handleProductSearchSelect} 
+        onProductSearchSelect={handleProductSearchSelect}
+        onLoginClick={() => setAuthModalOpen(true)} 
       />
       
       <main>
@@ -1954,16 +2175,49 @@ const handleWhatsAppCheckout = async () => {
       </main>
 
       <Footer navigateTo={navigateTo} />
+
+      {/* Todos los modales van acá abajo, solo una vez */}
+      <QuickViewModal 
+        isOpen={!!quickViewData} 
+        product={quickViewData?.product}
+        categoryName={quickViewData?.categoryName}
+        onClose={() => setQuickViewData(null)}
+        onAddToCart={handleAddToCart}
+      />
+
+      <CartDrawer 
+        isOpen={isCartOpen}
+        onClose={() => setCartOpen(false)}
+        cart={cart}
+        updateQuantity={updateQuantity}
+        removeItem={removeItem}
+        onCheckout={handleWhatsAppCheckout}
+        currentUser={currentUser}
+        clearCart={() => { setCart([]); localStorage.removeItem('dapa_cart'); }}
+      />
+
+      <HowToBuyTutorial 
+        isOpen={isTutorialOpen} 
+        onClose={() => setTutorialOpen(false)} 
+      />
+
+      <AuthModal 
+        isOpen={isAuthModalOpen} 
+        onClose={() => setAuthModalOpen(false)} 
+        onLogin={handleLogin}
+      />
+
     </div>
   );
 }
+
 export default function App() {
   return (
     <Router>
       <Routes>
         {/* Ruta para el cliente (tu código intacto) */}
         <Route path="/" element={<TiendaPublica />} />
-        
+
         {/* Ruta oculta para vos */}
         <Route path="/admin" element={<AdminPanel />} />
       </Routes>
