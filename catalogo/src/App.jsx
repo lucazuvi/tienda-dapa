@@ -473,10 +473,29 @@ function AuthModal({ isOpen, onClose, onLogin }) {
   );
 }
 
+function CorreoArgentinoLogo() {
+  return (
+    <div className="w-11 h-11 rounded-full bg-[#FFCE00] flex items-center justify-center flex-shrink-0 shadow-sm border border-yellow-400">
+      <div className="flex flex-col items-center leading-none text-[#152663]">
+        <Truck className="w-4 h-4 stroke-[2.5] mb-0.5" />
+        <span className="text-[7px] font-black uppercase tracking-tighter">Correo</span>
+        <span className="text-[6px] font-bold uppercase tracking-tighter -mt-0.5">Argentino</span>
+      </div>
+    </div>
+  );
+}
+
 function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUser }) {
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
+  const [isEditingCp, setIsEditingCp] = useState(false);
+  const [tempCp, setTempCp] = useState('2740');
+
+  // Estado de la cotización devuelta por la API
+  const [cotizacionCorreo, setCotizacionCorreo] = useState(null);
+  const [isQuotingShipping, setIsQuotingShipping] = useState(false);
+
   const nameParts = (currentUser?.name || '').trim().split(' ');
 
   const [formData, setFormData] = useState({
@@ -485,7 +504,7 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
     apellido: nameParts.slice(1).join(' ') || '',
     dni: '',
     telefono: currentUser?.phone || '',
-    metodoEnvio: 'domicilio',
+    metodoEnvio: 'correo_domicilio', // correo_domicilio | correo_sucursal | acordar | retiro
     calle: '',
     numero: '',
     piso: '',
@@ -496,9 +515,89 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
     observaciones: ''
   });
 
+  const totalUnidades = useMemo(
+    () => cart.reduce((acc, item) => acc + Number(item.quantity || 1), 0),
+    [cart]
+  );
+
+  // Consultar el endpoint /api/cotizarCorreo cuando cambia el CP o se abre el checkout
+  useEffect(() => {
+    if (!isOpen) return;
+    let isMounted = true;
+
+    const fetchQuote = async () => {
+      setIsQuotingShipping(true);
+      try {
+        const res = await fetch('/api/cotizarCorreo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            cpDestino: formData.cp,
+            totalItems: totalUnidades
+          })
+        });
+        if (!res.ok) throw new Error('Error en API');
+        const data = await res.json();
+        if (isMounted) setCotizacionCorreo(data);
+      } catch (err) {
+        // Fallback local por si estás corriendo solo vite sin vercel dev
+        const recargo = Math.max(0, (totalUnidades - 1) * 950);
+        const isLocal = formData.cp === '2740';
+        if (isMounted) {
+          setCotizacionCorreo({
+            cp: formData.cp,
+            domicilio: (isLocal ? 8546 : 10480) + recargo,
+            sucursal: (isLocal ? 5928 : 7350) + Math.round(recargo * 0.75),
+            diasDomicilio: '3 a 6 días hábiles',
+            diasSucursal: '3 a 6 días hábiles',
+            sucursalDetalle: isLocal
+              ? 'ARRECIFES - Av Dr Manuel Belgrano 42, Arrecifes, Buenos Aires - LUN A VIE 09.00 A 16.00'
+              : `Sucursal Correo Argentino habilitada para CP ${formData.cp} - LUN A VIE 09.00 A 16.00`
+          });
+        }
+      } finally {
+        if (isMounted) setIsQuotingShipping(false);
+      }
+    };
+
+    fetchQuote();
+    return () => { isMounted = false; };
+  }, [isOpen, formData.cp, totalUnidades]);
+
   if (!isOpen) return null;
 
+  const shippingCost =
+    formData.metodoEnvio === 'correo_domicilio'
+      ? (cotizacionCorreo?.domicilio || 0)
+      : formData.metodoEnvio === 'correo_sucursal'
+      ? (cotizacionCorreo?.sucursal || 0)
+      : 0;
+
+  const finalTotal = cartTotal + shippingCost;
+
+  const getShippingLabel = () => {
+    if (formData.metodoEnvio === 'correo_domicilio') return 'Correo Argentino - Envío a domicilio clásico';
+    if (formData.metodoEnvio === 'correo_sucursal') return `Correo Argentino - Retiro en sucursal (CP ${formData.cp})`;
+    if (formData.metodoEnvio === 'acordar') return 'Acordar envío con el vendedor';
+    return 'Retiro Gratis en D.A.P.A Repuestos Molle (Lamadrid 65, Arrecifes)';
+  };
+
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
+
+  const handleApplyCp = () => {
+    const cleanCp = tempCp.replace(/\D/g, '');
+    if (cleanCp.length !== 4 || parseInt(cleanCp, 10) < 1000) {
+      setFormError('Ingresá un Código Postal argentino válido de 4 dígitos (ej: 2740).');
+      return;
+    }
+    setFormError('');
+    setFormData(prev => ({
+      ...prev,
+      cp: cleanCp,
+      ciudad: cleanCp === '2740' ? 'Arrecifes' : prev.ciudad === 'Arrecifes' ? '' : prev.ciudad
+    }));
+    setIsEditingCp(false);
+  };
 
   const handleSiguientePaso = () => {
     setFormError('');
@@ -514,12 +613,16 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
     const telLimpio = formData.telefono.replace(/\D/g, '');
     if (telLimpio.length < 10) return setFormError('Ingresá un teléfono válido con código de área (ej: 2478512620).');
     
-    if (formData.metodoEnvio === 'domicilio') {
+    if (formData.metodoEnvio === 'correo_domicilio') {
       if (formData.calle.trim().length < 3 || formData.numero.trim() === '') {
-        return setFormError('Por favor, completá correctamente la calle y el número de entrega.');
+        return setFormError('Por favor, completá la calle y el número para el envío a domicilio.');
       }
-      if (formData.ciudad.trim().length < 2 || formData.cp.trim().length < 3) {
-        return setFormError('Por favor, indicá la ciudad y el código postal.');
+      if (formData.ciudad.trim().length < 2) {
+        return setFormError('Por favor, indicá tu localidad o ciudad.');
+      }
+    } else if (formData.metodoEnvio === 'correo_sucursal') {
+      if (formData.ciudad.trim().length < 2) {
+        return setFormError('Por favor, indicá la localidad de la sucursal donde retirás.');
       }
     }
 
@@ -529,13 +632,21 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
-      const detalleDomicilio = formData.metodoEnvio === 'retiro'
-        ? 'RETIRO EN EL LOCAL (Lamadrid 65, Arrecifes)'
-        : `${formData.calle} ${formData.numero} ${formData.piso ? 'Piso/Dpto: ' + formData.piso : ''}\n${formData.ciudad}, ${formData.provincia} (CP: ${formData.cp})`;
+      let detalleEntrega = '';
+      if (formData.metodoEnvio === 'retiro') {
+        detalleEntrega = 'RETIRO EN EL LOCAL (Lamadrid 65, Arrecifes) - GRATIS';
+      } else if (formData.metodoEnvio === 'acordar') {
+        detalleEntrega = `ACORDAR ENVÍO CON EL CLIENTE (CP: ${formData.cp})`;
+      } else if (formData.metodoEnvio === 'correo_sucursal') {
+        detalleEntrega = `CORREO ARGENTINO A SUCURSAL ($${shippingCost.toLocaleString('es-AR')})\nSucursal destino: CP ${formData.cp} - ${formData.ciudad}, ${formData.provincia}`;
+      } else {
+        detalleEntrega = `CORREO ARGENTINO A DOMICILIO ($${shippingCost.toLocaleString('es-AR')})\nDirección: ${formData.calle} ${formData.numero} ${formData.piso ? 'Piso/Dpto: ' + formData.piso : ''}\nLocalidad: ${formData.ciudad}, ${formData.provincia} (CP: ${formData.cp})`;
+      }
 
       const notas = `TIPO DE VENTA: Checkout Web Automático
 MÉTODO DE PAGO: ${formData.metodoPago.toUpperCase()}
-MÉTODO DE ENTREGA: ${formData.metodoEnvio === 'retiro' ? 'RETIRO EN LOCAL' : 'ENVÍO A DOMICILIO'}
+MODALIDAD DE ENVÍO: ${getShippingLabel()}
+COSTO DE ENVÍO: $${shippingCost.toLocaleString('es-AR')}
 ---------------------------------
 DATOS DEL CLIENTE:
 Nombre: ${formData.nombre} ${formData.apellido}
@@ -544,7 +655,7 @@ Teléfono: ${formData.telefono}
 Email: ${formData.email}
 ---------------------------------
 ENTREGA:
-${detalleDomicilio}
+${detalleEntrega}
 ---------------------------------
 OBSERVACIONES:
 ${formData.observaciones || 'Ninguna'}`;
@@ -555,7 +666,7 @@ ${formData.observaciones || 'Ninguna'}`;
           customer_name: `${formData.nombre} ${formData.apellido}`,
           customer_phone: formData.telefono,
           status: 'Pendiente (Vía Web)',
-          total_estimated: cartTotal,
+          total_estimated: finalTotal,
           notes: notas
         }])
         .select().single();
@@ -578,7 +689,9 @@ ${formData.observaciones || 'Ninguna'}`;
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             orderId: newOrder.id,
-            items: cart
+            items: cart,
+            shippingCost,
+            shippingTitle: getShippingLabel()
           })
         });
         
@@ -596,10 +709,10 @@ ${formData.observaciones || 'Ninguna'}`;
       onSuccess(false);
 
     } catch (error) {
-   console.error(error);
-   setFormError("Hubo un error al procesar la compra. Por favor intentá de nuevo.");
-   setStep(1);
- } finally {
+      console.error(error);
+      setFormError("Hubo un error al procesar la compra. Por favor intentá de nuevo.");
+      setStep(1);
+    } finally {
       setIsSubmitting(false);
     }
   };
@@ -614,101 +727,253 @@ ${formData.observaciones || 'Ninguna'}`;
       <div className="flex-1 max-w-5xl mx-auto w-full p-4 sm:p-6 lg:p-8 flex flex-col lg:flex-row gap-8">
         <div className="flex-1">
           <div className="flex items-center justify-between mb-8 border-b border-slate-200 dark:border-slate-700 pb-4">
-            <div className={`flex-1 text-center font-bold text-xs uppercase tracking-widest ${step >= 1 ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`}>1. Entrega</div>
+            <div className={`flex-1 text-center font-bold text-xs uppercase tracking-widest ${step >= 1 ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`}>1. Envío</div>
             <div className={`flex-1 text-center font-bold text-xs uppercase tracking-widest border-l border-slate-200 dark:border-slate-700 ${step >= 2 ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`}>2. Pago</div>
             <div className={`flex-1 text-center font-bold text-xs uppercase tracking-widest border-l border-slate-200 dark:border-slate-700 ${step >= 3 ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`}>3. Revisión</div>
           </div>
 
           {step === 1 && (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
-              <h3 className="font-bold text-lg text-slate-800 dark:text-white uppercase">Datos del Comprador</h3>
-              
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Email</label>
-                  <input type="email" name="email" value={formData.email} onChange={handleChange} placeholder="ejemplo@correo.com" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Teléfono</label>
-                  <input type="text" name="telefono" value={formData.telefono} onChange={handleChange} placeholder="Ej: 2478512620" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Nombre</label>
-                  <input type="text" name="nombre" value={formData.nombre} onChange={handleChange} placeholder="Tu nombre" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Apellido</label>
-                  <input type="text" name="apellido" value={formData.apellido} onChange={handleChange} placeholder="Tu apellido" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
-                </div>
-                <div className="space-y-1 sm:col-span-2">
-                  <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">DNI / CUIT</label>
-                  <input type="text" name="dni" value={formData.dni} onChange={handleChange} placeholder="Sin puntos ni guiones" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
+              <div>
+                <h3 className="font-bold text-sm text-slate-800 dark:text-white uppercase tracking-wider mb-4">Contacto</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Email</label>
+                    <input type="email" name="email" value={formData.email} onChange={handleChange} placeholder="ejemplo@correo.com" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Teléfono / WhatsApp</label>
+                    <input type="text" name="telefono" value={formData.telefono} onChange={handleChange} placeholder="Ej: 2478512620" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Nombre</label>
+                    <input type="text" name="nombre" value={formData.nombre} onChange={handleChange} placeholder="Tu nombre" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Apellido</label>
+                    <input type="text" name="apellido" value={formData.apellido} onChange={handleChange} placeholder="Tu apellido" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
+                  </div>
+                  <div className="space-y-1 sm:col-span-2">
+                    <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">DNI / CUIT (Requerido para el correo)</label>
+                    <input type="text" name="dni" value={formData.dni} onChange={handleChange} placeholder="Sin puntos ni guiones" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
+                  </div>
                 </div>
               </div>
 
-              <h4 className="font-bold text-sm text-slate-800 dark:text-white uppercase mt-6 mb-3 border-t border-slate-200 dark:border-slate-700 pt-6">Modalidad de Entrega</h4>
-              
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <button
-                  type="button"
-                  onClick={() => setFormData({ ...formData, metodoEnvio: 'domicilio' })}
-                  className={`p-4 rounded-xl border text-left transition-all flex items-start gap-3 ${
-                    formData.metodoEnvio === 'domicilio'
-                      ? 'border-blue-500 bg-blue-50/60 dark:bg-blue-900/20 ring-1 ring-blue-500'
-                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-blue-300'
-                  }`}
-                >
-                  <Truck className={`w-5 h-5 mt-0.5 flex-shrink-0 ${formData.metodoEnvio === 'domicilio' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
-                  <div>
-                    <span className="font-bold text-sm text-slate-900 dark:text-white block">Envío a Domicilio</span>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">Recibí el pedido en tu casa o taller</span>
-                  </div>
-                </button>
+              {/* OPCIONES DE ENVÍO CON API CORREO ARGENTINO */}
+              <div className="border-t border-slate-200 dark:border-slate-700 pt-6 space-y-5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h4 className="font-bold text-base text-slate-800 dark:text-white">Seleccioná una opción</h4>
+                  
+                  {isEditingCp ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        maxLength={4}
+                        value={tempCp}
+                        onChange={(e) => setTempCp(e.target.value.replace(/\D/g, ''))}
+                        placeholder="Ej: 2740"
+                        autoFocus
+                        onKeyDown={(e) => e.key === 'Enter' && handleApplyCp()}
+                        className="w-28 px-3 py-1.5 text-xs font-bold rounded-full border border-blue-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none text-center"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleApplyCp}
+                        className="px-3.5 py-1.5 rounded-full bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-colors"
+                      >
+                        Cotizar
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => { setTempCp(formData.cp); setIsEditingCp(true); }}
+                      className="px-4 py-1.5 rounded-full border border-slate-400 dark:border-slate-600 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:border-blue-500 hover:text-blue-600 transition-colors"
+                    >
+                      Cambiar CP{formData.cp}
+                    </button>
+                  )}
+                </div>
 
-                <button
-                  type="button"
-                  onClick={() => setFormData({ ...formData, metodoEnvio: 'retiro' })}
-                  className={`p-4 rounded-xl border text-left transition-all flex items-start gap-3 ${
-                    formData.metodoEnvio === 'retiro'
-                      ? 'border-blue-500 bg-blue-50/60 dark:bg-blue-900/20 ring-1 ring-blue-500'
-                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-blue-300'
-                  }`}
-                >
-                  <MapPin className={`w-5 h-5 mt-0.5 flex-shrink-0 ${formData.metodoEnvio === 'retiro' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
-                  <div>
-                    <span className="font-bold text-sm text-slate-900 dark:text-white block">Retiro en el Local (Gratis)</span>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">Lamadrid 65, Arrecifes</span>
+                {isQuotingShipping ? (
+                  <div className="p-6 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-center text-xs text-slate-500 flex items-center justify-center gap-2">
+                    <Settings className="w-4 h-4 animate-spin text-blue-500" /> Consultando tarifas de Correo Argentino para CP {formData.cp}...
                   </div>
-                </button>
+                ) : (
+                  <>
+                    {/* 1. ENVÍO A DOMICILIO */}
+                    {cotizacionCorreo?.domicilio && (
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium text-slate-600 dark:text-slate-400">Envío a domicilio</p>
+                        <label
+                          onClick={() => setFormData({ ...formData, metodoEnvio: 'correo_domicilio' })}
+                          className={`flex items-center gap-4 p-4 rounded-xl border cursor-pointer transition-all ${
+                            formData.metodoEnvio === 'correo_domicilio'
+                              ? 'border-blue-500 bg-blue-50/40 dark:bg-blue-900/20 ring-1 ring-blue-500'
+                              : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="metodoEnvio"
+                            checked={formData.metodoEnvio === 'correo_domicilio'}
+                            onChange={() => {}}
+                            className="w-4 h-4 text-blue-600 flex-shrink-0"
+                          />
+                          <CorreoArgentinoLogo />
+                          <div className="flex-1">
+                            <span className="text-sm font-medium text-slate-800 dark:text-white block">Envío a domicilio clásico</span>
+                            <span className="text-sm font-bold text-slate-900 dark:text-white">
+                              ${cotizacionCorreo.domicilio.toLocaleString('es-AR')},00 - {cotizacionCorreo.diasDomicilio}
+                            </span>{' '}
+                            <span className="text-xs text-slate-500 font-light">(luego de ser despachado)</span>
+                          </div>
+                        </label>
+                      </div>
+                    )}
+
+                    {/* 2. RETIRAR EN SUCURSAL DEL CORREO */}
+                    {cotizacionCorreo?.sucursal && (
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium text-slate-600 dark:text-slate-400">Retirar en sucursal del correo</p>
+                        <label
+                          onClick={() => setFormData({ ...formData, metodoEnvio: 'correo_sucursal' })}
+                          className={`flex items-center gap-4 p-4 rounded-xl border cursor-pointer transition-all ${
+                            formData.metodoEnvio === 'correo_sucursal'
+                              ? 'border-blue-500 bg-blue-50/40 dark:bg-blue-900/20 ring-1 ring-blue-500'
+                              : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="metodoEnvio"
+                            checked={formData.metodoEnvio === 'correo_sucursal'}
+                            onChange={() => {}}
+                            className="w-4 h-4 text-blue-600 flex-shrink-0"
+                          />
+                          <CorreoArgentinoLogo />
+                          <div className="flex-1">
+                            <span className="text-sm font-medium text-slate-800 dark:text-white block">Envío a sucursal</span>
+                            <div>
+                              <span className="text-sm font-bold text-slate-900 dark:text-white">
+                                ${cotizacionCorreo.sucursal.toLocaleString('es-AR')},00 - {cotizacionCorreo.diasSucursal}
+                              </span>{' '}
+                              <span className="text-xs text-slate-500 font-light">(luego de ser despachado)</span>
+                            </div>
+                            <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-1">
+                              {cotizacionCorreo.sucursalDetalle}
+                            </span>
+                          </div>
+                        </label>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* 3. ACORDAR ENVÍO */}
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-slate-600 dark:text-slate-400">Otros medios de envío</p>
+                  <label
+                    onClick={() => setFormData({ ...formData, metodoEnvio: 'acordar' })}
+                    className={`flex items-center gap-4 p-4 rounded-xl border cursor-pointer transition-all ${
+                      formData.metodoEnvio === 'acordar'
+                        ? 'border-blue-500 bg-blue-50/40 dark:bg-blue-900/20 ring-1 ring-blue-500'
+                        : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="metodoEnvio"
+                      checked={formData.metodoEnvio === 'acordar'}
+                      onChange={() => {}}
+                      className="w-4 h-4 text-blue-600 flex-shrink-0"
+                    />
+                    <div className="w-11 h-11 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center flex-shrink-0 text-slate-600 dark:text-slate-300">
+                      <MessageSquare className="w-5 h-5" />
+                    </div>
+                    <div className="flex-1">
+                      <span className="text-sm font-bold text-slate-800 dark:text-white block">Acordar envío</span>
+                      <span className="text-xs text-slate-500 dark:text-slate-400">
+                        Te podrás comunicar con nosotros para acordar el envío al finalizar la compra
+                      </span>
+                    </div>
+                  </label>
+                </div>
+
+                {/* 4. RETIRAR EN NUESTROS PUNTOS (LOCAL DAPA GRATIS) */}
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-slate-600 dark:text-slate-400">Retirar en nuestros puntos</p>
+                  <label
+                    onClick={() => setFormData({ ...formData, metodoEnvio: 'retiro' })}
+                    className={`flex items-center gap-4 p-4 rounded-xl border cursor-pointer transition-all ${
+                      formData.metodoEnvio === 'retiro'
+                        ? 'border-blue-500 bg-blue-50/40 dark:bg-blue-900/20 ring-1 ring-blue-500'
+                        : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="metodoEnvio"
+                      checked={formData.metodoEnvio === 'retiro'}
+                      onChange={() => {}}
+                      className="w-4 h-4 text-blue-600 flex-shrink-0"
+                    />
+                    <div className="w-11 h-11 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center flex-shrink-0 text-slate-600 dark:text-slate-300">
+                      <MapPin className="w-5 h-5" />
+                    </div>
+                    <div className="flex-1">
+                      <span className="text-sm font-bold text-slate-800 dark:text-white block">D.A.P.A REPUESTOS MOLLE</span>
+                      <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400 block">Gratis</span>
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">
+                        LAMADRID 65, ARRECIFES, PROV. BUENOS AIRES - LUNES A VIERNES DE 08:00 A 12:30 Y DE 15:00 A 19:00
+                      </span>
+                    </div>
+                  </label>
+                </div>
               </div>
 
-              {formData.metodoEnvio === 'domicilio' ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-2 animate-in fade-in">
-                  <div className="space-y-1 col-span-2">
-                    <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Calle</label>
-                    <input type="text" name="calle" value={formData.calle} onChange={handleChange} placeholder="Ej: San Martín" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Número</label>
-                    <input type="text" name="numero" value={formData.numero} onChange={handleChange} placeholder="Ej: 123" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Piso / Dpto</label>
-                    <input type="text" name="piso" value={formData.piso} onChange={handleChange} placeholder="Opcional" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Ciudad</label>
-                    <input type="text" name="ciudad" value={formData.ciudad} onChange={handleChange} placeholder="Tu ciudad" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Cód. Postal</label>
-                    <input type="text" name="cp" value={formData.cp} onChange={handleChange} placeholder="Ej: 2740" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
+              {formData.metodoEnvio === 'correo_domicilio' && (
+                <div className="border-t border-slate-200 dark:border-slate-700 pt-6 space-y-4 animate-in fade-in">
+                  <h4 className="font-bold text-sm text-slate-800 dark:text-white uppercase">Domicilio de Entrega</h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                    <div className="space-y-1 col-span-2">
+                      <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Calle</label>
+                      <input type="text" name="calle" value={formData.calle} onChange={handleChange} placeholder="Ej: San Martín" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Número</label>
+                      <input type="text" name="numero" value={formData.numero} onChange={handleChange} placeholder="Ej: 123" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Piso / Dpto</label>
+                      <input type="text" name="piso" value={formData.piso} onChange={handleChange} placeholder="Opcional" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Ciudad / Localidad</label>
+                      <input type="text" name="ciudad" value={formData.ciudad} onChange={handleChange} placeholder="Tu ciudad" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Provincia</label>
+                      <input type="text" name="provincia" value={formData.provincia} onChange={handleChange} placeholder="Tu provincia" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
+                    </div>
                   </div>
                 </div>
-              ) : (
-                <div className="bg-blue-50/70 dark:bg-slate-800/80 border border-blue-200 dark:border-slate-700 rounded-xl p-4 flex items-center gap-3 text-sm text-slate-700 dark:text-slate-300 animate-in fade-in">
-                  <MapPin className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
-                  <span>Podrás retirar tu pedido sin costo por nuestro local en <strong>Lamadrid 65, Arrecifes</strong> una vez confirmado.</span>
+              )}
+
+              {formData.metodoEnvio === 'correo_sucursal' && (
+                <div className="border-t border-slate-200 dark:border-slate-700 pt-6 space-y-4 animate-in fade-in">
+                  <h4 className="font-bold text-sm text-slate-800 dark:text-white uppercase">Localidad de la Sucursal de Destino</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Ciudad / Localidad de la sucursal</label>
+                      <input type="text" name="ciudad" value={formData.ciudad} onChange={handleChange} placeholder="Ej: Arrecifes, Pergamino..." className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Provincia</label>
+                      <input type="text" name="provincia" value={formData.provincia} onChange={handleChange} placeholder="Provincia" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
+                    </div>
+                  </div>
                 </div>
               )}
               
@@ -720,7 +985,7 @@ ${formData.observaciones || 'Ninguna'}`;
               
               <button 
                 onClick={handleSiguientePaso} 
-                className="w-full mt-6 bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase py-4 rounded-xl transition-colors"
+                className="w-full mt-6 bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase py-4 rounded-xl transition-colors shadow-lg shadow-blue-600/20"
               >
                 Siguiente Paso
               </button>
@@ -772,15 +1037,22 @@ ${formData.observaciones || 'Ninguna'}`;
               
               <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 space-y-4">
                 <div>
-                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">
-                    {formData.metodoEnvio === 'retiro' ? 'Retira en sucursal:' : 'Enviar a:'}
-                  </h4>
-                  <p className="text-slate-900 dark:text-white font-medium">{formData.nombre} {formData.apellido} ({formData.telefono})</p>
-                  <p className="text-slate-600 dark:text-slate-400 text-sm">
-                    {formData.metodoEnvio === 'retiro' 
-                      ? 'Retiro por mostrador en Lamadrid 65, Arrecifes'
-                      : `${formData.calle} ${formData.numero} ${formData.piso ? `Piso ${formData.piso}` : ''}, ${formData.ciudad}, ${formData.provincia}`}
-                  </p>
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Comprador:</h4>
+                  <p className="text-slate-900 dark:text-white font-medium">{formData.nombre} {formData.apellido} • DNI: {formData.dni} • Tel: {formData.telefono}</p>
+                </div>
+                <div className="border-t border-slate-100 dark:border-slate-700 pt-4">
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Modalidad de Entrega:</h4>
+                  <p className="text-slate-900 dark:text-white font-semibold">{getShippingLabel()}</p>
+                  {formData.metodoEnvio === 'correo_domicilio' && (
+                    <p className="text-slate-600 dark:text-slate-400 text-sm mt-0.5">
+                      {formData.calle} {formData.numero} {formData.piso && `Piso ${formData.piso}`}, {formData.ciudad}, {formData.provincia} (CP {formData.cp})
+                    </p>
+                  )}
+                  {formData.metodoEnvio === 'correo_sucursal' && (
+                    <p className="text-slate-600 dark:text-slate-400 text-sm mt-0.5">
+                      Sucursal Correo Argentino en {formData.ciudad}, {formData.provincia} (CP {formData.cp})
+                    </p>
+                  )}
                 </div>
                 <div className="border-t border-slate-100 dark:border-slate-700 pt-4">
                   <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Método de pago:</h4>
@@ -808,7 +1080,7 @@ ${formData.observaciones || 'Ninguna'}`;
                     ) : (
                       <div className="flex items-center gap-2 justify-center">
                         <svg viewBox="0 0 100 100" className="w-6 h-6 flex-shrink-0 fill-current"><path d="M50 0C22.4 0 0 22.4 0 50s22.4 50 50 50 50-22.4 50-50S77.6 0 50 0zm0 82.5c-17.9 0-32.5-14.6-32.5-32.5S32.1 17.5 50 17.5 82.5 32.1 82.5 50 72.1 82.5 50 82.5zM67.3 43.1c-1.3-1.3-3.4-1.3-4.7 0l-12.8 12.8-5.7-5.7c-1.3-1.3-3.4-1.3-4.7 0-1.3 1.3-1.3 3.4 0 4.7l8 8c.6.6 1.5.9 2.3.9.8 0 1.7-.3 2.3-.9l15.2-15.2c1.4-1.2 1.4-3.3.1-4.6z"/></svg>
-                        <span className="uppercase tracking-widest text-sm">Pagar con Mercado Pago</span>
+                        <span className="uppercase tracking-widest text-sm">Pagar ${finalTotal.toLocaleString('es-AR')} con Mercado Pago</span>
                       </div>
                     )}
                   </button>
@@ -834,9 +1106,9 @@ ${formData.observaciones || 'Ninguna'}`;
         </div>
 
         <div className="lg:w-96 flex-shrink-0">
-          <div className="bg-slate-100 dark:bg-slate-800 p-6 rounded-2xl sticky top-24">
+          <div className="bg-slate-100 dark:bg-slate-800 p-6 rounded-2xl sticky top-24 border border-slate-200 dark:border-slate-700">
             <h3 className="font-bold text-slate-900 dark:text-white uppercase mb-4">Resumen de Compra</h3>
-            <div className="space-y-3 mb-6 max-h-[40vh] overflow-y-auto custom-scrollbar pr-2">
+            <div className="space-y-3 mb-6 max-h-[36vh] overflow-y-auto custom-scrollbar pr-2">
               {cart.map(item => (
                 <div key={item.product.sku_code} className="flex justify-between items-start gap-4">
                   <div>
@@ -849,9 +1121,26 @@ ${formData.observaciones || 'Ninguna'}`;
                 </div>
               ))}
             </div>
-            <div className="border-t border-slate-300 dark:border-slate-700 pt-4 flex justify-between items-end">
-              <span className="font-bold text-slate-600 dark:text-slate-400">TOTAL</span>
-              <span className="text-2xl font-bold text-slate-900 dark:text-white">${cartTotal.toLocaleString('es-AR')}</span>
+
+            <div className="border-t border-slate-300 dark:border-slate-700 pt-4 space-y-2 text-sm">
+              <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                <span>Subtotal repuestos</span>
+                <span className="font-semibold">${cartTotal.toLocaleString('es-AR')}</span>
+              </div>
+              <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                <span>Envío (CP {formData.cp})</span>
+                <span className="font-semibold text-slate-900 dark:text-white">
+                  {shippingCost > 0
+                    ? `$${shippingCost.toLocaleString('es-AR')}`
+                    : formData.metodoEnvio === 'acordar'
+                    ? 'A convenir'
+                    : 'Gratis'}
+                </span>
+              </div>
+              <div className="border-t border-slate-300 dark:border-slate-700 pt-3 flex justify-between items-end">
+                <span className="font-bold text-slate-700 dark:text-slate-300">TOTAL</span>
+                <span className="text-2xl font-bold text-slate-900 dark:text-white">${finalTotal.toLocaleString('es-AR')}</span>
+              </div>
             </div>
           </div>
         </div>
