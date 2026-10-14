@@ -5,7 +5,7 @@ import {
   ChevronDown, Send, Settings, Search, ArrowLeft, ChevronLeft, ShoppingCart,
   User, Plus, Minus, Trash2, LogOut, PhoneCall, ArrowUp, Filter, Sun, Moon, Clock, Camera
 } from 'lucide-react';
-import { supabase } from './supabase'; // <-- ACÁ CONECTAMOS CON TU NUBE
+import { supabase } from './supabase';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import AdminPanel from './AdminPanel';
 
@@ -39,8 +39,6 @@ const CONTACT_INFO = {
   facebookLink: "https://www.facebook.com/"
 };
 
-const FORMSPREE_URL = "https://formspree.io/f/tu-codigo-aqui"; 
-
 const FAQ_ITEMS = [
   { q: '¿Realizan envíos al interior?', a: 'Sí, despachamos todos los días a cualquier punto de la República Argentina a través de correos y encomiendas.' },
   { q: '¿Qué garantía tienen los repuestos?', a: 'Todos nuestros productos cuentan con la garantía directa de fábrica por defectos de manufactura.' },
@@ -51,27 +49,42 @@ const FAQ_ITEMS = [
 /* ==========================================================================
    HOOKS Y COMPONENTES UI
    ========================================================================== */
-function useIntersectionObserver(options = {}) {
+function useIntersectionObserver(threshold = 0.1) {
   const [isIntersecting, setIsIntersecting] = useState(false);
   const targetRef = useRef(null);
 
   useEffect(() => {
     const observer = new IntersectionObserver(([entry]) => {
       if (entry.isIntersecting) setIsIntersecting(true);
-    }, { threshold: 0.1, ...options });
+    }, { threshold });
 
     const currentRef = targetRef.current;
     if (currentRef) observer.observe(currentRef);
     return () => currentRef && observer.unobserve(currentRef);
-  }, [options]);
+  }, [threshold]);
 
   return [targetRef, isIntersecting];
 }
 
+const DELAY_CLASSES = {
+  'delay-0': 'delay-0',
+  'delay-100': 'delay-100',
+  'delay-200': 'delay-200',
+  'delay-300': 'delay-300',
+  'delay-700': 'delay-700',
+  'md:delay-0': 'md:delay-0',
+  'md:delay-100': 'md:delay-100',
+  'md:delay-200': 'md:delay-200',
+  'md:delay-300': 'md:delay-300',
+  'md:delay-400': 'md:delay-[400ms]',
+  'md:delay-500': 'md:delay-500',
+};
+
 function RevealOnScroll({ children, className = "", delay = "delay-0" }) {
   const [ref, isVisible] = useIntersectionObserver();
+  const safeDelay = DELAY_CLASSES[delay] || 'delay-0';
   return (
-    <div ref={ref} className={`transition-all duration-[1000ms] ease-[cubic-bezier(0.25,0.1,0.25,1)] ${isVisible ? `opacity-100 translate-y-0 ${delay}` : "opacity-0 translate-y-16"} ${className}`}>
+    <div ref={ref} className={`transition-all duration-[1000ms] ease-[cubic-bezier(0.25,0.1,0.25,1)] ${isVisible ? `opacity-100 translate-y-0 ${safeDelay}` : "opacity-0 translate-y-16"} ${className}`}>
       {children}
     </div>
   );
@@ -132,57 +145,49 @@ function TiltCard({ children, className = "" }) {
 /* ==========================================================================
    COMPONENTES DE PRODUCTO Y MODALES (Tienda Pública)
    ========================================================================== */
-// Buscá esta función (seguramente en App.jsx) y reemplazala
 function ProductCard({ product, categoryName, onAddToCart, onQuickView, isSelected }) {
   return (
-    <div className={`flex flex-col bg-slate-800 rounded-xl border p-3 shadow-sm hover:border-blue-500 hover:-translate-y-1 transition-all duration-300 ${isSelected ? 'border-blue-500 shadow-blue-500/20' : 'border-slate-700'}`}>
+    <div className={`flex flex-col bg-white dark:bg-slate-800 rounded-xl border p-3 shadow-sm hover:border-blue-500 hover:-translate-y-1 transition-all duration-300 ${isSelected ? 'border-blue-500 shadow-blue-500/20' : 'border-slate-200 dark:border-slate-700'}`}>
       
-      {/* 1. Contenedor de la Imagen: Ahora es más bajito (h-36) en lugar de cuadrado */}
       <div 
-        className="h-32 sm:h-36 bg-slate-900/50 rounded-lg flex items-center justify-center mb-3 cursor-pointer overflow-hidden relative group"
-        onClick={() => onQuickView && onQuickView(product)}
+        className="h-32 sm:h-36 bg-slate-100 dark:bg-slate-900/50 rounded-lg flex items-center justify-center mb-3 cursor-pointer overflow-hidden relative group"
+        onClick={() => onQuickView && onQuickView(product, categoryName)}
       >
         {product.image_url ? (
-          // Si es una foto real, usamos object-contain para que no se recorte
           <img src={product.image_url} alt={product.name} className="object-contain w-full h-full p-2 group-hover:scale-105 transition-transform duration-300" />
         ) : (
-          <Package className="w-8 h-8 text-slate-600" />
+          <Package className="w-8 h-8 text-slate-400 dark:text-slate-600" />
         )}
       </div>
   
-      {/* Info del producto */}
       <div className="flex-grow flex flex-col">
-        {/* Código y Marca en una línea */}
         <div className="flex items-center gap-1.5 mb-1.5 overflow-hidden">
-          <span className="text-[10px] bg-blue-900/40 text-blue-400 px-1.5 py-0.5 rounded font-mono font-bold flex-shrink-0">
+          <span className="text-[10px] bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded font-mono font-bold flex-shrink-0">
             {product.sku_code}
           </span>
           {product.brand?.name && (
-            <span className="text-[10px] text-slate-400 font-bold uppercase truncate">
+            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase truncate">
               {product.brand.name}
             </span>
           )}
         </div>
   
-        {/* Título: limitamos a 2 renglones con altura fija mínima para que todas las tarjetas se vean iguales */}
         <h3 
-          className="text-xs sm:text-sm font-semibold text-white leading-tight line-clamp-2 min-h-[2.5rem] mb-2 cursor-pointer hover:text-blue-400 transition-colors" 
+          className="text-xs sm:text-sm font-semibold text-slate-800 dark:text-white leading-tight line-clamp-2 min-h-[2.5rem] mb-2 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors" 
           title={product.name}
-          onClick={() => onQuickView && onQuickView(product)}
+          onClick={() => onQuickView && onQuickView(product, categoryName)}
         >
           {product.name}
         </h3>
   
-        {/* Precio pegado abajo */}
-        <p className="text-sm sm:text-base font-bold text-white mt-auto">
+        <p className="text-sm sm:text-base font-bold text-slate-900 dark:text-white mt-auto">
           ${Number(product.price).toLocaleString('es-AR')}
         </p>
       </div>
   
-      {/* Botón de Agregar más discreto */}
       <button 
         onClick={() => onAddToCart && onAddToCart(product)}
-        className="mt-3 w-full bg-slate-700/50 hover:bg-blue-600 text-white text-[11px] font-bold py-2 rounded-lg transition-colors flex items-center justify-center gap-1.5 uppercase tracking-wider"
+        className="mt-3 w-full bg-slate-100 dark:bg-slate-700/50 hover:bg-blue-600 dark:hover:bg-blue-600 text-slate-800 hover:text-white dark:text-white text-[11px] font-bold py-2 rounded-lg transition-colors flex items-center justify-center gap-1.5 uppercase tracking-wider"
       >
         <ShoppingCart className="w-3.5 h-3.5" />
         <span>Agregar</span>
@@ -208,6 +213,7 @@ function SkeletonCard() {
 function QuickViewModal({ product, categoryName, isOpen, onClose, onAddToCart }) {
   if (!isOpen || !product) return null;
   const brandName = product.brand?.name || 'Multimarca';
+  const resolvedCategory = categoryName || product.category?.name || 'General';
   
   return (
     <div className="fixed inset-0 bg-black/60 z-[110] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-300">
@@ -217,7 +223,6 @@ function QuickViewModal({ product, categoryName, isOpen, onClose, onAddToCart })
           <X className="w-6 h-6" />
         </button>
 
-        {/* FOTO GRANDE (Mitad izquierda en compu, arriba en celular) */}
         <div className="w-full md:w-1/2 bg-slate-50 dark:bg-slate-900 h-48 md:h-auto relative flex items-center justify-center border-b md:border-b-0 md:border-r border-slate-200 dark:border-slate-700">
            {product.image_url ? (
              <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
@@ -227,7 +232,6 @@ function QuickViewModal({ product, categoryName, isOpen, onClose, onAddToCart })
            <span className="absolute bottom-4 left-4 text-xs font-bold tracking-widest uppercase text-white bg-slate-900/70 backdrop-blur-sm px-3 py-1.5 rounded-lg font-exo">Cód: {product.sku_code}</span>
         </div>
 
-        {/* DATOS (Mitad derecha en compu, abajo en celular) */}
         <div className="w-full md:w-1/2 p-6 md:p-8 flex flex-col">
           <h2 className="text-xl md:text-2xl font-bold text-slate-900 dark:text-white mb-6 leading-tight pr-6">{product.name}</h2>
           
@@ -237,7 +241,7 @@ function QuickViewModal({ product, categoryName, isOpen, onClose, onAddToCart })
             </h4>
             <ul className="space-y-3 text-sm text-slate-700 dark:text-slate-300 font-medium">
               <li className="flex justify-between border-b border-slate-200 dark:border-slate-700/50 pb-2">
-                <span className="text-slate-500 dark:text-slate-400 font-light">Categoría:</span><span>{categoryName}</span>
+                <span className="text-slate-500 dark:text-slate-400 font-light">Categoría:</span><span>{resolvedCategory}</span>
               </li>
               <li className="flex justify-between border-b border-slate-200 dark:border-slate-700/50 pb-2">
                 <span className="text-slate-500 dark:text-slate-400 font-light">Marca:</span>
@@ -267,14 +271,11 @@ function QuickViewModal({ product, categoryName, isOpen, onClose, onAddToCart })
   );
 }
 
-
-
-function AuthModal({ isOpen, onClose, onLogin }) { // <-- Agregamos onLogin acá
+function AuthModal({ isOpen, onClose, onLogin }) {
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   
-  // Estados del formulario
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [nombre, setNombre] = useState('');
@@ -307,14 +308,12 @@ function AuthModal({ isOpen, onClose, onLogin }) { // <-- Agregamos onLogin acá
 
     try {
       if (isLogin) {
-        // INICIAR SESIÓN CON EMAIL
         const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
         if (error) throw error;
         
-        // Le pasamos los datos a tu App.jsx para que actualice la barra superior
         onLogin({
           name: data.user.user_metadata.name || email.split('@')[0],
           phone: data.user.user_metadata.phone || '',
@@ -322,7 +321,6 @@ function AuthModal({ isOpen, onClose, onLogin }) { // <-- Agregamos onLogin acá
         });
         
       } else {
-        // CREAR CUENTA NUEVA
         if (!nombre || !apellido) throw new Error("El nombre y apellido son obligatorios");
         
         const { error } = await supabase.auth.signUp({
@@ -338,7 +336,7 @@ function AuthModal({ isOpen, onClose, onLogin }) { // <-- Agregamos onLogin acá
         
         if (error) throw error;
         alert("¡Cuenta creada! Revisa tu email para confirmarla (si está configurado) o iniciá sesión.");
-        setIsLogin(true); // Lo pasamos a la pantalla de login
+        setIsLogin(true);
       }
     } catch (error) {
       setError(error.message === "Invalid login credentials" ? "Email o contraseña incorrectos" : error.message);
@@ -347,15 +345,12 @@ function AuthModal({ isOpen, onClose, onLogin }) { // <-- Agregamos onLogin acá
     }
   };
 
-  // ... (De acá para abajo sigue igual el return con el diseño del modal) ...
-
   return (
     <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 sm:p-0">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose}></div>
       
       <div className="bg-white dark:bg-slate-800 w-full max-w-md rounded-2xl shadow-2xl relative z-10 overflow-hidden animate-in zoom-in-95 duration-200">
         
-        {/* Cabecera */}
         <div className="flex justify-between items-center p-6 border-b border-slate-100 dark:border-slate-700">
           <h2 className="text-xl font-bold text-slate-800 dark:text-white uppercase tracking-widest">
             {isLogin ? 'Iniciar Sesión' : 'Crear Cuenta'}
@@ -366,7 +361,6 @@ function AuthModal({ isOpen, onClose, onLogin }) { // <-- Agregamos onLogin acá
         </div>
 
         <div className="p-6">
-          {/* Botón de Google (Siempre visible) */}
           <button 
             onClick={handleGoogleLogin} 
             disabled={loading}
@@ -388,7 +382,6 @@ function AuthModal({ isOpen, onClose, onLogin }) { // <-- Agregamos onLogin acá
             </div>
           )}
 
-          {/* Formulario de Email */}
           <form onSubmit={handleEmailAuth} className="space-y-4">
             {!isLogin && (
               <div className="grid grid-cols-2 gap-4">
@@ -422,7 +415,6 @@ function AuthModal({ isOpen, onClose, onLogin }) { // <-- Agregamos onLogin acá
             </button>
           </form>
 
-          {/* Toggle entre Login y Register */}
           <div className="mt-6 text-center">
             <button onClick={() => {setIsLogin(!isLogin); setError('');}} type="button" className="text-sm text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 font-medium">
               {isLogin ? '¿No tenés cuenta? Registrate gratis' : '¿Ya tenés cuenta? Iniciá sesión'}
@@ -437,10 +429,13 @@ function AuthModal({ isOpen, onClose, onLogin }) { // <-- Agregamos onLogin acá
 function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUser }) {
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formError, setFormError] = useState('');
+  const nameParts = (currentUser?.name || '').trim().split(' ');
+
   const [formData, setFormData] = useState({
     email: currentUser?.email || '',
-    nombre: currentUser?.name || '',
-    apellido: '',
+    nombre: nameParts[0] || '',
+    apellido: nameParts.slice(1).join(' ') || '',
     dni: '',
     telefono: currentUser?.phone || '',
     metodoEnvio: 'domicilio',
@@ -457,33 +452,27 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
   if (!isOpen) return null;
 
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
+
   const handleSiguientePaso = () => {
-    setFormError(''); // Limpiamos errores previos
+    setFormError('');
     
-    // Validar Email
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(formData.email)) return setFormError('Por favor, ingresá un correo electrónico válido.');
     
-    // Validar Nombre y Apellido (mínimo 3 letras, sin números)
-    if (formData.nombre.trim().length < 3 || formData.apellido.trim().length < 3) return setFormError('El nombre y apellido deben ser reales.');
+    if (formData.nombre.trim().length < 2 || formData.apellido.trim().length < 2) return setFormError('El nombre y apellido deben ser reales.');
     
-    // Validar DNI (7 u 8 números, eliminando puntos si los puso)
     const dniLimpio = formData.dni.replace(/\D/g, '');
-    if (dniLimpio.length < 7 || dniLimpio.length > 8) return setFormError('El DNI debe tener 7 u 8 números válidos.');
+    if (dniLimpio.length < 7 || dniLimpio.length > 11) return setFormError('El DNI/CUIT debe tener entre 7 y 11 números válidos.');
     
-    // Validar Teléfono (mínimo 10 números para Argentina: cód área + número)
     const telLimpio = formData.telefono.replace(/\D/g, '');
     if (telLimpio.length < 10) return setFormError('Ingresá un teléfono válido con código de área (ej: 2478512620).');
     
-    // Validar Dirección
     if (formData.calle.trim().length < 3 || formData.numero.trim() === '') return setFormError('Por favor, completá correctamente la dirección.');
 
-    // Si pasó todas las pruebas, avanzamos al pago
     setStep(2);
   };
-  const [formError, setFormError] = useState('');
 
-const handleSubmit = async () => {
+  const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
       const notas = `TIPO DE VENTA: Checkout Web Automático
@@ -503,7 +492,6 @@ ${formData.ciudad}, ${formData.provincia} (CP: ${formData.cp})
 OBSERVACIONES:
 ${formData.observaciones || 'Ninguna'}`;
 
-      // 1. Guardar orden en Supabase
       const { data: newOrder, error: orderError } = await supabase
         .from('orders')
         .insert([{
@@ -517,7 +505,6 @@ ${formData.observaciones || 'Ninguna'}`;
 
       if (orderError) throw orderError;
 
-      // 2. Guardar repuestos en order_items
       const itemsToInsert = cart.map(item => ({
         order_id: newOrder.id,
         product_id: item.product.id,
@@ -528,9 +515,7 @@ ${formData.observaciones || 'Ninguna'}`;
       const { error: itemsError } = await supabase.from('order_items').insert(itemsToInsert);
       if (itemsError) throw itemsError;
 
-      // 3. INTEGRACIÓN CON MERCADO PAGO
       if (formData.metodoPago === 'mercadopago') {
-        // Llamamos a nuestro puente secreto en Vercel
         const response = await fetch('/api/createPreference', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -543,18 +528,14 @@ ${formData.observaciones || 'Ninguna'}`;
         const data = await response.json();
         
         if (data.init_point) {
-          // Vaciamos el carrito porque la compra ya se registró
-          if(onSuccess) onSuccess(true); 
-          
-          // Magia: Redirigimos al cliente a la página de cobro de Mercado Pago
+          if (onSuccess) onSuccess(true);
           window.location.href = data.init_point;
-          return; // Cortamos la función acá
+          return;
         } else {
           throw new Error("No se pudo conectar con Mercado Pago");
         }
       }
 
-      // Si eligió Transferencia o Local, simplemente muestra el cartel verde de éxito
       onSuccess(false);
 
     } catch (error) {
@@ -567,23 +548,19 @@ ${formData.observaciones || 'Ninguna'}`;
 
   return (
     <div className="fixed inset-0 z-[1000] bg-slate-50 dark:bg-slate-900 overflow-y-auto flex flex-col transition-colors">
-      {/* HEADER DEL CHECKOUT */}
       <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-4 sticky top-0 z-10 shadow-sm flex items-center justify-between">
         <h2 className="font-michroma text-xl font-bold text-slate-900 dark:text-white ml-4">D.A.P.A <span className="text-[10px] font-exo tracking-[0.2em] uppercase text-slate-500">Checkout</span></h2>
         <button onClick={onClose} className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full"><X className="w-6 h-6" /></button>
       </div>
 
       <div className="flex-1 max-w-5xl mx-auto w-full p-4 sm:p-6 lg:p-8 flex flex-col lg:flex-row gap-8">
-        {/* COLUMNA IZQUIERDA: FORMULARIO */}
         <div className="flex-1">
-          {/* BARRA DE PROGRESO */}
           <div className="flex items-center justify-between mb-8 border-b border-slate-200 dark:border-slate-700 pb-4">
             <div className={`flex-1 text-center font-bold text-xs uppercase tracking-widest ${step >= 1 ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`}>1. Envío</div>
             <div className={`flex-1 text-center font-bold text-xs uppercase tracking-widest border-l border-slate-200 dark:border-slate-700 ${step >= 2 ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`}>2. Pago</div>
             <div className={`flex-1 text-center font-bold text-xs uppercase tracking-widest border-l border-slate-200 dark:border-slate-700 ${step >= 3 ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`}>3. Revisión</div>
           </div>
 
-          {/* PASO 1: DATOS Y ENVÍO */}
           {step === 1 && (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
               <h3 className="font-bold text-lg text-slate-800 dark:text-white uppercase">Datos de Contacto y Envío</h3>
@@ -628,11 +605,11 @@ ${formData.observaciones || 'Ninguna'}`;
                 </div>
                 <div className="space-y-1">
                   <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Ciudad</label>
-                  <input type="text" name="ciudad" value={formData.ciudad} onChange={handleChange} className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none cursor-not-allowed" readOnly />
+                  <input type="text" name="ciudad" value={formData.ciudad} onChange={handleChange} placeholder="Tu ciudad" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
                 </div>
                 <div className="space-y-1">
                   <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Cód. Postal</label>
-                  <input type="text" name="cp" value={formData.cp} onChange={handleChange} className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none cursor-not-allowed" readOnly />
+                  <input type="text" name="cp" value={formData.cp} onChange={handleChange} placeholder="Ej: 2740" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
                 </div>
               </div>
               
@@ -651,7 +628,6 @@ ${formData.observaciones || 'Ninguna'}`;
             </div>
           )}
 
-          {/* PASO 2: PAGO */}
           {step === 2 && (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
               <h3 className="font-bold text-lg text-slate-800 dark:text-white uppercase">Método de Pago</h3>
@@ -691,7 +667,6 @@ ${formData.observaciones || 'Ninguna'}`;
             </div>
           )}
 
-          {/* PASO 3: REVISIÓN Y FINALIZAR */}
           {step === 3 && (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
               <h3 className="font-bold text-lg text-slate-800 dark:text-white uppercase">Revisión Final</h3>
@@ -708,7 +683,6 @@ ${formData.observaciones || 'Ninguna'}`;
                 </div>
               </div>
 
-              {/* BOTONES DEL PASO 3 ESTILIZADOS */}
               <div className="flex flex-col sm:flex-row gap-4 mt-8">
                 <button 
                   onClick={() => setStep(2)} 
@@ -754,7 +728,6 @@ ${formData.observaciones || 'Ninguna'}`;
           )}
         </div>
 
-        {/* COLUMNA DERECHA: RESUMEN DEL CARRITO */}
         <div className="lg:w-96 flex-shrink-0">
           <div className="bg-slate-100 dark:bg-slate-800 p-6 rounded-2xl sticky top-24">
             <h3 className="font-bold text-slate-900 dark:text-white uppercase mb-4">Resumen de Compra</h3>
@@ -782,8 +755,7 @@ ${formData.observaciones || 'Ninguna'}`;
   );
 }
 
-
-function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, onCheckout, currentUser, clearCart }) {
+function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, currentUser, clearCart }) {
   const [checkoutMode, setCheckoutMode] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
@@ -796,11 +768,10 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, onCheck
   const handleProcessOrder = async (metodoDeEnvio) => {
     setIsSubmitting(true);
     
-    let clienteNombre = currentUser ? currentUser.name : 'Cliente Web';
-    let clienteTelefono = currentUser ? currentUser.phone : 'No registrado';
+    const clienteNombre = currentUser ? currentUser.name : 'Cliente Web';
+    const clienteTelefono = currentUser ? currentUser.phone : 'No registrado';
 
     try {
-      // 1. GUARDAR LA ORDEN PRINCIPAL EN 'orders'
       const { data: newOrder, error: orderError } = await supabase
         .from('orders')
         .insert([{
@@ -815,7 +786,6 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, onCheck
 
       if (orderError) throw orderError;
 
-      // 2. GUARDAR LOS PRODUCTOS EN 'order_items' PARA QUE APAREZCAN EN EL PANEL ADMIN
       const itemsToInsert = cart.map(item => ({
         order_id: newOrder.id,
         product_id: item.product.id,
@@ -829,7 +799,6 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, onCheck
 
       if (itemsError) throw itemsError;
 
-      // 3. ACCIONES SEGÚN EL MÉTODO ELEGIDO (WhatsApp o Web)
       if (metodoDeEnvio === 'WHATSAPP') {
         let wppText = `¡Hola DAPA Repuestos! Soy ${clienteNombre}.\n\n`;
         wppText += `Acabo de generar el pedido web #${newOrder.id}:\n\n`;
@@ -838,16 +807,15 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, onCheck
         });
         wppText += `\n💰 *Total estimado: $${cartTotal.toLocaleString('es-AR')}*`;
 
-        const numeroVentas = "5492478512620"; // Ya dejé tu número oficial
-        const wppUrl = `https://wa.me/${numeroVentas}?text=${encodeURIComponent(wppText)}`;
+        const wppUrl = `${CONTACT_INFO.whatsappLink}?text=${encodeURIComponent(wppText)}`;
         
         window.open(wppUrl, '_blank');
-        if(clearCart) clearCart();
+        if (clearCart) clearCart();
         onClose();
         setCheckoutMode(false);
       } else {
         setOrderSuccess(true);
-        if(clearCart) clearCart();
+        if (clearCart) clearCart();
       }
 
     } catch (error) {
@@ -864,7 +832,7 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, onCheck
     onClose();
   };
 
-if (showWebCheckout) {
+  if (showWebCheckout) {
     return (
       <CheckoutModal 
         isOpen={true}
@@ -874,14 +842,11 @@ if (showWebCheckout) {
         onClose={() => setShowWebCheckout(false)}
         onSuccess={(isMp) => {
           if (isMp) {
-            // Si es Mercado Pago: solo vaciamos el carrito en silencio.
-            // (La página saltará sola al link de cobro en un instante)
-            if(clearCart) clearCart(); 
+            if (clearCart) clearCart(); 
           } else {
-            // Si es Transferencia o Acordar: cerramos el modal y mostramos tu cartel verde
             setOrderSuccess(true);
             setShowWebCheckout(false);
-            if(clearCart) clearCart();
+            if (clearCart) clearCart();
           }
         }}
       />  
@@ -893,7 +858,6 @@ if (showWebCheckout) {
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity" onClick={resetAndClose}></div>
       <div className="w-full max-w-md bg-white dark:bg-slate-800 h-full shadow-2xl relative z-[1000] flex flex-col animate-in slide-in-from-right duration-300 border-l border-slate-200 dark:border-slate-700">
         
-        {/* Cabecera */}
         <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/80 dark:bg-slate-900/80 backdrop-blur-md">
           <div className="flex items-center gap-3">
             <ShoppingCart className="w-6 h-6 text-slate-900 dark:text-white" />
@@ -904,7 +868,6 @@ if (showWebCheckout) {
           </button>
         </div>
 
-        {/* Contenido principal */}
         <div className="flex-1 overflow-y-auto p-6 bg-slate-50/30 dark:bg-slate-900/30 custom-scrollbar">
           {orderSuccess ? (
             <div className="h-full flex flex-col items-center justify-center text-center animate-in fade-in zoom-in duration-500">
@@ -954,13 +917,13 @@ if (showWebCheckout) {
           )}
         </div>
 
-        {/* Footer: Opciones de Envío */}
         {!orderSuccess && cart.length > 0 && (
           <div className="p-6 border-t border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.05)]">
-            <div className="mb-4 text-xs font-light text-slate-500 dark:text-slate-400 text-center bg-slate-50 dark:bg-slate-900 py-2 rounded-lg border border-slate-100 dark:border-slate-700">
-              {currentUser ? `Cotización a nombre de: ` : ''}
-              {currentUser && <strong className="font-bold text-slate-700 dark:text-slate-200">{currentUser.name}</strong>}
-            </div>
+            {currentUser && (
+              <div className="mb-4 text-xs font-light text-slate-500 dark:text-slate-400 text-center bg-slate-50 dark:bg-slate-900 py-2 rounded-lg border border-slate-100 dark:border-slate-700">
+                Cotización a nombre de: <strong className="font-bold text-slate-700 dark:text-slate-200">{currentUser.name}</strong>
+              </div>
+            )}
 
             {checkoutMode ? (
               <div className="flex flex-col gap-3 animate-in slide-in-from-bottom-2">
@@ -974,12 +937,12 @@ if (showWebCheckout) {
                   Por WhatsApp
                 </button>
                 <button 
-  onClick={() => setShowWebCheckout(true)}
-  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-widest py-3 rounded-xl transition-colors flex items-center justify-center gap-3 shadow-lg shadow-blue-600/20 focus:outline-none"
->
-  <Send className="w-4 h-4" /> 
-  Por la Página Web 
-</button>
+                  onClick={() => setShowWebCheckout(true)}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-widest py-3 rounded-xl transition-colors flex items-center justify-center gap-3 shadow-lg shadow-blue-600/20 focus:outline-none"
+                >
+                  <Send className="w-4 h-4" /> 
+                  Por la Página Web 
+                </button>
                 <button 
                   onClick={() => setCheckoutMode(false)}
                   className="w-full mt-2 py-2 text-xs font-bold uppercase tracking-widest text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors"
@@ -1099,6 +1062,15 @@ function GlobalStyles() {
       .line-clamp-3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
       @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
       .animate-fade-up { animation: fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; opacity: 0; }
+      @keyframes floatParticle {
+        0% { transform: translateY(0) scale(1); opacity: 0; }
+        20% { opacity: 0.8; }
+        80% { opacity: 0.5; }
+        100% { transform: translateY(-260px) scale(0.4); opacity: 0; }
+      }
+      .css-particle { position: absolute; background-color: #60a5fa; border-radius: 9999px; animation-name: floatParticle; animation-timing-function: linear; animation-iteration-count: infinite; }
+      @keyframes softPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+      .animate-soft-pulse { animation: softPulse 3s ease-in-out infinite; }
     `}} />
   );
 }
@@ -1109,7 +1081,7 @@ function ProgressBarComponent() {
     const handleScroll = () => {
       const totalScroll = document.documentElement.scrollTop;
       const windowHeight = document.documentElement.scrollHeight - document.documentElement.clientHeight;
-      setScrollProgress(totalScroll / windowHeight);
+      setScrollProgress(windowHeight > 0 ? totalScroll / windowHeight : 0);
     };
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
@@ -1144,13 +1116,12 @@ function FloatingActions() {
 /* ==========================================================================
    NAVBAR CON MENÚS DESPLEGABLES Y BÚSQUEDA
    ========================================================================== */
-function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenAuth, onOpenCart, onLogout, toggleDarkMode, isDarkMode, categories, allProducts, onOpenCategory, onProductSearchSelect, onLoginClick }) {
+function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenCart, onLogout, toggleDarkMode, isDarkMode, categories, allProducts, onOpenCategory, onProductSearchSelect, onLoginClick }) {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [suggestions, setSuggestions] = useState([]);
-  
 
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 50);
@@ -1158,7 +1129,7 @@ function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenAuth, on
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-const isNavbarSolid = isScrolled || activePage !== 'inicio' || mobileMenuOpen;
+  const isNavbarSolid = isScrolled || activePage !== 'inicio' || mobileMenuOpen;
 
   const handleNavClick = (page, section) => { navigateTo(page, section); setMobileMenuOpen(false); setActiveDropdown(null); };
   const handleCategoryClick = (cat) => { onOpenCategory(cat); setActiveDropdown(null); setMobileMenuOpen(false); };
@@ -1186,13 +1157,11 @@ const isNavbarSolid = isScrolled || activePage !== 'inicio' || mobileMenuOpen;
     <nav className={`fixed w-full z-[100] transition-all duration-300 ${isNavbarSolid ? "bg-white/95 dark:bg-slate-900/95 backdrop-blur-md shadow-sm py-4 border-b border-slate-100 dark:border-slate-800" : "bg-transparent py-6"}`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center gap-4">
         
-        {/* LOGO */}
         <button onClick={() => handleNavClick('inicio', 'inicio')} className="flex flex-col items-start group text-left focus:outline-none flex-shrink-0">
           <span className={`font-bold text-xl md:text-2xl tracking-tighter font-michroma transition-colors leading-none ${isNavbarSolid ? 'text-slate-900 dark:text-white group-hover:text-blue-600' : 'text-white'}`}>D.A.P.A</span>
           <span className={`text-[8px] md:text-[10px] font-bold tracking-[0.2em] uppercase font-exo mt-1 transition-colors ${isNavbarSolid ? 'text-slate-500 dark:text-slate-400' : 'text-slate-300'}`}>Repuestos Molle</span>
         </button>
         
-        {/* LINKS (Desktop) */}
         <div className="hidden lg:flex items-center space-x-1">
           <button onClick={() => handleNavClick('inicio', 'inicio')} className={`px-4 py-2 text-xs font-semibold uppercase tracking-widest transition-all hover:text-blue-600 ${isNavbarSolid ? 'text-slate-600 dark:text-slate-300' : 'text-white'}`}>Inicio</button>
           <div className="relative group" onMouseEnter={() => setActiveDropdown('catalog')} onMouseLeave={() => setActiveDropdown(null)}>
@@ -1213,10 +1182,8 @@ const isNavbarSolid = isScrolled || activePage !== 'inicio' || mobileMenuOpen;
           <button onClick={() => handleNavClick('nosotros')} className={`px-4 py-2 text-xs font-semibold uppercase tracking-widest transition-all hover:text-blue-600 ${isNavbarSolid ? 'text-slate-600 dark:text-slate-300' : 'text-white'}`}>Nosotros</button>
         </div>
 
-        {/* ACCIONES DE LA DERECHA (Buscador + Iconos) */}
         <div className="flex items-center gap-2 md:gap-4 flex-grow justify-end relative z-50">
           
-          {/* BUSCADOR */}
           <div className="hidden lg:block relative mr-2 w-full max-w-[220px]">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <Search className={`h-4 w-4 ${isNavbarSolid ? 'text-slate-400' : 'text-slate-300'}`} />
@@ -1237,19 +1204,16 @@ const isNavbarSolid = isScrolled || activePage !== 'inicio' || mobileMenuOpen;
             )}
           </div>
 
-          {/* BOTÓN MODO OSCURO */}
           <button onClick={toggleDarkMode} className={`p-2 rounded-full transition-colors ${isNavbarSolid ? 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800' : 'text-white hover:bg-white/10'}`}>
             {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
           </button>
 
-          {/* BOTÓN USUARIO (LOGIN / PERFIL) */}
           {currentUser ? (
             <div className="relative group cursor-pointer flex items-center gap-2 pr-2">
               <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold border border-blue-200 dark:border-blue-800">
                 {currentUser.name.charAt(0).toUpperCase()}
               </div>
               
-              {/* Menú desplegable oculto para Cerrar Sesión */}
               <div className="absolute top-full right-0 mt-2 w-48 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[110]">
                 <div className="p-3 border-b border-slate-100 dark:border-slate-700">
                   <p className="text-sm font-bold text-slate-800 dark:text-white truncate">{currentUser.name}</p>
@@ -1272,13 +1236,11 @@ const isNavbarSolid = isScrolled || activePage !== 'inicio' || mobileMenuOpen;
             </button>
           )}
 
-          {/* BOTÓN CARRITO */}
           <button onClick={onOpenCart} className={`relative p-2 rounded-full transition-all ${isNavbarSolid ? 'text-slate-900 dark:text-white hover:bg-slate-100 dark:hover:bg-slate-800' : 'text-white hover:bg-white/10'}`}>
             <ShoppingCart className="w-6 h-6" />
             {cartCount > 0 && <span className="absolute top-0 right-0 bg-blue-600 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center border-2 border-white dark:border-slate-900 animate-in zoom-in">{cartCount}</span>}
           </button>
 
-          {/* BOTÓN HAMBURGUESA (Móvil) */}
           <button className="lg:hidden p-2" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
             {mobileMenuOpen ? <X className={isNavbarSolid ? 'text-slate-900 dark:text-white' : 'text-white'} /> : <Menu className={isNavbarSolid ? 'text-slate-900 dark:text-white' : 'text-white'} />}
           </button>
@@ -1286,7 +1248,6 @@ const isNavbarSolid = isScrolled || activePage !== 'inicio' || mobileMenuOpen;
         </div>
       </div>
 
-      {/* MENÚ MÓVIL DESPLEGABLE */}
       {mobileMenuOpen && (
         <div className="lg:hidden absolute top-full left-0 w-full bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 p-6 flex flex-col gap-6 shadow-2xl animate-in slide-in-from-top-2 h-[calc(100vh-80px)] overflow-y-auto">
           
@@ -1323,9 +1284,10 @@ const isNavbarSolid = isScrolled || activePage !== 'inicio' || mobileMenuOpen;
 
 /* COMPONENTE TEXTO HERO */
 function CSSHeroTitle() {
-  const particles = Array.from({ length: 30 }).map((_, i) => ({
+  const particles = useMemo(() => Array.from({ length: 30 }).map((_, i) => ({
     id: i, left: `${Math.random() * 100}%`, delay: `${Math.random() * 5}s`, duration: `${Math.random() * 5 + 3}s`
-  }));
+  })), []);
+
   return (
     <div className="relative w-full h-[180px] sm:h-[220px] md:h-[280px] mb-6 flex flex-col justify-center items-center md:items-start z-10 pointer-events-none">
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -1439,7 +1401,6 @@ function CatalogSection({ categories, allProducts, onOpenCategory, onProductSear
          <div className="text-center py-10"><Settings className="w-8 h-8 animate-spin mx-auto text-blue-500" /></div>
       ) : (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* GRILLA ESTÁTICA */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
             {categories.map((cat, idx) => (
               <RevealOnScroll key={cat.id} delay={`delay-${(idx % 4) * 100}`}>
@@ -1462,18 +1423,11 @@ function CatalogSection({ categories, allProducts, onOpenCategory, onProductSear
 
 function CategoryDetailSection({ category, allProducts, selectedProduct, onBack, onAddToCart, onQuickView }) {
   const [currentPage, setCurrentPage] = useState(1);
-  const [isLoading, setIsLoading] = useState(true);
   const [selectedBrandFilter, setSelectedBrandFilter] = useState('Todas');
   const itemsPerPage = 70;
+  const isLoading = false;
 
-  // Filtramos la base de datos completa para dejar solo los de esta categoría
   const baseProducts = allProducts.filter(p => p.category_id === category.id);
-
-  useEffect(() => {
-    setIsLoading(true);
-    const timer = setTimeout(() => setIsLoading(false), 400); 
-    return () => clearTimeout(timer);
-  }, [category.name, selectedBrandFilter]);
 
   const availableBrands = ['Todas', ...new Set(baseProducts.map(p => p.brand?.name).filter(Boolean))];
   const filteredProducts = selectedBrandFilter === 'Todas' ? baseProducts : baseProducts.filter(p => p.brand?.name === selectedBrandFilter);
@@ -1520,28 +1474,25 @@ function CategoryDetailSection({ category, allProducts, selectedProduct, onBack,
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-3 md:gap-4 auto-rows-fr">
                   {displayProducts.map((prod, i) => (<RevealOnScroll key={prod.sku_code + i} delay={`delay-${(i % 3) * 100}`}><ProductCard product={prod} categoryName={category.name} onAddToCart={onAddToCart} onQuickView={onQuickView} isSelected={selectedProduct && selectedProduct.sku_code === prod.sku_code} /></RevealOnScroll>))}
                 </div>
-            {totalPages > 1 && (
-  <div className="flex justify-center items-center gap-2 md:gap-4 mt-12 mb-8">
-    {/* Botón Atrás */}
-    <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-2 md:p-3 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 hover:shadow-md disabled:opacity-50 disabled:shadow-none disabled:cursor-not-allowed transition-all bg-transparent flex-shrink-0">
-      <ChevronLeft className="w-5 h-5" />
-    </button>
-    
-    {/* Contenedor de Números con FLEX-WRAP */}
-    <div className="flex flex-wrap justify-center items-center gap-2 max-w-full">
-      {Array.from({ length: totalPages }).map((_, i) => (
-        <button key={i} onClick={() => setCurrentPage(i + 1)} className={`min-w-[40px] h-10 rounded-xl text-sm font-bold transition-all ${currentPage === i + 1 ? 'bg-blue-600 text-white shadow-md shadow-blue-500/30' : 'bg-transparent border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 hover:shadow-sm'}`}>
-          {i + 1}
-        </button>
-      ))}
-    </div>
+                {totalPages > 1 && (
+                  <div className="flex justify-center items-center gap-2 md:gap-4 mt-12 mb-8">
+                    <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-2 md:p-3 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 hover:shadow-md disabled:opacity-50 disabled:shadow-none disabled:cursor-not-allowed transition-all bg-transparent flex-shrink-0">
+                      <ChevronLeft className="w-5 h-5" />
+                    </button>
+                    
+                    <div className="flex flex-wrap justify-center items-center gap-2 max-w-full">
+                      {Array.from({ length: totalPages }).map((_, i) => (
+                        <button key={i} onClick={() => setCurrentPage(i + 1)} className={`min-w-[40px] h-10 rounded-xl text-sm font-bold transition-all ${currentPage === i + 1 ? 'bg-blue-600 text-white shadow-md shadow-blue-500/30' : 'bg-transparent border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 hover:shadow-sm'}`}>
+                          {i + 1}
+                        </button>
+                      ))}
+                    </div>
 
-    {/* Botón Siguiente */}
-    <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="p-2 md:p-3 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 hover:shadow-md disabled:opacity-50 disabled:shadow-none disabled:cursor-not-allowed transition-all bg-transparent flex-shrink-0">
-      <ChevronRight className="w-5 h-5" />
-    </button>
-  </div>
-)}
+                    <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="p-2 md:p-3 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 hover:shadow-md disabled:opacity-50 disabled:shadow-none disabled:cursor-not-allowed transition-all bg-transparent flex-shrink-0">
+                      <ChevronRight className="w-5 h-5" />
+                    </button>
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -1606,7 +1557,6 @@ function ProcessSection({ setTutorialOpen }) {
   );
 }
 
-
 function ContactSection() {
   const [formStatus, setFormStatus] = useState('idle');
   const [errorMsg, setErrorMsg] = useState('');
@@ -1618,7 +1568,6 @@ function ContactSection() {
     setErrorMsg('');
     const form = e.target;
     
-    // Obtenemos los valores del formulario
     const nombre = form.nombre.value;
     const telefono = form.telefono.value;
     const repuesto = form.repuesto.value;
@@ -1627,44 +1576,61 @@ function ContactSection() {
     const anio = form.anio.value;
     const puertas = form.puertas.value;
     const mensaje = form.mensaje.value;
+    const file = form.imagen_adjunta?.files?.[0];
 
     try {
-      // 1. GUARDAR EN EL PANEL DE ADMINISTRADOR (SUPABASE)
-      // Usamos la tabla 'orders' con un status especial para diferenciarlo de las compras del carrito
+      let imageUrl = '';
+      if (file) {
+        const fileExt = file.name.split('.').pop();
+        const filePath = `cotizaciones/${Date.now()}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage
+          .from('products')
+          .upload(filePath, file);
+
+        if (!uploadError) {
+          const { data: publicUrlData } = supabase.storage
+            .from('products')
+            .getPublicUrl(filePath);
+          imageUrl = publicUrlData?.publicUrl || '';
+        }
+      }
+
+      const infoFoto = imageUrl 
+        ? `\nFOTO ADJUNTA: ${imageUrl}` 
+        : (file ? `\nFOTO: El cliente seleccionó una foto (${file.name}) para enviar por WhatsApp.` : '');
+
       const { data: newOrder, error: orderError } = await supabase
         .from('orders')
         .insert([{
           customer_name: nombre,
           customer_phone: telefono,
-          status: 'Cotización Web', // Así lo identificás rápido en el admin
+          status: 'Cotización Web',
           total_estimated: 0,
-          notes: `REPUESTO BUSCADO: ${repuesto}\nVEHÍCULO: ${marca} ${modelo}\nAÑO: ${anio} | PUERTAS: ${puertas}\nOBSERVACIONES: ${mensaje || 'Ninguna'}`
+          notes: `REPUESTO BUSCADO: ${repuesto}\nVEHÍCULO: ${marca} ${modelo}\nAÑO: ${anio} | PUERTAS: ${puertas}\nOBSERVACIONES: ${mensaje || 'Ninguna'}${infoFoto}`
         }])
         .select()
         .single();
 
       if (orderError) throw orderError;
 
-      // 2. ARMAR EL MENSAJE DE WHATSAPP
       let wppText = `¡Hola DAPA Repuestos! Soy ${nombre}.\n\n`;
       wppText += `Estoy buscando cotizar este repuesto por la página web:\n`;
       wppText += `🔍 *Repuesto:* ${repuesto}\n`;
       wppText += `🚗 *Vehículo:* ${marca} ${modelo}\n`;
       wppText += `📅 *Año:* ${anio} | 🚪 *Puertas:* ${puertas}\n`;
       if (mensaje) wppText += `\n📝 *Notas:* ${mensaje}\n`;
+      if (imageUrl) {
+        wppText += `\n📷 *Foto de muestra:* ${imageUrl}\n`;
+      } else if (file) {
+        wppText += `\n📷 *Tengo una foto de muestra para adjuntar acá en el chat.*\n`;
+      }
       wppText += `\n*(Cotización #${newOrder.id})*`;
 
-      // 3. ENVIAR A WHATSAPP
-      // Acá deberías poner el número limpio de DAPA (ej: 5492478512620). 
-      // Por ahora uso un número genérico, reemplazalo por el real.
-      const numeroVentas = "5492478512620"; 
-      const wppUrl = `https://wa.me/${numeroVentas}?text=${encodeURIComponent(wppText)}`;
+      const wppUrl = `${CONTACT_INFO.whatsappLink}?text=${encodeURIComponent(wppText)}`;
       
       setFormStatus('success');
       form.reset();
       setFileName('');
-      
-      // Abrimos WhatsApp en una pestaña nueva
       window.open(wppUrl, '_blank');
 
     } catch (error) {
@@ -1767,7 +1733,7 @@ function Footer({ navigateTo }) {
           <div className="flex flex-col gap-4 text-sm font-light">
             <button onClick={() => navigateTo('inicio', 'inicio')} className="hover:text-white transition-colors focus:outline-none w-fit mx-auto md:mx-0">Inicio</button>
             <button onClick={() => navigateTo('inicio', 'catálogo')} className="hover:text-white transition-colors focus:outline-none w-fit mx-auto md:mx-0">Catálogo Completo</button>
-            <button onClick={() => navigateTo('inicio', 'marcas')} className="hover:text-white transition-colors focus:outline-none w-fit mx-auto md:mx-0">Nuestras Marcas</button>
+            <button onClick={() => navigateTo('inicio', 'contacto')} className="hover:text-white transition-colors focus:outline-none w-fit mx-auto md:mx-0">Cotización y Contacto</button>
             <button onClick={() => navigateTo('nosotros')} className="hover:text-white transition-colors focus:outline-none w-fit mx-auto md:mx-0">Quiénes Somos</button>
           </div>
         </div>
@@ -1889,11 +1855,10 @@ function FAQSection() {
   );
 }
 
-
 /* ==========================================================================
-   COMPONENTE PRINCIPAL (App)
+   COMPONENTE PRINCIPAL (Tienda Pública)
    ========================================================================== */
- function TiendaPublica() {
+function TiendaPublica() {
   const [activePage, setActivePage] = useState('inicio');
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [selectedProduct, setSelectedProduct] = useState(null);
@@ -1906,14 +1871,12 @@ function FAQSection() {
   const [isTutorialOpen, setTutorialOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
   const [isDarkMode, setIsDarkMode] = useState(false);
-  
 
-  // NUEVOS ESTADOS PARA SUPABASE
   const [dbCategories, setDbCategories] = useState([]);
   const [dbProducts, setDbProducts] = useState([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
+  const toastTimeoutRef = useRef(null);
 
-  // EFECTO INICIAL (Carga LocalStorage, Tema y Datos de Supabase)
   useEffect(() => {
     const savedUser = localStorage.getItem('dapa_user');
     const savedCart = localStorage.getItem('dapa_cart');
@@ -1930,19 +1893,41 @@ function FAQSection() {
       document.documentElement.classList.add('dark');
     }
 
-    // CARGAMOS LA BASE DE DATOS REAL
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        const userData = {
+          name: session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email.split('@')[0],
+          phone: session.user.user_metadata?.phone || '',
+          email: session.user.email
+        };
+        setCurrentUser(userData);
+        localStorage.setItem('dapa_user', JSON.stringify(userData));
+      }
+    });
+
     const fetchSupabaseData = async () => {
       setIsLoadingData(true);
       try {
         const { data: cats } = await supabase.from('categories').select('*').eq('is_active', true);
         if (cats) setDbCategories(cats);
 
-        const { data: prods } = await supabase.from('products').select(`
-          *,
-          brand:brands(name),
-          category:categories(name)
-        `).eq('is_active', true);
-        if (prods) setDbProducts(prods);
+        let allProds = [];
+        let from = 0;
+        const step = 1000;
+        while (true) {
+          const { data: batch, error } = await supabase
+            .from('products')
+            .select(`*, brand:brands(name), category:categories(name)`)
+            .eq('is_active', true)
+            .range(from, from + step - 1);
+
+          if (error) throw error;
+          if (!batch || batch.length === 0) break;
+          allProds = [...allProds, ...batch];
+          if (batch.length < step) break;
+          from += step;
+        }
+        setDbProducts(allProds);
       } catch (err) {
         console.error("Error cargando datos de Supabase", err);
       } finally {
@@ -1950,6 +1935,27 @@ function FAQSection() {
       }
     };
     fetchSupabaseData();
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const handlePopState = (event) => {
+      const state = event.state;
+      if (!state || state.page === 'inicio') {
+        setActivePage('inicio');
+        setSelectedCategory(null);
+        setSelectedProduct(null);
+      } else if (state.page === 'nosotros') {
+        setActivePage('nosotros');
+      } else if (state.page === 'categoria' && state.category) {
+        setSelectedCategory(state.category);
+        setSelectedProduct(state.product || null);
+        setActivePage('categoria');
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
   const toggleDarkMode = () => {
@@ -1967,8 +1973,9 @@ function FAQSection() {
   };
 
   const showToast = (message) => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
     setToastMessage(message);
-    setTimeout(() => setToastMessage(null), 3000);
+    toastTimeoutRef.current = setTimeout(() => setToastMessage(null), 3000);
   };
 
   const handleLogin = (userData) => {
@@ -1978,7 +1985,8 @@ function FAQSection() {
     showToast(`¡Bienvenido, ${userData.name}!`);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     setCurrentUser(null);
     setCart([]);
     localStorage.removeItem('dapa_user');
@@ -1992,11 +2000,6 @@ function FAQSection() {
   };
 
   const handleAddToCart = (product) => {
-    if (!currentUser) {
-      setAuthModalOpen(true);
-      return;
-    }
-
     const existingItem = cart.find(item => item.product.sku_code === product.sku_code);
     if (existingItem) {
       const newCart = cart.map(item => 
@@ -2026,61 +2029,11 @@ function FAQSection() {
   const removeItem = (sku_code) => {
     saveCart(cart.filter(item => item.product.sku_code !== sku_code));
   };
-const handleWhatsAppCheckout = async () => {
-    if (!currentUser || cart.length === 0) return;
-
-    try {
-      // 1. Calculamos el total estimativo de la cotización
-      const totalEstimated = cart.reduce((total, item) => total + (item.product.price * item.quantity), 0);
-
-      // 2. Creamos la cabecera del pedido en Supabase
-      const { data: orderData, error: orderError } = await supabase
-        .from('orders')
-        .insert([{ 
-          customer_name: currentUser.name, 
-          customer_phone: currentUser.phone,
-          total_estimated: totalEstimated,
-          status: 'Pendiente'
-        }])
-        .select();
-
-      if (orderError) throw orderError;
-      
-      const newOrderId = orderData[0].id;
-
-      // 3. Guardamos el detalle (qué repuestos pidió)
-      const orderItems = cart.map(item => ({
-        order_id: newOrderId,
-        product_id: item.product.id,
-        quantity: item.quantity,
-        unit_price: item.product.price
-      }));
-
-      const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
-      if (itemsError) throw itemsError;
-
-      // 4. Armamos el mensaje para WhatsApp (¡Ahora incluye el número de pedido!)
-      let text = `¡Hola DAPA Repuestos! Soy *${currentUser.name}*.\n\nAcabo de generar el pedido web *#${newOrderId}*:\n\n`;
-      cart.forEach(i => text += `📦 ${i.quantity}x [${i.product.sku_code}] ${i.product.name}\n`);
-      text += `\nMi teléfono: ${currentUser.phone}`;
-      
-      window.open(`${CONTACT_INFO.whatsappLink}?text=${encodeURIComponent(text)}`, '_blank');
-      
-      // 5. Vaciamos el carrito y cerramos
-      setCart([]);
-      localStorage.removeItem('dapa_cart');
-      setCartOpen(false);
-      showToast("¡Cotización generada y enviada!");
-
-    } catch (error) {
-      console.error("Error al guardar el pedido:", error);
-      showToast("Hubo un error al procesar tu pedido.");
-    }
-  };
 
   const navigateTo = (page, sectionId = null) => {
     if (activePage !== page) {
       setActivePage(page);
+      window.history.pushState({ page }, '', page === 'nosotros' ? '#nosotros' : '/');
     }
     if (page === 'inicio') {
       setSelectedCategory(null);
@@ -2103,6 +2056,7 @@ const handleWhatsAppCheckout = async () => {
     setSelectedCategory(category);
     setSelectedProduct(null); 
     setActivePage('categoria');
+    window.history.pushState({ page: 'categoria', category }, '', `#categoria-${category.id}`);
   };
 
   const handleProductSearchSelect = (product) => {
@@ -2111,6 +2065,7 @@ const handleWhatsAppCheckout = async () => {
       setSelectedCategory(categoryInfo);
       setSelectedProduct(product);
       setActivePage('categoria');
+      window.history.pushState({ page: 'categoria', category: categoryInfo, product }, '', `#producto-${product.sku_code}`);
     }
   };
 
@@ -2119,7 +2074,6 @@ const handleWhatsAppCheckout = async () => {
   };
 
   const cartTotalItems = cart.reduce((acc, item) => acc + item.quantity, 0);
-
 
   return (
     <div className="min-h-screen bg-white dark:bg-slate-900 font-montserrat text-slate-800 dark:text-slate-100 overflow-x-hidden selection:bg-slate-900 dark:selection:bg-white selection:text-cyan-400 dark:selection:text-slate-900 relative transition-colors duration-300">
@@ -2176,7 +2130,6 @@ const handleWhatsAppCheckout = async () => {
 
       <Footer navigateTo={navigateTo} />
 
-      {/* Todos los modales van acá abajo, solo una vez */}
       <QuickViewModal 
         isOpen={!!quickViewData} 
         product={quickViewData?.product}
@@ -2191,7 +2144,6 @@ const handleWhatsAppCheckout = async () => {
         cart={cart}
         updateQuantity={updateQuantity}
         removeItem={removeItem}
-        onCheckout={handleWhatsAppCheckout}
         currentUser={currentUser}
         clearCart={() => { setCart([]); localStorage.removeItem('dapa_cart'); }}
       />
@@ -2215,10 +2167,7 @@ export default function App() {
   return (
     <Router>
       <Routes>
-        {/* Ruta para el cliente (tu código intacto) */}
         <Route path="/" element={<TiendaPublica />} />
-
-        {/* Ruta oculta para vos */}
         <Route path="/admin" element={<AdminPanel />} />
       </Routes>
     </Router>
