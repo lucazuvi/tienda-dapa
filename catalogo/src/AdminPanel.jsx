@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Tags, ClipboardList, ArrowLeft, Plus, X, Save, Package, CheckCircle, 
   Calendar, User as UserIcon, Phone, FileText, Lock, LogOut, 
   Image as ImageIcon, Upload, Edit, Trash2, ListPlus, Tag, Search, 
-  AlertTriangle, FileSpreadsheet, Download, RefreshCw
+  AlertTriangle, FileSpreadsheet, Download, RefreshCw, TrendingUp, 
+  BarChart3, Percent, Filter, ShoppingBag, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { supabase } from './supabase';
 
@@ -39,14 +40,29 @@ export default function AdminPanel() {
   const [brands, setBrands] = useState([]);
   const [orders, setOrders] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Estados de Filtros de Inventario
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterCategory, setFilterCategory] = useState('todas');
+  const [filterBrand, setFilterBrand] = useState('todas');
+  const [filterStock, setFilterStock] = useState('todos'); // todos | con_stock | bajo_stock | sin_stock
+  const [sortBy, setSortBy] = useState('recientes'); // recientes | precio_asc | precio_desc | stock_asc | nombre_asc
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 100;
+
+  // Estado de Filtro de Pedidos
   const [orderFilter, setOrderFilter] = useState('todos');
+
+  // Estados de Edición Rápida (Inline Editing)
+  const [inlineEdit, setInlineEdit] = useState({ id: null, field: null, value: '' });
 
   // Estados de los Modales
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [isBrandModalOpen, setIsBrandModalOpen] = useState(false);
   const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
+  const [isBulkPriceModalOpen, setIsBulkPriceModalOpen] = useState(false);
+  const [isPosModalOpen, setIsPosModalOpen] = useState(false);
   const [productToDelete, setProductToDelete] = useState(null);
   const [orderToDelete, setOrderToDelete] = useState(null);
   const [confirmClearCompleted, setConfirmClearCompleted] = useState(false);
@@ -55,7 +71,7 @@ export default function AdminPanel() {
   const [notification, setNotification] = useState(null);
   const notifTimeoutRef = useRef(null);
   
-  // Estados para Producto
+  // Estados para Producto (Crear / Editar)
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [editingProductId, setEditingProductId] = useState(null);
@@ -73,6 +89,22 @@ export default function AdminPanel() {
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryDesc, setNewCategoryDesc] = useState('');
   const [newBrandName, setNewBrandName] = useState('');
+
+  // Estados para Actualización Masiva de Precios (%)
+  const [bulkScope, setBulkScope] = useState('todos'); // todos | categoria | marca
+  const [bulkCategoryId, setBulkCategoryId] = useState('');
+  const [bulkBrandId, setBulkBrandId] = useState('');
+  const [bulkPercentage, setBulkPercentage] = useState('');
+  const [bulkRounding, setBulkRounding] = useState('100'); // 1 | 10 | 100 | 500 | 1000
+
+  // Estados para Nueva Venta Manual (POS / Mostrador)
+  const [posCustomerName, setPosCustomerName] = useState('Cliente Mostrador');
+  const [posCustomerPhone, setPosCustomerPhone] = useState('');
+  const [posPaymentMethod, setPosPaymentMethod] = useState('Efectivo');
+  const [posNotes, setPosNotes] = useState('');
+  const [posSearch, setPosSearch] = useState('');
+  const [posItems, setPosItems] = useState([]);
+  const [posDiscountStock, setPosDiscountStock] = useState(true);
 
   // Estados para Importación de Excel
   const [excelPreview, setExcelPreview] = useState([]);
@@ -93,6 +125,11 @@ export default function AdminPanel() {
     });
     return () => subscription.unsubscribe();
   }, []);
+
+  // Resetear a la página 1 cuando cambian los filtros de inventario
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterCategory, filterBrand, filterStock, sortBy]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -143,7 +180,7 @@ export default function AdminPanel() {
         supabase.from('categories').select('*').order('name'),
         supabase.from('brands').select('*').order('name'),
         fetchAllProducts(),
-        supabase.from('orders').select(`*, order_items (quantity, unit_price, product:products (name, sku_code))`).order('created_at', { ascending: false })
+        supabase.from('orders').select(`*, order_items (id, product_id, quantity, unit_price, product:products (id, name, sku_code, stock))`).order('created_at', { ascending: false })
       ]);
       if (catsRes.data) setCategories(catsRes.data);
       if (brandsRes.data) setBrands(brandsRes.data);
@@ -160,6 +197,111 @@ export default function AdminPanel() {
     if (notifTimeoutRef.current) clearTimeout(notifTimeoutRef.current);
     setNotification({ message, type });
     notifTimeoutRef.current = setTimeout(() => setNotification(null), 3500);
+  };
+
+  // =======================================================================
+  // EDICIÓN RÁPIDA EN TABLA (INLINE EDITING DE PRECIO Y STOCK)
+  // =======================================================================
+  const startInlineEdit = (prod, field) => {
+    setInlineEdit({
+      id: prod.id,
+      field,
+      value: String(prod[field] ?? '')
+    });
+  };
+
+  const saveInlineEdit = async (prod) => {
+    if (inlineEdit.id !== prod.id || !inlineEdit.field) return;
+    const field = inlineEdit.field;
+    const newValue = field === 'price' 
+      ? Math.max(0, parseFloat(inlineEdit.value) || 0)
+      : Math.max(0, parseInt(inlineEdit.value, 10) || 0);
+
+    setInlineEdit({ id: null, field: null, value: '' });
+
+    if (Number(prod[field]) === newValue) return;
+
+    const { error } = await supabase
+      .from('products')
+      .update({ [field]: newValue })
+      .eq('id', prod.id);
+
+    if (error) {
+      showNotification('No se pudo actualizar: ' + error.message, 'error');
+    } else {
+      setProducts(prev => prev.map(p => p.id === prod.id ? { ...p, [field]: newValue } : p));
+      showNotification(`${field === 'price' ? 'Precio' : 'Stock'} de ${prod.sku_code} actualizado`, 'success');
+    }
+  };
+
+  // =======================================================================
+  // ACTUALIZACIÓN MASIVA DE PRECIOS POR PORCENTAJE (%)
+  // =======================================================================
+  const targetBulkProducts = useMemo(() => {
+    if (bulkScope === 'categoria') {
+      if (!bulkCategoryId) return [];
+      return products.filter(p => String(p.category_id) === String(bulkCategoryId));
+    }
+    if (bulkScope === 'marca') {
+      if (!bulkBrandId) return [];
+      return products.filter(p => String(p.brand_id) === String(bulkBrandId));
+    }
+    return products;
+  }, [products, bulkScope, bulkCategoryId, bulkBrandId]);
+
+  const calculateRoundedPrice = (currentPrice, pct, roundStep) => {
+    const rawNew = Number(currentPrice) * (1 + pct / 100);
+    const step = parseInt(roundStep, 10) || 1;
+    if (step <= 1) return Math.max(0, Math.round(rawNew));
+    return Math.max(0, Math.round(rawNew / step) * step);
+  };
+
+  const handleApplyBulkPrice = async (e) => {
+    e.preventDefault();
+    const pct = parseFloat(bulkPercentage);
+    if (isNaN(pct) || pct === 0) {
+      showNotification('Ingresá un porcentaje distinto de 0', 'error');
+      return;
+    }
+    if (targetBulkProducts.length === 0) {
+      showNotification('No hay productos seleccionados para actualizar', 'error');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const updates = targetBulkProducts.map(p => ({
+        id: p.id,
+        sku_code: p.sku_code,
+        name: p.name,
+        category_id: p.category_id,
+        brand_id: p.brand_id,
+        stock: p.stock,
+        description: p.description,
+        image_url: p.image_url,
+        is_active: p.is_active,
+        price: calculateRoundedPrice(p.price, pct, bulkRounding)
+      }));
+
+      // Upsert en lotes de 250 para máxima velocidad en Supabase
+      const batchSize = 250;
+      for (let i = 0; i < updates.length; i += batchSize) {
+        const batch = updates.slice(i, i + batchSize);
+        const { error } = await supabase.from('products').upsert(batch, { onConflict: 'id' });
+        if (error) throw error;
+      }
+
+      const updatedMap = new Map(updates.map(u => [u.id, u.price]));
+      setProducts(prev => prev.map(p => updatedMap.has(p.id) ? { ...p, price: updatedMap.get(p.id) } : p));
+
+      showNotification(`Se actualizaron los precios de ${updates.length} repuestos (${pct > 0 ? `+${pct}%` : `${pct}%`})`, 'success');
+      setIsBulkPriceModalOpen(false);
+      setBulkPercentage('');
+    } catch (err) {
+      showNotification('Error al actualizar precios: ' + err.message, 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // =======================================================================
@@ -410,7 +552,6 @@ export default function AdminPanel() {
     setImportProgress('Verificando categorías y marcas...');
 
     try {
-      // 1. Mapear categorías existentes y crear las nuevas que vengan en el Excel
       const catMap = new Map(categories.map(c => [normalizeKey(c.name), c.id]));
       const uniqueNewCats = [...new Set(excelPreview.map(r => r.categoryName))]
         .filter(name => !catMap.has(normalizeKey(name)));
@@ -424,7 +565,6 @@ export default function AdminPanel() {
         insertedCats?.forEach(c => catMap.set(normalizeKey(c.name), c.id));
       }
 
-      // 2. Mapear marcas existentes y crear las nuevas que vengan en el Excel
       const brandMap = new Map(brands.map(b => [normalizeKey(b.name), b.id]));
       const uniqueNewBrands = [...new Set(excelPreview.map(r => r.brandName))]
         .filter(name => !brandMap.has(normalizeKey(name)));
@@ -438,7 +578,6 @@ export default function AdminPanel() {
         insertedBrands?.forEach(b => brandMap.set(normalizeKey(b.name), b.id));
       }
 
-      // 3. Separar productos nuevos vs actualizaciones
       const toInsert = [];
       const toUpdate = [];
 
@@ -461,7 +600,6 @@ export default function AdminPanel() {
         }
       });
 
-      // 4. Insertar nuevos en lotes de 200
       if (toInsert.length > 0) {
         setImportProgress(`Cargando ${toInsert.length} productos nuevos...`);
         const batchSize = 200;
@@ -472,7 +610,6 @@ export default function AdminPanel() {
         }
       }
 
-      // 5. Actualizar existentes
       if (toUpdate.length > 0) {
         setImportProgress(`Actualizando ${toUpdate.length} productos existentes...`);
         for (const prod of toUpdate) {
@@ -496,7 +633,7 @@ export default function AdminPanel() {
   };
 
   // =======================================================================
-  // FUNCIONES DE CATEGORÍAS, MARCAS Y PEDIDOS
+  // FUNCIONES DE CATEGORÍAS, MARCAS, PEDIDOS Y VENTA MANUAL (POS)
   // =======================================================================
   const handleAddCategory = async (e) => {
     e.preventDefault();
@@ -529,13 +666,114 @@ export default function AdminPanel() {
     setIsSubmitting(false);
   };
 
+  // Descuento automático de stock al pasar un pedido a "Facturado"
   const updateOrderStatus = async (orderId, newStatus) => {
+    const targetOrder = orders.find(o => o.id === orderId);
+    const wasAlreadyBilled = targetOrder?.status === 'Facturado';
+
     const { error } = await supabase.from('orders').update({ status: newStatus }).eq('id', orderId);
-    if (!error) {
-      setOrders(orders.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
-      showNotification(`Pedido #${orderId} actualizado a ${newStatus}`, 'success');
-    } else {
+    if (error) {
       showNotification("No se pudo actualizar el pedido", 'error');
+      return;
+    }
+
+    // Si pasa a Facturado por primera vez y tiene productos, descontamos el stock
+    if (newStatus === 'Facturado' && !wasAlreadyBilled && targetOrder?.order_items?.length > 0) {
+      const updatedStockMap = new Map();
+      for (const item of targetOrder.order_items) {
+        const prodId = item.product_id || item.product?.id;
+        if (!prodId) continue;
+        const currentProd = products.find(p => p.id === prodId);
+        if (currentProd) {
+          const newStock = Math.max(0, Number(currentProd.stock || 0) - Number(item.quantity || 0));
+          await supabase.from('products').update({ stock: newStock }).eq('id', prodId);
+          updatedStockMap.set(prodId, newStock);
+        }
+      }
+      if (updatedStockMap.size > 0) {
+        setProducts(prev => prev.map(p => updatedStockMap.has(p.id) ? { ...p, stock: updatedStockMap.get(p.id) } : p));
+      }
+      showNotification(`Pedido #${orderId} facturado y stock descontado automáticamente`, 'success');
+    } else {
+      showNotification(`Pedido #${orderId} actualizado a ${newStatus}`, 'success');
+    }
+
+    setOrders(orders.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+  };
+
+  // Crear Venta Manual (Mostrador / POS)
+  const posSuggestions = useMemo(() => {
+    if (posSearch.trim().length < 2) return [];
+    const q = posSearch.toLowerCase();
+    return products
+      .filter(p => p.name?.toLowerCase().includes(q) || p.sku_code?.toLowerCase().includes(q))
+      .slice(0, 8);
+  }, [posSearch, products]);
+
+  const addProductToPos = (prod) => {
+    setPosItems(prev => {
+      const exists = prev.find(i => i.product.id === prod.id);
+      if (exists) {
+        return prev.map(i => i.product.id === prod.id ? { ...i, quantity: i.quantity + 1 } : i);
+      }
+      return [...prev, { product: prod, quantity: 1 }];
+    });
+    setPosSearch('');
+  };
+
+  const posTotal = posItems.reduce((acc, item) => acc + Number(item.product.price) * item.quantity, 0);
+
+  const handleCreatePosOrder = async (e) => {
+    e.preventDefault();
+    if (posItems.length === 0) {
+      showNotification('Agregá al menos un repuesto a la venta', 'error');
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const notesText = `TIPO DE VENTA: Venta Manual / Mostrador\nMÉTODO DE PAGO: ${posPaymentMethod.toUpperCase()}${posNotes ? `\nNOTAS: ${posNotes}` : ''}`;
+      const { data: newOrder, error: orderErr } = await supabase
+        .from('orders')
+        .insert([{
+          customer_name: posCustomerName.trim() || 'Cliente Mostrador',
+          customer_phone: posCustomerPhone.trim() || 'Sin teléfono',
+          status: posDiscountStock ? 'Facturado' : 'Pendiente',
+          total_estimated: posTotal,
+          notes: notesText
+        }])
+        .select()
+        .single();
+
+      if (orderErr) throw orderErr;
+
+      const itemsPayload = posItems.map(i => ({
+        order_id: newOrder.id,
+        product_id: i.product.id,
+        quantity: i.quantity,
+        unit_price: i.product.price
+      }));
+
+      const { error: itemsErr } = await supabase.from('order_items').insert(itemsPayload);
+      if (itemsErr) throw itemsErr;
+
+      if (posDiscountStock) {
+        for (const item of posItems) {
+          const newStock = Math.max(0, Number(item.product.stock || 0) - item.quantity);
+          await supabase.from('products').update({ stock: newStock }).eq('id', item.product.id);
+        }
+      }
+
+      showNotification('Venta manual registrada con éxito', 'success');
+      setIsPosModalOpen(false);
+      setPosItems([]);
+      setPosCustomerName('Cliente Mostrador');
+      setPosCustomerPhone('');
+      setPosNotes('');
+      fetchData();
+    } catch (err) {
+      showNotification('Error al registrar venta: ' + err.message, 'error');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -543,10 +781,7 @@ export default function AdminPanel() {
     if (!orderToDelete) return;
     setIsSubmitting(true);
     try {
-      // 1. Primero eliminamos los items asociados en order_items
       await supabase.from('order_items').delete().eq('order_id', orderToDelete.id);
-
-      // 2. Luego eliminamos la orden principal
       const { error } = await supabase.from('orders').delete().eq('id', orderToDelete.id);
       if (error) throw error;
 
@@ -586,6 +821,9 @@ export default function AdminPanel() {
     }
   };
 
+  // =======================================================================
+  // MÉTRICAS, FILTROS COMBINADOS Y PAGINACIÓN
+  // =======================================================================
   const isOrderPending = (status) => {
     if (!status) return false;
     return status.startsWith('Pendiente') || status === 'Cotización Web';
@@ -601,16 +839,88 @@ export default function AdminPanel() {
     return true;
   });
 
-  const filteredProducts = products.filter(p => {
-    if (!searchTerm.trim()) return true;
-    const q = searchTerm.toLowerCase();
-    return (
-      p.name?.toLowerCase().includes(q) ||
-      p.sku_code?.toLowerCase().includes(q) ||
-      p.category?.name?.toLowerCase().includes(q) ||
-      p.brand?.name?.toLowerCase().includes(q)
-    );
-  });
+  const filteredProducts = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
+
+    const list = products.filter(p => {
+      if (q) {
+        const matchesQuery =
+          p.name?.toLowerCase().includes(q) ||
+          p.sku_code?.toLowerCase().includes(q) ||
+          p.category?.name?.toLowerCase().includes(q) ||
+          p.brand?.name?.toLowerCase().includes(q);
+        if (!matchesQuery) return false;
+      }
+
+      if (filterCategory !== 'todas' && String(p.category_id) !== String(filterCategory)) {
+        return false;
+      }
+
+      if (filterBrand !== 'todas' && String(p.brand_id) !== String(filterBrand)) {
+        return false;
+      }
+
+      const stockNum = Number(p.stock || 0);
+      if (filterStock === 'con_stock' && stockNum <= 0) return false;
+      if (filterStock === 'bajo_stock' && (stockNum < 1 || stockNum > 2)) return false;
+      if (filterStock === 'sin_stock' && stockNum > 0) return false;
+
+      return true;
+    });
+
+    if (sortBy === 'precio_asc') list.sort((a, b) => Number(a.price) - Number(b.price));
+    else if (sortBy === 'precio_desc') list.sort((a, b) => Number(b.price) - Number(a.price));
+    else if (sortBy === 'stock_asc') list.sort((a, b) => Number(a.stock) - Number(b.stock));
+    else if (sortBy === 'nombre_asc') list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+    return list;
+  }, [products, searchTerm, filterCategory, filterBrand, filterStock, sortBy]);
+
+  const totalProductPages = Math.max(1, Math.ceil(filteredProducts.length / itemsPerPage));
+  const paginatedProducts = filteredProducts.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  const hasActiveProductFilters = searchTerm.trim() !== '' || filterCategory !== 'todas' || filterBrand !== 'todas' || filterStock !== 'todos' || sortBy !== 'recientes';
+
+  const clearAllProductFilters = () => {
+    setSearchTerm('');
+    setFilterCategory('todas');
+    setFilterBrand('todas');
+    setFilterStock('todos');
+    setSortBy('recientes');
+  };
+
+  // Estadísticas del Dashboard
+  const stats = useMemo(() => {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    const billedOrders = orders.filter(o => o.status === 'Facturado');
+    const totalRevenue = billedOrders.reduce((acc, o) => acc + Number(o.total_estimated || 0), 0);
+
+    const monthlyBilled = billedOrders.filter(o => {
+      const d = new Date(o.created_at);
+      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    });
+    const monthlyRevenue = monthlyBilled.reduce((acc, o) => acc + Number(o.total_estimated || 0), 0);
+
+    const avgTicket = billedOrders.length > 0 ? Math.round(totalRevenue / billedOrders.length) : 0;
+
+    const totalInventoryValue = products.reduce((acc, p) => acc + Number(p.price || 0) * Math.max(0, Number(p.stock || 0)), 0);
+    const outOfStockProducts = products.filter(p => Number(p.stock || 0) <= 0);
+    const lowStockProducts = products.filter(p => Number(p.stock || 0) >= 1 && Number(p.stock || 0) <= 2);
+
+    return {
+      billedCount: billedOrders.length,
+      totalRevenue,
+      monthlyRevenue,
+      monthlyBilledCount: monthlyBilled.length,
+      avgTicket,
+      totalInventoryValue,
+      outOfStockProducts,
+      lowStockProducts
+    };
+  }, [orders, products]);
 
   // =======================================================================
   // VISTAS DE ACCESO Y SEGURIDAD
@@ -675,7 +985,7 @@ export default function AdminPanel() {
       )}
       
       {/* Sidebar Lateral */}
-      <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col shadow-2xl z-20">
+      <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col shadow-2xl z-20 flex-shrink-0">
         <div className="p-6 border-b border-slate-800">
           <span className="font-bold text-2xl tracking-tighter text-white font-michroma block">D.A.P.A</span>
           <span className="text-[10px] font-bold tracking-[0.2em] uppercase text-blue-500 font-exo">Admin Panel</span>
@@ -690,6 +1000,14 @@ export default function AdminPanel() {
               <span className="ml-auto bg-red-500 text-white text-[10px] px-2 py-1 rounded-full">{pendingOrdersCount}</span>
             )}
           </button>
+          <button onClick={() => setActiveTab('estadisticas')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors font-semibold text-sm ${activeTab === 'estadisticas' ? 'bg-blue-600 text-white' : 'hover:bg-slate-800 hover:text-white'}`}>
+            <BarChart3 className="w-5 h-5" /> Estadísticas
+            {stats.outOfStockProducts.length > 0 && (
+              <span className="ml-auto bg-amber-500 text-slate-900 font-bold text-[10px] px-2 py-0.5 rounded-full">
+                {stats.outOfStockProducts.length}
+              </span>
+            )}
+          </button>
         </div>
         <div className="p-4 border-t border-slate-800 space-y-2">
           <button onClick={() => navigate('/')} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors text-xs uppercase tracking-widest font-bold">
@@ -702,9 +1020,9 @@ export default function AdminPanel() {
       </aside>
 
       <main className="flex-1 flex flex-col h-screen overflow-hidden">
-        <header className="bg-white dark:bg-slate-800 h-16 shadow-sm border-b border-slate-200 dark:border-slate-700 flex items-center justify-between px-8 z-10">
+        <header className="bg-white dark:bg-slate-800 h-16 shadow-sm border-b border-slate-200 dark:border-slate-700 flex items-center justify-between px-8 z-10 flex-shrink-0">
           <h1 className="font-bold font-exo text-xl uppercase tracking-widest text-slate-800 dark:text-white">
-            {activeTab === 'productos' ? 'Gestión de Inventario' : 'Bandeja de Pedidos'}
+            {activeTab === 'productos' ? 'Gestión de Inventario' : activeTab === 'pedidos' ? 'Bandeja de Pedidos' : 'Estadísticas y Stock'}
           </h1>
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold">A</div>
@@ -714,70 +1032,160 @@ export default function AdminPanel() {
 
         <div className="flex-1 overflow-auto p-6 lg:p-8 bg-slate-50 dark:bg-slate-900/50">
           
-          {/* VISTA: PRODUCTOS */}
+          {/* =============================================================== */}
+          {/* VISTA 1: PRODUCTOS E INVENTARIO */}
+          {/* =============================================================== */}
           {activeTab === 'productos' && (
             <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm flex flex-col h-full overflow-hidden">
-              <div className="p-6 border-b border-slate-200 dark:border-slate-700 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
-                <div>
-                  <h2 className="text-lg font-bold text-slate-800 dark:text-white">Tus Repuestos</h2>
-                  <p className="text-sm text-slate-500 font-light">{filteredProducts.length} de {products.length} productos.</p>
+              
+              {/* FILA SUPERIOR: TÍTULO, BUSCADOR Y BOTONES DE ACCIÓN */}
+              <div className="p-5 border-b border-slate-200 dark:border-slate-700 flex flex-col gap-4">
+                <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-800 dark:text-white">Tus Repuestos</h2>
+                    <p className="text-xs text-slate-500 font-light">
+                      Mostrando <strong>{filteredProducts.length}</strong> de <strong>{products.length}</strong> productos. <span className="text-blue-500 hidden sm:inline">• Hacé clic en cualquier Precio o Stock para editarlo al instante.</span>
+                    </p>
+                  </div>
+
+                  <div className="relative w-full xl:w-80">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input 
+                      type="text" 
+                      value={searchTerm} 
+                      onChange={(e) => setSearchTerm(e.target.value)} 
+                      placeholder="Buscar por código, nombre o marca..." 
+                      className="w-full pl-10 pr-8 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs text-slate-800 dark:text-white outline-none focus:border-blue-500"
+                    />
+                    {searchTerm && (
+                      <button onClick={() => setSearchTerm('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                  
+                  <div className="flex flex-wrap gap-2">
+                    <button onClick={() => setIsCategoryModalOpen(true)} className="bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-3 py-2 rounded-xl font-bold uppercase tracking-widest text-[11px] flex items-center gap-1.5 transition-colors focus:outline-none">
+                      <ListPlus className="w-4 h-4" /> + Categoría
+                    </button>
+                    <button onClick={() => setIsBrandModalOpen(true)} className="bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-3 py-2 rounded-xl font-bold uppercase tracking-widest text-[11px] flex items-center gap-1.5 transition-colors focus:outline-none">
+                      <Tag className="w-4 h-4" /> + Marca
+                    </button>
+                    <button 
+                      onClick={() => setIsBulkPriceModalOpen(true)} 
+                      className="bg-purple-600 hover:bg-purple-500 text-white px-3.5 py-2 rounded-xl font-bold uppercase tracking-widest text-[11px] flex items-center gap-1.5 shadow-lg shadow-purple-600/20 transition-colors focus:outline-none"
+                    >
+                      <Percent className="w-4 h-4" /> Actualizar %
+                    </button>
+                    <button 
+                      onClick={() => { setExcelPreview([]); setExcelFileName(''); setIsExcelModalOpen(true); }} 
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-2 rounded-xl font-bold uppercase tracking-widest text-[11px] flex items-center gap-1.5 shadow-lg shadow-emerald-600/20 transition-colors focus:outline-none"
+                    >
+                      <FileSpreadsheet className="w-4 h-4" /> Importar Excel
+                    </button>
+                    <button onClick={openAddProductModal} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl font-bold uppercase tracking-widest text-[11px] flex items-center gap-1.5 shadow-lg shadow-blue-600/20 transition-colors focus:outline-none">
+                      <Plus className="w-4 h-4" /> Nuevo Repuesto
+                    </button>
+                  </div>
                 </div>
 
-                <div className="relative w-full xl:w-72">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                  <input 
-                    type="text" 
-                    value={searchTerm} 
-                    onChange={(e) => setSearchTerm(e.target.value)} 
-                    placeholder="Buscar por código, nombre o marca..." 
-                    className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs text-slate-800 dark:text-white outline-none focus:border-blue-500"
-                  />
-                </div>
-                
-                <div className="flex flex-wrap gap-2">
-                  <button onClick={() => setIsCategoryModalOpen(true)} className="bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-3.5 py-2 rounded-xl font-bold uppercase tracking-widest text-xs flex items-center gap-2 transition-colors focus:outline-none">
-                    <ListPlus className="w-4 h-4" /> Categoría
-                  </button>
-                  <button onClick={() => setIsBrandModalOpen(true)} className="bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-3.5 py-2 rounded-xl font-bold uppercase tracking-widest text-xs flex items-center gap-2 transition-colors focus:outline-none">
-                    <Tag className="w-4 h-4" /> Marca
-                  </button>
-                  <button 
-                    onClick={() => { setExcelPreview([]); setExcelFileName(''); setIsExcelModalOpen(true); }} 
-                    className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl font-bold uppercase tracking-widest text-xs flex items-center gap-2 shadow-lg shadow-emerald-600/20 transition-colors focus:outline-none"
+                {/* FILA INFERIOR: BARRA DE FILTROS COMBINADOS (CATEGORÍA, MARCA, STOCK, ORDEN) */}
+                <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-slate-100 dark:border-slate-700/70">
+                  <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-400">
+                    <Filter className="w-3.5 h-3.5 text-blue-500" /> Filtrar:
+                  </div>
+
+                  {/* Filtro Categoría */}
+                  <select
+                    value={filterCategory}
+                    onChange={(e) => setFilterCategory(e.target.value)}
+                    className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs rounded-xl px-3 py-2 outline-none focus:border-blue-500 font-medium"
                   >
-                    <FileSpreadsheet className="w-4 h-4" /> Importar Excel
-                  </button>
-                  <button onClick={openAddProductModal} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl font-bold uppercase tracking-widest text-xs flex items-center gap-2 shadow-lg shadow-blue-600/20 transition-colors focus:outline-none">
-                    <Plus className="w-4 h-4" /> Nuevo Repuesto
-                  </button>
+                    <option value="todas">Todas las Categorías ({categories.length})</option>
+                    {categories.map(cat => (
+                      <option key={cat.id} value={cat.id}>{cat.name}</option>
+                    ))}
+                  </select>
+
+                  {/* Filtro Marca */}
+                  <select
+                    value={filterBrand}
+                    onChange={(e) => setFilterBrand(e.target.value)}
+                    className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs rounded-xl px-3 py-2 outline-none focus:border-blue-500 font-medium"
+                  >
+                    <option value="todas">Todas las Marcas ({brands.length})</option>
+                    {brands.map(b => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
+                  </select>
+
+                  {/* Filtro Disponibilidad de Stock */}
+                  <select
+                    value={filterStock}
+                    onChange={(e) => setFilterStock(e.target.value)}
+                    className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs rounded-xl px-3 py-2 outline-none focus:border-blue-500 font-medium"
+                  >
+                    <option value="todos">Stock: Todos</option>
+                    <option value="con_stock">✅ Con Stock (&gt; 0)</option>
+                    <option value="bajo_stock">⚠️ Stock Bajo (1 a 2 u.)</option>
+                    <option value="sin_stock">❌ Sin Stock (Agotados)</option>
+                  </select>
+
+                  {/* Ordenamiento */}
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value)}
+                    className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs rounded-xl px-3 py-2 outline-none focus:border-blue-500 font-medium"
+                  >
+                    <option value="recientes">Orden: Más recientes</option>
+                    <option value="nombre_asc">Orden: Nombre (A - Z)</option>
+                    <option value="precio_asc">Orden: Menor Precio</option>
+                    <option value="precio_desc">Orden: Mayor Precio</option>
+                    <option value="stock_asc">Orden: Menor Stock primero</option>
+                  </select>
+
+                  {hasActiveProductFilters && (
+                    <button
+                      onClick={clearAllProductFilters}
+                      className="text-xs font-bold text-blue-500 hover:text-blue-400 underline ml-auto"
+                    >
+                      Limpiar filtros
+                    </button>
+                  )}
                 </div>
               </div>
 
+              {/* TABLA DE PRODUCTOS */}
               <div className="p-0 flex-1 overflow-auto relative">
                 {isLoading ? (
                   <div className="p-10 text-center text-slate-500">Cargando base de datos...</div>
                 ) : filteredProducts.length === 0 ? (
                   <div className="p-20 text-center flex flex-col items-center">
                     <Package className="w-16 h-16 text-slate-300 mb-4" />
-                    <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Sin resultados</h3>
+                    <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Sin resultados para estos filtros</h3>
+                    {hasActiveProductFilters && (
+                      <button onClick={clearAllProductFilters} className="mt-2 px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold uppercase tracking-wider">
+                        Ver todos los repuestos
+                      </button>
+                    )}
                   </div>
                 ) : (
-                  <table className="w-full text-left border-collapse min-w-[800px]">
+                  <table className="w-full text-left border-collapse min-w-[850px]">
                     <thead className="bg-slate-50 dark:bg-slate-900/50 sticky top-0 border-b border-slate-200 dark:border-slate-700 z-10">
                       <tr>
                         <th className="p-4 text-xs font-bold uppercase tracking-widest text-slate-500 w-16">Foto</th>
                         <th className="p-4 text-xs font-bold uppercase tracking-widest text-slate-500">Código</th>
                         <th className="p-4 text-xs font-bold uppercase tracking-widest text-slate-500">Nombre</th>
                         <th className="p-4 text-xs font-bold uppercase tracking-widest text-slate-500">Categoría / Marca</th>
-                        <th className="p-4 text-xs font-bold uppercase tracking-widest text-slate-500 text-right">Precio</th>
-                        <th className="p-4 text-xs font-bold uppercase tracking-widest text-slate-500 text-center">Stock</th>
+                        <th className="p-4 text-xs font-bold uppercase tracking-widest text-slate-500 text-right">Precio (Clic p/ editar)</th>
+                        <th className="p-4 text-xs font-bold uppercase tracking-widest text-slate-500 text-center">Stock (Clic p/ editar)</th>
                         <th className="p-4 text-xs font-bold uppercase tracking-widest text-slate-500 text-center">Acciones</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                      {filteredProducts.map(prod => (
+                      {paginatedProducts.map(prod => (
                         <tr key={prod.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                          <td className="p-4 text-center">
+                          <td className="p-3.5 text-center">
                             {prod.image_url ? (
                               <img src={prod.image_url} alt={prod.name} className="w-10 h-10 object-cover rounded-lg border border-slate-200" />
                             ) : (
@@ -786,24 +1194,77 @@ export default function AdminPanel() {
                               </div>
                             )}
                           </td>
-                          <td className="p-4 text-sm font-bold text-slate-700 dark:text-slate-300 font-exo">{prod.sku_code}</td>
-                          <td className="p-4 text-sm font-medium text-slate-900 dark:text-white">{prod.name}</td>
-                          <td className="p-4 text-sm text-slate-500">
+                          <td className="p-3.5 text-sm font-bold text-slate-700 dark:text-slate-300 font-exo">{prod.sku_code}</td>
+                          <td className="p-3.5 text-sm font-medium text-slate-900 dark:text-white">{prod.name}</td>
+                          <td className="p-3.5 text-sm text-slate-500">
                             <span className="block text-slate-700 dark:text-slate-300 font-medium">{prod.category?.name || '-'}</span>
                             <span className="text-[11px] uppercase text-slate-400">{prod.brand?.name || ''}</span>
                           </td>
-                          <td className="p-4 text-sm font-bold text-slate-800 dark:text-white text-right">${Number(prod.price).toLocaleString('es-AR')}</td>
-                          <td className="p-4 text-center">
-                            <span className={`px-3 py-1 rounded-full text-xs font-bold ${prod.stock > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                              {prod.stock > 0 ? prod.stock : 'Sin'}
-                            </span>
+
+                          {/* PRECIO CON EDICIÓN RÁPIDA (INLINE) */}
+                          <td className="p-3.5 text-right">
+                            {inlineEdit.id === prod.id && inlineEdit.field === 'price' ? (
+                              <input
+                                type="number"
+                                autoFocus
+                                value={inlineEdit.value}
+                                onChange={(e) => setInlineEdit({ ...inlineEdit, value: e.target.value })}
+                                onBlur={() => saveInlineEdit(prod)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') saveInlineEdit(prod);
+                                  if (e.key === 'Escape') setInlineEdit({ id: null, field: null, value: '' });
+                                }}
+                                className="w-28 text-right px-2 py-1 rounded-lg border border-blue-500 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm font-bold outline-none"
+                              />
+                            ) : (
+                              <button
+                                onClick={() => startInlineEdit(prod, 'price')}
+                                title="Clic para editar precio rápidamente"
+                                className="text-sm font-bold text-slate-800 dark:text-white hover:text-blue-500 dark:hover:text-blue-400 px-2 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors"
+                              >
+                                ${Number(prod.price).toLocaleString('es-AR')}
+                              </button>
+                            )}
                           </td>
-                          <td className="p-4 text-center">
+
+                          {/* STOCK CON EDICIÓN RÁPIDA (INLINE) */}
+                          <td className="p-3.5 text-center">
+                            {inlineEdit.id === prod.id && inlineEdit.field === 'stock' ? (
+                              <input
+                                type="number"
+                                autoFocus
+                                value={inlineEdit.value}
+                                onChange={(e) => setInlineEdit({ ...inlineEdit, value: e.target.value })}
+                                onBlur={() => saveInlineEdit(prod)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') saveInlineEdit(prod);
+                                  if (e.key === 'Escape') setInlineEdit({ id: null, field: null, value: '' });
+                                }}
+                                className="w-20 text-center px-2 py-1 rounded-lg border border-blue-500 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs font-bold outline-none"
+                              />
+                            ) : (
+                              <button
+                                onClick={() => startInlineEdit(prod, 'stock')}
+                                title="Clic para editar stock rápidamente"
+                                className={`px-3 py-1 rounded-full text-xs font-bold transition-transform hover:scale-105 ${
+                                  prod.stock > 2
+                                    ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400'
+                                    : prod.stock > 0
+                                    ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400'
+                                    : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400'
+                                }`}
+                              >
+                                {prod.stock > 0 ? prod.stock : 'Sin Stock'}
+                              </button>
+                            )}
+                          </td>
+
+                          <td className="p-3.5 text-center">
                             <div className="flex items-center justify-center gap-2">
-                              <button onClick={() => openEditProductModal(prod)} className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors focus:outline-none" title="Editar">
+                              <button onClick={() => openEditProductModal(prod)} className="p-2 text-blue-600 hover:bg-blue-100 dark:hover:bg-slate-700 rounded-lg transition-colors focus:outline-none" title="Editar ficha completa">
                                 <Edit className="w-4 h-4" />
                               </button>
-                              <button onClick={() => setProductToDelete(prod)} className="p-2 text-red-500 hover:bg-red-100 rounded-lg transition-colors focus:outline-none" title="Eliminar">
+                              <button onClick={() => setProductToDelete(prod)} className="p-2 text-red-500 hover:bg-red-100 dark:hover:bg-slate-700 rounded-lg transition-colors focus:outline-none" title="Eliminar">
                                 <Trash2 className="w-4 h-4" />
                               </button>
                             </div>
@@ -814,13 +1275,39 @@ export default function AdminPanel() {
                   </table>
                 )}
               </div>
+
+              {/* PAGINACIÓN DE LA TABLA DE INVENTARIO */}
+              {totalProductPages > 1 && (
+                <div className="p-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 flex items-center justify-between text-xs text-slate-500">
+                  <span>
+                    Página <strong>{currentPage}</strong> de <strong>{totalProductPages}</strong> ({filteredProducts.length} productos)
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      disabled={currentPage === 1}
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 disabled:opacity-40 flex items-center gap-1 font-bold"
+                    >
+                      <ChevronLeft className="w-4 h-4" /> Anterior
+                    </button>
+                    <button
+                      disabled={currentPage === totalProductPages}
+                      onClick={() => setCurrentPage(p => Math.min(totalProductPages, p + 1))}
+                      className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 disabled:opacity-40 flex items-center gap-1 font-bold"
+                    >
+                      Siguiente <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          {/* VISTA: PEDIDOS */}
+          {/* =============================================================== */}
+          {/* VISTA 2: PEDIDOS Y VENTAS MANUALES */}
+          {/* =============================================================== */}
           {activeTab === 'pedidos' && (
             <div className="space-y-6">
-              {/* Barra Superior de Filtros y Limpieza de Pedidos */}
               <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row justify-between items-center gap-4 shadow-sm">
                 <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                   {[
@@ -843,14 +1330,23 @@ export default function AdminPanel() {
                   ))}
                 </div>
 
-                {completedOrdersCount > 0 && (
+                <div className="flex flex-wrap gap-2 w-full sm:w-auto justify-end">
                   <button
-                    onClick={() => setConfirmClearCompleted(true)}
-                    className="w-full sm:w-auto px-4 py-2 rounded-xl bg-red-50 dark:bg-red-900/20 hover:bg-red-600 text-red-600 dark:text-red-400 hover:text-white border border-red-200 dark:border-red-800 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors"
+                    onClick={() => setIsPosModalOpen(true)}
+                    className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 transition-colors"
                   >
-                    <Trash2 className="w-4 h-4" /> Limpiar Finalizados ({completedOrdersCount})
+                    <ShoppingBag className="w-4 h-4" /> Nueva Venta Manual
                   </button>
-                )}
+
+                  {completedOrdersCount > 0 && (
+                    <button
+                      onClick={() => setConfirmClearCompleted(true)}
+                      className="px-4 py-2 rounded-xl bg-red-50 dark:bg-red-900/20 hover:bg-red-600 text-red-600 dark:text-red-400 hover:text-white border border-red-200 dark:border-red-800 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" /> Limpiar Finalizados ({completedOrdersCount})
+                    </button>
+                  )}
+                </div>
               </div>
 
               {isLoading ? (
@@ -971,10 +1467,461 @@ export default function AdminPanel() {
               )}
             </div>
           )}
+
+          {/* =============================================================== */}
+          {/* VISTA 3: ESTADÍSTICAS Y ALERTAS DE STOCK (DASHBOARD) */}
+          {/* =============================================================== */}
+          {activeTab === 'estadisticas' && (
+            <div className="space-y-8">
+              {/* Tarjetas de Resumen Comercial */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                  <span className="text-xs font-bold uppercase tracking-widest text-slate-400 block mb-2">Facturación del Mes</span>
+                  <p className="text-3xl font-bold font-exo text-emerald-600 dark:text-emerald-400">
+                    ${stats.monthlyRevenue.toLocaleString('es-AR')}
+                  </p>
+                  <span className="text-xs text-slate-500 mt-2 block">{stats.monthlyBilledCount} ventas cerradas este mes</span>
+                </div>
+
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                  <span className="text-xs font-bold uppercase tracking-widest text-slate-400 block mb-2">Facturación Histórica</span>
+                  <p className="text-3xl font-bold font-exo text-slate-900 dark:text-white">
+                    ${stats.totalRevenue.toLocaleString('es-AR')}
+                  </p>
+                  <span className="text-xs text-slate-500 mt-2 block">{stats.billedCount} ventas totales • Ticket prom: ${stats.avgTicket.toLocaleString('es-AR')}</span>
+                </div>
+
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                  <span className="text-xs font-bold uppercase tracking-widest text-slate-400 block mb-2">Capital en Mercadería</span>
+                  <p className="text-3xl font-bold font-exo text-blue-600 dark:text-blue-400">
+                    ${stats.totalInventoryValue.toLocaleString('es-AR')}
+                  </p>
+                  <span className="text-xs text-slate-500 mt-2 block">{products.length} artículos activos en catálogo</span>
+                </div>
+
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                  <span className="text-xs font-bold uppercase tracking-widest text-slate-400 block mb-2">Alertas de Reposición</span>
+                  <p className="text-3xl font-bold font-exo text-amber-500">
+                    {stats.outOfStockProducts.length + stats.lowStockProducts.length}
+                  </p>
+                  <span className="text-xs text-slate-500 mt-2 block">
+                    {stats.outOfStockProducts.length} agotados • {stats.lowStockProducts.length} con stock bajo
+                  </span>
+                </div>
+              </div>
+
+              {/* Tabla de Repuestos sin Stock o con Stock Crítico */}
+              <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm overflow-hidden">
+                <div className="p-6 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
+                  <div>
+                    <h3 className="font-bold text-base text-slate-800 dark:text-white uppercase tracking-wider">
+                      Repuestos con Stock Agotado o Crítico (0 a 2 unidades)
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1">Hacé clic en "+ Reponer" para sumar unidades rápidamente</p>
+                  </div>
+                  <button
+                    onClick={() => { setFilterStock('sin_stock'); setActiveTab('productos'); }}
+                    className="text-xs font-bold text-blue-500 hover:underline uppercase tracking-wider"
+                  >
+                    Ver en Inventario →
+                  </button>
+                </div>
+
+                <div className="max-h-[450px] overflow-y-auto">
+                  {[...stats.outOfStockProducts, ...stats.lowStockProducts].length === 0 ? (
+                    <div className="p-12 text-center text-slate-500 text-sm">
+                      ¡Excelente! Todos tus repuestos tienen más de 2 unidades en stock.
+                    </div>
+                  ) : (
+                    <table className="w-full text-left border-collapse text-sm">
+                      <thead className="bg-slate-50 dark:bg-slate-900/50 sticky top-0 border-b border-slate-200 dark:border-slate-700 text-xs uppercase text-slate-500">
+                        <tr>
+                          <th className="p-4">Código</th>
+                          <th className="p-4">Repuesto</th>
+                          <th className="p-4">Marca</th>
+                          <th className="p-4 text-center">Stock Actual</th>
+                          <th className="p-4 text-right">Reposición Rápida</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                        {[...stats.outOfStockProducts, ...stats.lowStockProducts].slice(0, 100).map(prod => (
+                          <tr key={prod.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                            <td className="p-4 font-mono font-bold text-slate-700 dark:text-slate-300">{prod.sku_code}</td>
+                            <td className="p-4 text-slate-900 dark:text-white font-medium">{prod.name}</td>
+                            <td className="p-4 text-slate-500 text-xs uppercase">{prod.brand?.name || '-'}</td>
+                            <td className="p-4 text-center">
+                              <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                                prod.stock <= 0 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
+                              }`}>
+                                {prod.stock <= 0 ? 'Agotado (0)' : `${prod.stock} u.`}
+                              </span>
+                            </td>
+                            <td className="p-4 text-right space-x-2">
+                              {[1, 5, 10].map(addQty => (
+                                <button
+                                  key={addQty}
+                                  onClick={async () => {
+                                    const newStock = Math.max(0, Number(prod.stock || 0)) + addQty;
+                                    const { error } = await supabase.from('products').update({ stock: newStock }).eq('id', prod.id);
+                                    if (!error) {
+                                      setProducts(prev => prev.map(p => p.id === prod.id ? { ...p, stock: newStock } : p));
+                                      showNotification(`Se sumaron +${addQty} u. a ${prod.sku_code}`, 'success');
+                                    }
+                                  }}
+                                  className="px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-slate-700 hover:bg-blue-600 text-blue-600 dark:text-blue-300 hover:text-white text-xs font-bold transition-colors"
+                                >
+                                  +{addQty}
+                                </button>
+                              ))}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
         </div>
       </main>
 
+      {/* ==================================================================== */}
+      {/* MODAL: ACTUALIZACIÓN MASIVA DE PRECIOS POR PORCENTAJE (%) */}
+      {/* ==================================================================== */}
+      {isBulkPriceModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/70 z-[210] flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 border border-slate-200 dark:border-slate-700">
+            <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-900/50">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400">
+                  <Percent className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold uppercase tracking-widest text-slate-800 dark:text-white">
+                    Actualizar Precios por Porcentaje
+                  </h2>
+                  <p className="text-xs text-slate-500">Aumentá o descontá precios masivamente</p>
+                </div>
+              </div>
+              <button onClick={() => setIsBulkPriceModalOpen(false)} className="text-slate-400 hover:text-slate-700">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <form onSubmit={handleApplyBulkPrice} className="p-6 space-y-5">
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase tracking-widest text-slate-500">¿A qué productos aplicar?</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: 'todos', label: 'Todo el Catálogo' },
+                    { id: 'categoria', label: 'Una Categoría' },
+                    { id: 'marca', label: 'Una Marca' }
+                  ].map(opt => (
+                    <button
+                      type="button"
+                      key={opt.id}
+                      onClick={() => setBulkScope(opt.id)}
+                      className={`py-2.5 px-3 rounded-xl text-xs font-bold uppercase tracking-wider border transition-colors ${
+                        bulkScope === opt.id
+                          ? 'bg-purple-600 text-white border-purple-600'
+                          : 'bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {bulkScope === 'categoria' && (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Seleccionar Categoría</label>
+                  <select
+                    required
+                    value={bulkCategoryId}
+                    onChange={(e) => setBulkCategoryId(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:border-purple-500"
+                  >
+                    <option value="">Elegir categoría...</option>
+                    {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+              )}
+
+              {bulkScope === 'marca' && (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Seleccionar Marca</label>
+                  <select
+                    required
+                    value={bulkBrandId}
+                    onChange={(e) => setBulkBrandId(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:border-purple-500"
+                  >
+                    <option value="">Elegir marca...</option>
+                    {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  </select>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Porcentaje (%) *</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    required
+                    placeholder="Ej: 15 (o -10 p/ descuento)"
+                    value={bulkPercentage}
+                    onChange={(e) => setBulkPercentage(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:border-purple-500 font-bold"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Redondear precios a</label>
+                  <select
+                    value={bulkRounding}
+                    onChange={(e) => setBulkRounding(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:border-purple-500"
+                  >
+                    <option value="1">Sin redondeo ($1)</option>
+                    <option value="10">Múltiplos de $10</option>
+                    <option value="100">Múltiplos de $100</option>
+                    <option value="500">Múltiplos de $500</option>
+                    <option value="1000">Múltiplos de $1.000</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="bg-purple-50/60 dark:bg-slate-900/70 border border-purple-200 dark:border-slate-700 rounded-xl p-4 text-xs text-slate-600 dark:text-slate-300 space-y-1">
+                <p className="font-bold text-slate-800 dark:text-white">
+                  Se modificarán <strong>{targetBulkProducts.length}</strong> repuestos.
+                </p>
+                {bulkPercentage && !isNaN(parseFloat(bulkPercentage)) && (
+                  <p>
+                    Ejemplo: Un repuesto de <strong>$50.000</strong> pasará a valer{' '}
+                    <strong className="text-purple-600 dark:text-purple-400">
+                      ${calculateRoundedPrice(50000, parseFloat(bulkPercentage), bulkRounding).toLocaleString('es-AR')}
+                    </strong>.
+                  </p>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsBulkPriceModalOpen(false)}
+                  className="px-5 py-2.5 rounded-xl text-xs font-bold uppercase text-slate-500 hover:bg-slate-100"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting || targetBulkProducts.length === 0}
+                  className="px-6 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold uppercase tracking-widest shadow-lg shadow-purple-600/30 disabled:opacity-50"
+                >
+                  {isSubmitting ? 'Actualizando...' : 'Aplicar Aumento / Descuento'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ==================================================================== */}
+      {/* MODAL: NUEVA VENTA MANUAL (MOSTRADOR / POS) */}
+      {/* ==================================================================== */}
+      {isPosModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/70 z-[210] flex items-center justify-center p-4 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 max-h-[92vh]">
+            <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-900/50">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400">
+                  <ShoppingBag className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold uppercase tracking-widest text-slate-800 dark:text-white">
+                    Registrar Venta Manual (Mostrador / WhatsApp)
+                  </h2>
+                  <p className="text-xs text-slate-500">Armá el pedido y descontá stock en el acto</p>
+                </div>
+              </div>
+              <button onClick={() => setIsPosModalOpen(false)} className="text-slate-400 hover:text-slate-700">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreatePosOrder} className="p-6 overflow-y-auto space-y-5 flex-1">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Cliente / Taller</label>
+                  <input
+                    type="text"
+                    required
+                    value={posCustomerName}
+                    onChange={(e) => setPosCustomerName(e.target.value)}
+                    className="w-full mt-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2.5 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Teléfono (Opcional)</label>
+                  <input
+                    type="text"
+                    value={posCustomerPhone}
+                    onChange={(e) => setPosCustomerPhone(e.target.value)}
+                    placeholder="Ej: 2478..."
+                    className="w-full mt-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2.5 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Medio de Pago</label>
+                  <select
+                    value={posPaymentMethod}
+                    onChange={(e) => setPosPaymentMethod(e.target.value)}
+                    className="w-full mt-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2.5 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500"
+                  >
+                    <option value="Efectivo">Efectivo</option>
+                    <option value="Transferencia">Transferencia</option>
+                    <option value="Mercado Pago">Mercado Pago</option>
+                    <option value="Cuenta DNI">Cuenta DNI</option>
+                    <option value="Tarjeta">Tarjeta Débito / Crédito</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Buscador de repuestos para agregar a la venta */}
+              <div className="relative">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Agregar Repuestos a la Venta</label>
+                <div className="relative mt-1">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={posSearch}
+                    onChange={(e) => setPosSearch(e.target.value)}
+                    placeholder="Escribí el código SKU o nombre del repuesto..."
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500"
+                  />
+                </div>
+                {posSuggestions.length > 0 && (
+                  <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-30 max-h-56 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-700">
+                    {posSuggestions.map(prod => (
+                      <button
+                        type="button"
+                        key={prod.id}
+                        onClick={() => addProductToPos(prod)}
+                        className="w-full text-left px-4 py-2.5 hover:bg-blue-50 dark:hover:bg-slate-700 flex justify-between items-center text-xs"
+                      >
+                        <div>
+                          <span className="font-mono font-bold text-blue-600 dark:text-blue-400 mr-2">{prod.sku_code}</span>
+                          <span className="font-semibold text-slate-800 dark:text-white">{prod.name}</span>
+                          <span className="ml-2 text-slate-400">(Stock: {prod.stock})</span>
+                        </div>
+                        <span className="font-bold text-slate-900 dark:text-white">${Number(prod.price).toLocaleString('es-AR')}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Lista de ítems cargados */}
+              <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+                {posItems.length === 0 ? (
+                  <div className="p-8 text-center text-xs text-slate-400">
+                    Todavía no agregaste repuestos a esta venta.
+                  </div>
+                ) : (
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 dark:bg-slate-900 text-slate-500 uppercase">
+                      <tr>
+                        <th className="p-3">Repuesto</th>
+                        <th className="p-3 text-center">Cantidad</th>
+                        <th className="p-3 text-right">Subtotal</th>
+                        <th className="p-3 w-10"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {posItems.map((item, idx) => (
+                        <tr key={item.product.id}>
+                          <td className="p-3">
+                            <span className="font-mono font-bold text-slate-500 mr-2">{item.product.sku_code}</span>
+                            <span className="font-semibold text-slate-900 dark:text-white">{item.product.name}</span>
+                          </td>
+                          <td className="p-3 text-center">
+                            <input
+                              type="number"
+                              min="1"
+                              value={item.quantity}
+                              onChange={(e) => {
+                                const q = Math.max(1, parseInt(e.target.value, 10) || 1);
+                                setPosItems(prev => prev.map((it, i) => i === idx ? { ...it, quantity: q } : it));
+                              }}
+                              className="w-16 text-center py-1 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-bold"
+                            />
+                          </td>
+                          <td className="p-3 text-right font-bold text-slate-900 dark:text-white">
+                            ${(Number(item.product.price) * item.quantity).toLocaleString('es-AR')}
+                          </td>
+                          <td className="p-3 text-center">
+                            <button
+                              type="button"
+                              onClick={() => setPosItems(prev => prev.filter((_, i) => i !== idx))}
+                              className="text-red-500 hover:text-red-700"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pt-2">
+                <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={posDiscountStock}
+                    onChange={(e) => setPosDiscountStock(e.target.checked)}
+                    className="w-4 h-4 rounded text-blue-600"
+                  />
+                  Marcar como Facturado y descontar stock automáticamente
+                </label>
+
+                <div className="text-right ml-auto">
+                  <span className="text-xs uppercase text-slate-400 font-bold mr-2">Total:</span>
+                  <span className="text-2xl font-bold font-exo text-slate-900 dark:text-white">
+                    ${posTotal.toLocaleString('es-AR')}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-700">
+                <button
+                  type="button"
+                  onClick={() => setIsPosModalOpen(false)}
+                  className="px-5 py-2.5 rounded-xl text-xs font-bold uppercase text-slate-500 hover:bg-slate-100"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting || posItems.length === 0}
+                  className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase tracking-widest shadow-lg shadow-blue-600/30 disabled:opacity-50"
+                >
+                  {isSubmitting ? 'Registrando...' : 'Confirmar Venta'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ==================================================================== */}
       {/* MODAL: IMPORTACIÓN MASIVA POR EXCEL */}
+      {/* ==================================================================== */}
       {isExcelModalOpen && (
         <div className="fixed inset-0 bg-slate-900/70 z-[210] flex items-center justify-center p-4 backdrop-blur-sm overflow-y-auto">
           <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 max-h-[90vh]">
@@ -996,7 +1943,6 @@ export default function AdminPanel() {
             </div>
 
             <div className="p-6 overflow-y-auto space-y-6 flex-1">
-              {/* Paso 1: Descargar plantilla o subir archivo */}
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-slate-50 dark:bg-slate-900/60 p-4 rounded-2xl border border-slate-200 dark:border-slate-700">
                 <div className="text-xs text-slate-600 dark:text-slate-300 space-y-1">
                   <p className="font-bold text-slate-800 dark:text-white uppercase tracking-wider">Columnas reconocidas:</p>
@@ -1012,7 +1958,6 @@ export default function AdminPanel() {
                 </button>
               </div>
 
-              {/* Zona de carga de archivo */}
               <div className="relative border-2 border-dashed border-emerald-400/70 dark:border-emerald-600/60 rounded-2xl p-8 text-center bg-emerald-50/20 dark:bg-emerald-950/10 hover:bg-emerald-50/40 transition-colors cursor-pointer">
                 <input
                   type="file"
@@ -1033,7 +1978,6 @@ export default function AdminPanel() {
                 </div>
               )}
 
-              {/* Vista previa de productos detectados */}
               {excelPreview.length > 0 && (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
@@ -1084,11 +2028,6 @@ export default function AdminPanel() {
                       </tbody>
                     </table>
                   </div>
-                  {excelPreview.length > 100 && (
-                    <p className="text-[11px] text-slate-400 text-center">
-                      Mostrando los primeros 100 de {excelPreview.length} productos. Todos serán procesados al confirmar.
-                    </p>
-                  )}
                 </div>
               )}
             </div>
