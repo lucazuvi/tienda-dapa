@@ -275,9 +275,11 @@ function AuthModal({ isOpen, onClose, onLogin }) {
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [nombre, setNombre] = useState('');
   const [apellido, setApellido] = useState('');
   const [telefono, setTelefono] = useState('');
@@ -287,6 +289,7 @@ function AuthModal({ isOpen, onClose, onLogin }) {
   const handleGoogleLogin = async () => {
     setLoading(true);
     setError('');
+    setSuccessMsg('');
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -305,6 +308,7 @@ function AuthModal({ isOpen, onClose, onLogin }) {
     e.preventDefault();
     setLoading(true);
     setError('');
+    setSuccessMsg('');
 
     try {
       if (isLogin) {
@@ -321,22 +325,32 @@ function AuthModal({ isOpen, onClose, onLogin }) {
         });
         
       } else {
-        if (!nombre || !apellido) throw new Error("El nombre y apellido son obligatorios");
+        if (!nombre.trim() || !apellido.trim()) {
+          throw new Error("El nombre y apellido son obligatorios");
+        }
+        if (password.length < 6) {
+          throw new Error("La contraseña debe tener al menos 6 caracteres");
+        }
+        if (password !== confirmPassword) {
+          throw new Error("Las contraseñas no coinciden. Verificalas por favor.");
+        }
         
         const { error } = await supabase.auth.signUp({
           email,
           password,
           options: {
             data: {
-              name: `${nombre} ${apellido}`,
-              phone: telefono || ''
+              name: `${nombre.trim()} ${apellido.trim()}`,
+              phone: telefono.trim() || ''
             }
           }
         });
         
         if (error) throw error;
-        alert("¡Cuenta creada! Revisa tu email para confirmarla (si está configurado) o iniciá sesión.");
         setIsLogin(true);
+        setPassword('');
+        setConfirmPassword('');
+        setSuccessMsg("¡Cuenta creada con éxito! Ya podés iniciar sesión con tu clave.");
       }
     } catch (error) {
       setError(error.message === "Invalid login credentials" ? "Email o contraseña incorrectos" : error.message);
@@ -349,7 +363,7 @@ function AuthModal({ isOpen, onClose, onLogin }) {
     <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 sm:p-0">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose}></div>
       
-      <div className="bg-white dark:bg-slate-800 w-full max-w-md rounded-2xl shadow-2xl relative z-10 overflow-hidden animate-in zoom-in-95 duration-200">
+      <div className="bg-white dark:bg-slate-800 w-full max-w-md rounded-2xl shadow-2xl relative z-10 overflow-hidden animate-in zoom-in-95 duration-200 max-h-[92vh] overflow-y-auto custom-scrollbar border border-slate-200 dark:border-slate-700">
         
         <div className="flex justify-between items-center p-6 border-b border-slate-100 dark:border-slate-700">
           <h2 className="text-xl font-bold text-slate-800 dark:text-white uppercase tracking-widest">
@@ -376,9 +390,17 @@ function AuthModal({ isOpen, onClose, onLogin }) {
             <div className="flex-1 border-t border-slate-200 dark:border-slate-700"></div>
           </div>
 
+          {successMsg && (
+            <div className="bg-green-50 dark:bg-green-900/25 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 p-4 rounded-xl text-xs font-bold mb-4 flex items-center gap-3 animate-in fade-in zoom-in-95">
+              <CheckCircle className="w-5 h-5 flex-shrink-0 text-green-600 dark:text-green-400" />
+              <span>{successMsg}</span>
+            </div>
+          )}
+
           {error && (
-            <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-3 rounded-lg text-sm mb-4 font-medium">
-              {error}
+            <div className="bg-red-50 dark:bg-red-900/25 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 p-4 rounded-xl text-xs font-bold mb-4 flex items-center gap-3 animate-in fade-in zoom-in-95">
+              <X className="w-5 h-5 flex-shrink-0 text-red-500" />
+              <span>{error}</span>
             </div>
           )}
 
@@ -407,8 +429,29 @@ function AuthModal({ isOpen, onClose, onLogin }) {
             
             <div className="space-y-1">
               <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Contraseña</label>
-              <input type="password" required value={password} onChange={e => setPassword(e.target.value)} className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:border-blue-500 focus:outline-none" />
+              <input type="password" required value={password} onChange={e => setPassword(e.target.value)} placeholder={isLogin ? "" : "Mínimo 6 caracteres"} className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:border-blue-500 focus:outline-none" />
             </div>
+
+            {!isLogin && (
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Repetir Contraseña</label>
+                <input 
+                  type="password" 
+                  required 
+                  value={confirmPassword} 
+                  onChange={e => setConfirmPassword(e.target.value)} 
+                  placeholder="Volvé a escribir tu contraseña"
+                  className={`w-full p-3 rounded-xl border bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none ${
+                    confirmPassword && password !== confirmPassword 
+                      ? 'border-red-500 focus:border-red-500' 
+                      : 'border-slate-300 dark:border-slate-600 focus:border-blue-500'
+                  }`} 
+                />
+                {confirmPassword && password !== confirmPassword && (
+                  <p className="text-[11px] text-red-500 font-semibold ml-1 pt-1">Las contraseñas no coinciden</p>
+                )}
+              </div>
+            )}
 
             <button type="submit" disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-widest py-3 rounded-xl transition-colors mt-2">
               {loading ? 'Cargando...' : isLogin ? 'Ingresar' : 'Crear Cuenta'}
@@ -416,7 +459,11 @@ function AuthModal({ isOpen, onClose, onLogin }) {
           </form>
 
           <div className="mt-6 text-center">
-            <button onClick={() => {setIsLogin(!isLogin); setError('');}} type="button" className="text-sm text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 font-medium">
+            <button 
+              onClick={() => { setIsLogin(!isLogin); setError(''); setSuccessMsg(''); setConfirmPassword(''); }} 
+              type="button" 
+              className="text-sm text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 font-medium"
+            >
               {isLogin ? '¿No tenés cuenta? Registrate gratis' : '¿Ya tenés cuenta? Iniciá sesión'}
             </button>
           </div>
@@ -467,7 +514,14 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
     const telLimpio = formData.telefono.replace(/\D/g, '');
     if (telLimpio.length < 10) return setFormError('Ingresá un teléfono válido con código de área (ej: 2478512620).');
     
-    if (formData.calle.trim().length < 3 || formData.numero.trim() === '') return setFormError('Por favor, completá correctamente la dirección.');
+    if (formData.metodoEnvio === 'domicilio') {
+      if (formData.calle.trim().length < 3 || formData.numero.trim() === '') {
+        return setFormError('Por favor, completá correctamente la calle y el número de entrega.');
+      }
+      if (formData.ciudad.trim().length < 2 || formData.cp.trim().length < 3) {
+        return setFormError('Por favor, indicá la ciudad y el código postal.');
+      }
+    }
 
     setStep(2);
   };
@@ -475,9 +529,13 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
+      const detalleDomicilio = formData.metodoEnvio === 'retiro'
+        ? 'RETIRO EN EL LOCAL (Lamadrid 65, Arrecifes)'
+        : `${formData.calle} ${formData.numero} ${formData.piso ? 'Piso/Dpto: ' + formData.piso : ''}\n${formData.ciudad}, ${formData.provincia} (CP: ${formData.cp})`;
+
       const notas = `TIPO DE VENTA: Checkout Web Automático
 MÉTODO DE PAGO: ${formData.metodoPago.toUpperCase()}
-MÉTODO DE ENVÍO: ${formData.metodoEnvio.toUpperCase()}
+MÉTODO DE ENTREGA: ${formData.metodoEnvio === 'retiro' ? 'RETIRO EN LOCAL' : 'ENVÍO A DOMICILIO'}
 ---------------------------------
 DATOS DEL CLIENTE:
 Nombre: ${formData.nombre} ${formData.apellido}
@@ -485,9 +543,8 @@ DNI: ${formData.dni}
 Teléfono: ${formData.telefono}
 Email: ${formData.email}
 ---------------------------------
-DOMICILIO:
-${formData.calle} ${formData.numero} ${formData.piso ? 'Piso/Dpto: ' + formData.piso : ''}
-${formData.ciudad}, ${formData.provincia} (CP: ${formData.cp})
+ENTREGA:
+${detalleDomicilio}
 ---------------------------------
 OBSERVACIONES:
 ${formData.observaciones || 'Ninguna'}`;
@@ -539,9 +596,10 @@ ${formData.observaciones || 'Ninguna'}`;
       onSuccess(false);
 
     } catch (error) {
-      console.error(error);
-      alert("Error al procesar la compra. Intentá de nuevo.");
-    } finally {
+   console.error(error);
+   setFormError("Hubo un error al procesar la compra. Por favor intentá de nuevo.");
+   setStep(1);
+ } finally {
       setIsSubmitting(false);
     }
   };
@@ -556,14 +614,14 @@ ${formData.observaciones || 'Ninguna'}`;
       <div className="flex-1 max-w-5xl mx-auto w-full p-4 sm:p-6 lg:p-8 flex flex-col lg:flex-row gap-8">
         <div className="flex-1">
           <div className="flex items-center justify-between mb-8 border-b border-slate-200 dark:border-slate-700 pb-4">
-            <div className={`flex-1 text-center font-bold text-xs uppercase tracking-widest ${step >= 1 ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`}>1. Envío</div>
+            <div className={`flex-1 text-center font-bold text-xs uppercase tracking-widest ${step >= 1 ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`}>1. Entrega</div>
             <div className={`flex-1 text-center font-bold text-xs uppercase tracking-widest border-l border-slate-200 dark:border-slate-700 ${step >= 2 ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`}>2. Pago</div>
             <div className={`flex-1 text-center font-bold text-xs uppercase tracking-widest border-l border-slate-200 dark:border-slate-700 ${step >= 3 ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`}>3. Revisión</div>
           </div>
 
           {step === 1 && (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
-              <h3 className="font-bold text-lg text-slate-800 dark:text-white uppercase">Datos de Contacto y Envío</h3>
+              <h3 className="font-bold text-lg text-slate-800 dark:text-white uppercase">Datos del Comprador</h3>
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
@@ -588,30 +646,71 @@ ${formData.observaciones || 'Ninguna'}`;
                 </div>
               </div>
 
-              <h4 className="font-bold text-sm text-slate-800 dark:text-white uppercase mt-6 mb-2 border-t border-slate-200 dark:border-slate-700 pt-6">Domicilio de Entrega</h4>
+              <h4 className="font-bold text-sm text-slate-800 dark:text-white uppercase mt-6 mb-3 border-t border-slate-200 dark:border-slate-700 pt-6">Modalidad de Entrega</h4>
               
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                <div className="space-y-1 col-span-2">
-                  <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Calle</label>
-                  <input type="text" name="calle" value={formData.calle} onChange={handleChange} placeholder="Ej: San Martín" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Número</label>
-                  <input type="text" name="numero" value={formData.numero} onChange={handleChange} placeholder="Ej: 123" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Piso / Dpto</label>
-                  <input type="text" name="piso" value={formData.piso} onChange={handleChange} placeholder="Opcional" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Ciudad</label>
-                  <input type="text" name="ciudad" value={formData.ciudad} onChange={handleChange} placeholder="Tu ciudad" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Cód. Postal</label>
-                  <input type="text" name="cp" value={formData.cp} onChange={handleChange} placeholder="Ej: 2740" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
-                </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, metodoEnvio: 'domicilio' })}
+                  className={`p-4 rounded-xl border text-left transition-all flex items-start gap-3 ${
+                    formData.metodoEnvio === 'domicilio'
+                      ? 'border-blue-500 bg-blue-50/60 dark:bg-blue-900/20 ring-1 ring-blue-500'
+                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-blue-300'
+                  }`}
+                >
+                  <Truck className={`w-5 h-5 mt-0.5 flex-shrink-0 ${formData.metodoEnvio === 'domicilio' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  <div>
+                    <span className="font-bold text-sm text-slate-900 dark:text-white block">Envío a Domicilio</span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">Recibí el pedido en tu casa o taller</span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, metodoEnvio: 'retiro' })}
+                  className={`p-4 rounded-xl border text-left transition-all flex items-start gap-3 ${
+                    formData.metodoEnvio === 'retiro'
+                      ? 'border-blue-500 bg-blue-50/60 dark:bg-blue-900/20 ring-1 ring-blue-500'
+                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-blue-300'
+                  }`}
+                >
+                  <MapPin className={`w-5 h-5 mt-0.5 flex-shrink-0 ${formData.metodoEnvio === 'retiro' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                  <div>
+                    <span className="font-bold text-sm text-slate-900 dark:text-white block">Retiro en el Local (Gratis)</span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">Lamadrid 65, Arrecifes</span>
+                  </div>
+                </button>
               </div>
+
+              {formData.metodoEnvio === 'domicilio' ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-2 animate-in fade-in">
+                  <div className="space-y-1 col-span-2">
+                    <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Calle</label>
+                    <input type="text" name="calle" value={formData.calle} onChange={handleChange} placeholder="Ej: San Martín" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Número</label>
+                    <input type="text" name="numero" value={formData.numero} onChange={handleChange} placeholder="Ej: 123" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Piso / Dpto</label>
+                    <input type="text" name="piso" value={formData.piso} onChange={handleChange} placeholder="Opcional" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Ciudad</label>
+                    <input type="text" name="ciudad" value={formData.ciudad} onChange={handleChange} placeholder="Tu ciudad" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Cód. Postal</label>
+                    <input type="text" name="cp" value={formData.cp} onChange={handleChange} placeholder="Ej: 2740" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-blue-50/70 dark:bg-slate-800/80 border border-blue-200 dark:border-slate-700 rounded-xl p-4 flex items-center gap-3 text-sm text-slate-700 dark:text-slate-300 animate-in fade-in">
+                  <MapPin className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                  <span>Podrás retirar tu pedido sin costo por nuestro local en <strong>Lamadrid 65, Arrecifes</strong> una vez confirmado.</span>
+                </div>
+              )}
               
               {formError && (
                 <div className="bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 p-4 mt-4 animate-in fade-in">
@@ -673,9 +772,15 @@ ${formData.observaciones || 'Ninguna'}`;
               
               <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 space-y-4">
                 <div>
-                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Enviar a:</h4>
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">
+                    {formData.metodoEnvio === 'retiro' ? 'Retira en sucursal:' : 'Enviar a:'}
+                  </h4>
                   <p className="text-slate-900 dark:text-white font-medium">{formData.nombre} {formData.apellido} ({formData.telefono})</p>
-                  <p className="text-slate-600 dark:text-slate-400 text-sm">{formData.calle} {formData.numero} {formData.piso && `Piso ${formData.piso}`}, {formData.ciudad}, {formData.provincia}</p>
+                  <p className="text-slate-600 dark:text-slate-400 text-sm">
+                    {formData.metodoEnvio === 'retiro' 
+                      ? 'Retiro por mostrador en Lamadrid 65, Arrecifes'
+                      : `${formData.calle} ${formData.numero} ${formData.piso ? `Piso ${formData.piso}` : ''}, ${formData.ciudad}, ${formData.provincia}`}
+                  </p>
                 </div>
                 <div className="border-t border-slate-100 dark:border-slate-700 pt-4">
                   <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Método de pago:</h4>
@@ -760,6 +865,8 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, current
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
   const [showWebCheckout, setShowWebCheckout] = useState(false);
+  const [drawerError, setDrawerError] = useState('');
+  
 
   if (!isOpen) return null;
 
@@ -818,10 +925,11 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, current
         if (clearCart) clearCart();
       }
 
-    } catch (error) {
-      console.error("Error al procesar el pedido:", error);
-      alert("Hubo un error al procesar el pedido. Por favor intentá de nuevo.");
-    } finally {
+   } catch (error) {
+   console.error("Error al procesar el pedido:", error);
+   setDrawerError("Hubo un error al procesar el pedido. Intentá nuevamente.");
+   setTimeout(() => setDrawerError(''), 4000);
+ } finally {
       setIsSubmitting(false);
     }
   };
@@ -925,6 +1033,8 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, current
               </div>
             )}
 
+            {drawerError && <div className="mb-3 p-3 rounded-xl bg-red-50 dark:bg-red-900/25 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 text-xs font-bold text-center">{drawerError}</div>}
+            
             {checkoutMode ? (
               <div className="flex flex-col gap-3 animate-in slide-in-from-bottom-2">
                 <p className="text-xs font-bold uppercase tracking-widest text-center text-slate-500 mb-2">¿Cómo querés enviar el pedido?</p>
@@ -1182,9 +1292,9 @@ function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenCart, on
           <button onClick={() => handleNavClick('nosotros')} className={`px-4 py-2 text-xs font-semibold uppercase tracking-widest transition-all hover:text-blue-600 ${isNavbarSolid ? 'text-slate-600 dark:text-slate-300' : 'text-white'}`}>Nosotros</button>
         </div>
 
-        <div className="flex items-center gap-2 md:gap-4 flex-grow justify-end relative z-50">
+        <div className="flex items-center gap-2 md:gap-3 flex-grow justify-end relative z-50">
           
-          <div className="hidden lg:block relative mr-2 w-full max-w-[220px]">
+          <div className="hidden lg:block relative mr-1 w-full max-w-[200px]">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <Search className={`h-4 w-4 ${isNavbarSolid ? 'text-slate-400' : 'text-slate-300'}`} />
             </div>
@@ -1209,18 +1319,27 @@ function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenCart, on
           </button>
 
           {currentUser ? (
-            <div className="relative group cursor-pointer flex items-center gap-2 pr-2">
+            <div className="relative group cursor-pointer flex items-center gap-2 pr-1">
               <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold border border-blue-200 dark:border-blue-800">
                 {currentUser.name.charAt(0).toUpperCase()}
               </div>
               
-              <div className="absolute top-full right-0 mt-2 w-48 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[110]">
+              <div className="absolute top-full right-0 mt-2 w-52 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[110] overflow-hidden">
                 <div className="p-3 border-b border-slate-100 dark:border-slate-700">
                   <p className="text-sm font-bold text-slate-800 dark:text-white truncate">{currentUser.name}</p>
+                  {currentUser.email && <p className="text-[11px] text-slate-400 truncate">{currentUser.email}</p>}
                 </div>
+                {currentUser.email?.toLowerCase() === 'admin@dapa.com' && (
+                  <a 
+                    href="/admin" 
+                    className="w-full text-left px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-slate-700/60 flex items-center gap-2 border-b border-slate-100 dark:border-slate-700 transition-colors"
+                  >
+                    <Settings className="w-4 h-4" /> Panel Admin
+                  </a>
+                )}
                 <button 
                   onClick={onLogout} 
-                  className="w-full text-left px-4 py-3 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 font-medium transition-colors rounded-b-xl"
+                  className="w-full text-left px-4 py-3 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 font-medium transition-colors"
                 >
                   Cerrar Sesión
                 </button>
@@ -1229,10 +1348,20 @@ function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenCart, on
           ) : (
             <button 
               onClick={onLoginClick} 
-              className={`p-2 rounded-full transition-all flex items-center gap-2 ${isNavbarSolid ? 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800' : 'text-white hover:bg-white/10'}`}
-              title="Iniciar sesión"
+              className={`px-3 py-2 rounded-full transition-all flex items-center gap-2 border ${
+                isNavbarSolid 
+                  ? 'text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800' 
+                  : 'text-white border-white/25 hover:bg-white/10'
+              }`}
+              title="Iniciar sesión o Registrarse"
             >
-              <User className="w-5 h-5" />
+              <User className="w-4 h-4 flex-shrink-0" />
+              <span className="hidden xl:inline text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
+                Iniciar Sesión / Registrarse
+              </span>
+              <span className="hidden sm:inline xl:hidden text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
+                Ingresar
+              </span>
             </button>
           )}
 
@@ -1251,6 +1380,15 @@ function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenCart, on
       {mobileMenuOpen && (
         <div className="lg:hidden absolute top-full left-0 w-full bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 p-6 flex flex-col gap-6 shadow-2xl animate-in slide-in-from-top-2 h-[calc(100vh-80px)] overflow-y-auto">
           
+          {!currentUser && (
+            <button 
+              onClick={() => { setMobileMenuOpen(false); onLoginClick(); }}
+              className="w-full py-3 px-4 rounded-xl bg-blue-600 text-white font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-md"
+            >
+              <User className="w-4 h-4" /> Iniciar Sesión / Registrarse
+            </button>
+          )}
+
           <div className="relative w-full mb-2">
             <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Search className="h-5 w-5 text-slate-400" /></div>
             <input type="text" value={searchTerm} onChange={handleSearchChange} placeholder="Buscar repuesto..." className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full pl-11 pr-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900" />
@@ -1584,12 +1722,12 @@ function ContactSection() {
         const fileExt = file.name.split('.').pop();
         const filePath = `cotizaciones/${Date.now()}.${fileExt}`;
         const { error: uploadError } = await supabase.storage
-          .from('products')
+          .from('repuestos')
           .upload(filePath, file);
 
         if (!uploadError) {
           const { data: publicUrlData } = supabase.storage
-            .from('products')
+            .from('repuestos')
             .getPublicUrl(filePath);
           imageUrl = publicUrlData?.publicUrl || '';
         }
@@ -1877,7 +2015,7 @@ function TiendaPublica() {
   const [isLoadingData, setIsLoadingData] = useState(true);
   const toastTimeoutRef = useRef(null);
 
-  useEffect(() => {
+useEffect(() => {
     const savedUser = localStorage.getItem('dapa_user');
     const savedCart = localStorage.getItem('dapa_cart');
     const savedTheme = localStorage.getItem('dapa_theme');
@@ -1891,6 +2029,22 @@ function TiendaPublica() {
     } else if (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches) {
       setIsDarkMode(true);
       document.documentElement.classList.add('dark');
+    }
+
+    // Detectar retorno desde Mercado Pago
+    const urlParams = new URLSearchParams(window.location.search);
+    const mpStatus = urlParams.get('mp_status') || urlParams.get('status') || urlParams.get('collection_status');
+    if (mpStatus) {
+      if (mpStatus === 'approved') {
+        setCart([]);
+        localStorage.removeItem('dapa_cart');
+        setTimeout(() => showToast('¡Pago acreditado con éxito! Ya registramos tu pedido.'), 400);
+      } else if (mpStatus === 'pending' || mpStatus === 'in_process') {
+        setTimeout(() => showToast('Tu pago está pendiente de acreditación.'), 400);
+      } else if (mpStatus === 'failure' || mpStatus === 'rejected') {
+        setTimeout(() => showToast('El pago no pudo completarse. Podés intentar nuevamente.'), 400);
+      }
+      window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
     }
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -1928,6 +2082,30 @@ function TiendaPublica() {
           from += step;
         }
         setDbProducts(allProds);
+
+        // Soporte para abrir links directos compartidos (#categoria-ID, #producto-SKU, #nosotros)
+        const hash = decodeURIComponent(window.location.hash || '');
+        if (hash === '#nosotros') {
+          setActivePage('nosotros');
+        } else if (hash.startsWith('#categoria-') && cats) {
+          const catId = Number(hash.replace('#categoria-', ''));
+          const foundCat = cats.find(c => c.id === catId);
+          if (foundCat) {
+            setSelectedCategory(foundCat);
+            setActivePage('categoria');
+          }
+        } else if (hash.startsWith('#producto-') && cats && allProds.length > 0) {
+          const sku = hash.replace('#producto-', '');
+          const foundProd = allProds.find(p => p.sku_code === sku);
+          if (foundProd) {
+            const foundCat = cats.find(c => c.id === foundProd.category_id);
+            if (foundCat) {
+              setSelectedCategory(foundCat);
+              setSelectedProduct(foundProd);
+              setActivePage('categoria');
+            }
+          }
+        }
       } catch (err) {
         console.error("Error cargando datos de Supabase", err);
       } finally {
