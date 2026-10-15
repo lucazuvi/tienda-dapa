@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react';
 import { 
   MapPin, Phone, Target, ShieldCheck, TrendingUp, Truck, Wrench, ChevronRight,
   Menu, X, MessageSquare, CreditCard, Package, HelpCircle, CheckCircle,
@@ -7,7 +7,8 @@ import {
 } from 'lucide-react';
 import { supabase } from './supabase';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import AdminPanel from './AdminPanel';
+
+const AdminPanel = lazy(() => import('./AdminPanel'));
 
 /* ==========================================================================
    ÍCONOS CUSTOM
@@ -609,34 +610,39 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
       }
 
       const notas = `TIPO DE VENTA: Checkout Web Automático
-MÉTODO DE PAGO: ${formData.metodoPago.toUpperCase()}
-MODALIDAD DE ENVÍO: ${getShippingLabel()}
-COSTO DE ENVÍO: $${shippingCost.toLocaleString('es-AR')}
----------------------------------
-DATOS DEL CLIENTE:
-Nombre: ${formData.nombre} ${formData.apellido}
-DNI: ${formData.dni}
-Teléfono: ${formData.telefono}
-Email: ${formData.email}
----------------------------------
-ENTREGA:
-${detalleEntrega}
----------------------------------
-OBSERVACIONES:
-${formData.observaciones || 'Ninguna'}`;
+        MÉTODO DE PAGO: ${formData.metodoPago.toUpperCase()}
+        MODALIDAD DE ENVÍO: ${getShippingLabel()}
+        COSTO DE ENVÍO: $${shippingCost.toLocaleString('es-AR')}
+        ---------------------------------
+        DATOS DEL CLIENTE:
+        Nombre: ${formData.nombre} ${formData.apellido}
+        DNI: ${formData.dni}
+        Teléfono: ${formData.telefono}
+        Email: ${formData.email}
+        ---------------------------------
+        ENTREGA:
+        ${detalleEntrega}
+        ---------------------------------
+        OBSERVACIONES:
+        ${formData.observaciones || 'Ninguna'}`;
 
-      const { data: newOrder, error: orderError } = await supabase
-        .from('orders')
-        .insert([{
-          customer_name: `${formData.nombre} ${formData.apellido}`,
-          customer_phone: formData.telefono,
-          status: 'Pendiente (Vía Web)',
-          total_estimated: finalTotal,
-          notes: notas
-        }])
-        .select().single();
+    const itemsPayload = cart.map(item => ({
+        product_id: item.product.id,
+        quantity: item.quantity,
+        unit_price: item.product.price
+      }));
+
+      const { data: newOrderId, error: orderError } = await supabase.rpc('create_web_order', {
+        p_customer_name: `${formData.nombre} ${formData.apellido}`,
+        p_customer_phone: formData.telefono,
+        p_status: 'Pendiente (Vía Web)',
+        p_total_estimated: finalTotal,
+        p_notes: notas,
+        p_items: itemsPayload
+      });
 
       if (orderError) throw orderError;
+      const newOrder = { id: newOrderId };
 
       const itemsToInsert = cart.map(item => ({
         order_id: newOrder.id,
@@ -1133,19 +1139,23 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, current
     const clienteTelefono = currentUser ? currentUser.phone : 'No registrado';
 
     try {
-      const { data: newOrder, error: orderError } = await supabase
-        .from('orders')
-        .insert([{
-          customer_name: clienteNombre,
-          customer_phone: clienteTelefono,
-          status: metodoDeEnvio === 'WHATSAPP' ? 'Pendiente (Vía WhatsApp)' : 'Pendiente (Vía Web)',
-          total_estimated: cartTotal,
-          notes: 'Pedido generado desde el carrito web.'
-        }])
-        .select()
-        .single();
+      const itemsPayload = cart.map(item => ({
+        product_id: item.product.id,
+        quantity: item.quantity,
+        unit_price: item.product.price
+      }));
+
+      const { data: newOrderId, error: orderError } = await supabase.rpc('create_web_order', {
+        p_customer_name: clienteNombre,
+        p_customer_phone: clienteTelefono,
+        p_status: metodoDeEnvio === 'WHATSAPP' ? 'Pendiente (Vía WhatsApp)' : 'Pendiente (Vía Web)',
+        p_total_estimated: cartTotal,
+        p_notes: 'Pedido generado desde el carrito web.',
+        p_items: itemsPayload
+      });
 
       if (orderError) throw orderError;
+      const newOrder = { id: newOrderId };
 
       const itemsToInsert = cart.map(item => ({
         order_id: newOrder.id,
@@ -1436,7 +1446,6 @@ function HowToBuyTutorial({ isOpen, onClose }) {
 function GlobalStyles() {
   return (
     <style dangerouslySetInnerHTML={{__html: `
-      @import url('https://fonts.googleapis.com/css2?family=Exo+2:ital,wght@0,300..800;1,300..800&family=Michroma&family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap');
       .dark body { background-color: #0f172a; color: #f1f5f9; }
       .font-montserrat { font-family: 'Montserrat', sans-serif; }
       .font-exo { font-family: 'Exo 2', sans-serif; }
@@ -2520,19 +2529,17 @@ function ContactSection() {
       if (urlFotoCedula) infoFotosNotas += `\nFOTO CÉDULA / CHASIS: ${urlFotoCedula}`;
       else if (photo2) infoFotosNotas += `\nFOTO CÉDULA / CHASIS: Seleccionada por el cliente (no se pudo subir al servidor).`;
 
-      const { data: newOrder, error: orderError } = await supabase
-        .from('orders')
-        .insert([{
-          customer_name: nombre,
-          customer_phone: telefono,
-          status: 'Cotización Web',
-          total_estimated: 0,
-          notes: `REPUESTO BUSCADO: ${repuesto}\nVEHÍCULO: ${marca} ${modelo}\nAÑO: ${anio} | PUERTAS: ${puertas}\nOBSERVACIONES: ${mensaje || 'Ninguna'}${infoFotosNotas}`
-        }])
-        .select()
-        .single();
+      const { data: newOrderId, error: orderError } = await supabase.rpc('create_web_order', {
+        p_customer_name: nombre,
+        p_customer_phone: telefono,
+        p_status: 'Cotización Web',
+        p_total_estimated: 0,
+        p_notes: `REPUESTO BUSCADO: ${repuesto}\nVEHÍCULO: ${marca} ${modelo}\nAÑO: ${anio} | PUERTAS: ${puertas}\nOBSERVACIONES: ${mensaje || 'Ninguna'}${infoFotosNotas}`,
+        p_items: []
+      });
 
       if (orderError) throw orderError;
+      const newOrder = { id: newOrderId };
 
       // Usamos viñetas limpias (•) en lugar de emojis complejos para evitar el símbolo "" en WhatsApp Web
       let wppText = `¡Hola DAPA Repuestos! Soy ${nombre}.\n\n`;
@@ -2894,7 +2901,13 @@ function TiendaPublica() {
   const [isLoadingData, setIsLoadingData] = useState(true);
   const toastTimeoutRef = useRef(null);
 
-useEffect(() => {
+  const showToast = (message) => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    setToastMessage(message);
+    toastTimeoutRef.current = setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  useEffect(() => {
     const savedUser = localStorage.getItem('dapa_user');
     const savedCart = localStorage.getItem('dapa_cart');
     const savedTheme = localStorage.getItem('dapa_theme');
@@ -3027,12 +3040,6 @@ useEffect(() => {
       }
       return newVal;
     });
-  };
-
-  const showToast = (message) => {
-    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
-    setToastMessage(message);
-    toastTimeoutRef.current = setTimeout(() => setToastMessage(null), 3000);
   };
 
   const handleLogin = (userData) => {
@@ -3227,7 +3234,19 @@ export default function App() {
     <Router>
       <Routes>
         <Route path="/" element={<TiendaPublica />} />
-        <Route path="/admin" element={<AdminPanel />} />
+        <Route 
+          path="/admin" 
+          element={
+            <Suspense fallback={
+              <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-white">
+                <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+                <p className="font-exo font-semibold text-sm tracking-widest uppercase">Cargando Panel de Administración...</p>
+              </div>
+            }>
+              <AdminPanel />
+            </Suspense>
+          } 
+        />
       </Routes>
     </Router>
   );

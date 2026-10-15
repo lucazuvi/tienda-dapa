@@ -114,45 +114,6 @@ export default function AdminPanel() {
 
   const isAuthorizedAdmin = session?.user?.email && ADMIN_EMAILS.includes(session.user.email.toLowerCase());
 
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, currentSession) => {
-      setSession(currentSession);
-      if (currentSession?.user?.email && ADMIN_EMAILS.includes(currentSession.user.email.toLowerCase())) {
-        fetchData();
-      } else {
-        setIsLoading(false);
-      }
-    });
-    return () => subscription.unsubscribe();
-  }, []);
-
-  // Resetear a la página 1 cuando cambian los filtros de inventario
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, filterCategory, filterBrand, filterStock, sortBy]);
-
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setIsLoggingIn(true);
-    setLoginError('');
-
-    if (!ADMIN_EMAILS.includes(email.trim().toLowerCase())) {
-      setLoginError('Este correo no tiene permisos de administrador.');
-      setIsLoggingIn(false);
-      return;
-    }
-
-    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-    if (error) setLoginError('Correo o contraseña incorrectos.');
-    setIsLoggingIn(false);
-  };
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    localStorage.removeItem('dapa_user');
-    navigate('/');
-  };
-
   const fetchAllProducts = async () => {
     let allProds = [];
     let from = 0;
@@ -191,6 +152,45 @@ export default function AdminPanel() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, currentSession) => {
+      setSession(currentSession);
+      if (currentSession?.user?.email && ADMIN_EMAILS.includes(currentSession.user.email.toLowerCase())) {
+        fetchData();
+      } else {
+        setIsLoading(false);
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Resetear a la página 1 cuando cambian los filtros de inventario
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterCategory, filterBrand, filterStock, sortBy]);
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setIsLoggingIn(true);
+    setLoginError('');
+
+    if (!ADMIN_EMAILS.includes(email.trim().toLowerCase())) {
+      setLoginError('Este correo no tiene permisos de administrador.');
+      setIsLoggingIn(false);
+      return;
+    }
+
+    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    if (error) setLoginError('Correo o contraseña incorrectos.');
+    setIsLoggingIn(false);
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    localStorage.removeItem('dapa_user');
+    navigate('/');
   };
 
   const showNotification = (message, type = 'success') => {

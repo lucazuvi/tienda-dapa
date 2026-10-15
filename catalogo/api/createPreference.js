@@ -1,7 +1,13 @@
 export default async function handler(req, res) {
   // 1. Permisos CORS
-  res.setHeader('Access-Control-Allow-Credentials', true);
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  const origin = req.headers.origin;
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+  res.setHeader('Vary', 'Origin');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
   res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
 
@@ -15,7 +21,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { orderId, items } = req.body;
+    const { orderId, items, shippingCost, shippingTitle } = req.body;
 
     if (!orderId || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'Datos de orden o carrito inválidos' });
@@ -32,7 +38,12 @@ export default async function handler(req, res) {
     const dbPricesMap = {};
 
     if (supabaseUrl && supabaseKey) {
-      const productIds = items.map(i => i.product?.id).filter(Boolean).join(',');
+      const productIds = items
+        .map(i => i.product?.id)
+        .filter(id => id && !isNaN(Number(id)))
+        .map(Number)
+        .join(',');
+
       if (productIds) {
         const sbRes = await fetch(
           `${supabaseUrl}/rest/v1/products?id=in.(${productIds})&select=id,price,name,sku_code`,
@@ -53,7 +64,21 @@ export default async function handler(req, res) {
     // 3. Armar ítems validados para Mercado Pago
     const mpItems = items.map(item => {
       const dbProd = dbPricesMap[item.product?.id];
-      const realPrice = dbProd ? Number(dbProd.price) : Number(item.product?.price || 0);
+      // Si Supabase está conectado, requerir precio de la base de datos para evitar manipulación
+      let realPrice;
+      if (supabaseUrl && supabaseKey && Object.keys(dbPricesMap).length > 0) {
+        if (!dbProd) {
+          throw new Error(`El producto ${item.product?.name || item.product?.id} no fue encontrado en la base de datos.`);
+        }
+        realPrice = Number(dbProd.price);
+      } else {
+        realPrice = Number(item.product?.price || 0);
+      }
+
+      if (isNaN(realPrice) || realPrice <= 0) {
+        throw new Error(`Precio inválido para el producto ${dbProd?.name || item.product?.name}`);
+      }
+
       const safeQuantity = Math.max(1, parseInt(item.quantity, 10) || 1);
 
       return {
@@ -64,6 +89,18 @@ export default async function handler(req, res) {
         unit_price: realPrice
       };
     });
+
+    // 3.1 Sumar costo de envío a Mercado Pago si corresponde
+    const validShippingCost = Number(shippingCost) || 0;
+    if (validShippingCost > 0) {
+      mpItems.push({
+        title: shippingTitle ? `Envío: ${shippingTitle}` : 'Costo de Envío',
+        description: 'Servicio de entrega / despacho',
+        quantity: 1,
+        currency_id: "ARS",
+        unit_price: Math.round(validShippingCost)
+      });
+    }
 
     const siteOrigin = req.headers.origin || "https://tienda-dapa-6hoc.vercel.app";
 
