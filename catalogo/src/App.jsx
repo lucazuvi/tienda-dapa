@@ -40,10 +40,9 @@ const CONTACT_INFO = {
 };
 
 const FAQ_ITEMS = [
-  { q: '¿Realizan envíos al interior?', a: 'Sí, despachamos todos los días a cualquier punto de la República Argentina a través de correos y encomiendas.' },
-  { q: '¿Qué garantía tienen los repuestos?', a: 'Todos nuestros productos cuentan con la garantía directa de fábrica por defectos de manufactura.' },
-  { q: '¿Cómo puedo pagar mi compra?', a: 'Aceptamos transferencias bancarias, Cuenta DNI, Mercado Pago, tarjetas de crédito/débito y efectivo.' },
-  { q: '¿Qué datos necesito para cotizar un repuesto?', a: 'Para mayor precisión, te recomendamos enviarnos por WhatsApp la marca, modelo, motor, año del vehículo o el código del repuesto.' }
+  { q: '¿Realizan envíos al interior?', a: 'Sí, despachamos a cualquier punto mediante servicios de correo y encomiendas.' },
+  { q: '¿Cómo puedo pagar mi compra?', a: 'Aceptamos transferencias bancarias, Cuenta DNI, Mercado Pago, tarjetas de crédito/débito y efectivo. Podes abonar directo, pasar por nuestro local o acordamos por WhatsApp.' },
+  { q: '¿Qué datos necesito para cotizar un repuesto?', a: 'Para mayor precisión, te recomendamos enviarnos la marca, modelo, motor, año del vehículo o el código del repuesto.' }
 ];
 
 /* ==========================================================================
@@ -1597,7 +1596,8 @@ const handleSearchChange = (e) => {
             </div>
           </div>
           <button onClick={() => handleNavClick('nosotros')} className={`px-4 py-2 text-xs font-semibold uppercase tracking-widest transition-all hover:text-blue-600 ${isNavbarSolid ? 'text-slate-600 dark:text-slate-300' : 'text-white'}`}>Nosotros</button>
-        </div>
+          <button onClick={() => handleNavClick('inicio', 'contacto')} className={`px-4 py-2 text-xs font-semibold uppercase tracking-widest transition-all hover:text-blue-600 ${isNavbarSolid ? 'text-slate-600 dark:text-slate-300' : 'text-white'}`}>Contacto</button>      
+          </div>
 
         <div className="flex items-center gap-2 md:gap-3 flex-grow justify-end relative z-50">
           
@@ -1720,7 +1720,8 @@ const handleSearchChange = (e) => {
             </div>
           </div>
           
-          <button onClick={() => handleNavClick('nosotros')} className="text-left text-sm font-bold uppercase tracking-widest text-slate-800 dark:text-white border-t border-slate-100 dark:border-slate-800 pt-4">Nosotros</button>
+        <button onClick={() => handleNavClick('nosotros')} className="text-left text-sm font-bold uppercase tracking-widest text-slate-800 dark:text-white border-t border-slate-100 dark:border-slate-800 pt-4">Nosotros</button>
+          <button onClick={() => handleNavClick('inicio', 'contacto')} className="text-left text-sm font-bold uppercase tracking-widest text-slate-800 dark:text-white border-t border-slate-100 dark:border-slate-800 pt-4">Contacto</button>
         </div>
       )}
     </nav>
@@ -1757,7 +1758,6 @@ function TrustBadges() {
     <div className="bg-[#0b1120] text-white py-4 shadow-md relative z-20 border-b border-slate-800">
       <div className="max-w-7xl mx-auto px-4 flex flex-wrap justify-center md:justify-between items-center gap-4 md:gap-2 text-[10px] sm:text-xs md:text-sm font-bold tracking-wider">
         <span className="flex items-center gap-2"><Truck className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500" /> Envíos a todo el país</span>
-        <span className="flex items-center gap-2"><ShieldCheck className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500" /> Garantía de fábrica 100%</span>
         <span className="hidden md:flex items-center gap-2"><Clock className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500" /> Soporte rápido por WhatsApp</span>
         <span className="hidden lg:flex items-center gap-2"><CreditCard className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500" /> Todos los medios de pago</span>
       </div>
@@ -2361,7 +2361,7 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
 function ProcessSection({ setTutorialOpen }) {
   const steps = [
     { id: 1, title: 'Elegí', desc: 'Agregá los repuestos al carrito.', icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-8 h-8 md:w-10 md:h-10 text-slate-400 group-hover:text-blue-600 transition-colors duration-500"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" className="group-hover:stroke-blue-600"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12" className="group-hover:stroke-blue-600"/><circle cx="12" cy="5" r="1" fill="currentColor" className="opacity-0 group-hover:animate-drop-1 text-blue-500"/><circle cx="10" cy="4" r="1" fill="currentColor" className="opacity-0 group-hover:animate-drop-2 text-blue-500"/><circle cx="14" cy="4" r="1" fill="currentColor" className="opacity-0 group-hover:animate-drop-3 text-blue-500"/></svg> },
-    { id: 2, title: 'Cotizá', desc: 'Enviá el carrito por WhatsApp.', icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-8 h-8 md:w-10 md:h-10 text-slate-400 group-hover:text-green-500 transition-colors duration-500"><rect width="14" height="20" x="5" y="2" rx="2" ry="2" className="group-hover:stroke-green-600"/><path d="M12 18h.01M8 6h8" className="group-hover:stroke-green-600"/><path d="M12 10.5c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zm0 6c2.5 0 4.5-2 4.5-4.5S14.5 7.5 12 7.5c-2.3 0-4.1 1.7-4.4 3.9-.1.6.4 1.1 1 .9 1.1-.3 2.1 1.1 1.5 2.1-.2.4.1.9.6.9.3 0 .6.2.7.5.1.3.1.6 0 1-.3.8-.4 1.7-.1 2.5.3.8 1.1 1.2 2 1.2z" fill="none" className="opacity-0 group-hover:animate-fade-in text-green-500"/><path d="M8 10h3M8 12h5" className="opacity-0 group-hover:animate-data-load text-slate-300"/></svg> },
+    { id: 2, title: 'Cotizá', desc: 'Enviá el carrito por WhatsApp o via web.', icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-8 h-8 md:w-10 md:h-10 text-slate-400 group-hover:text-green-500 transition-colors duration-500"><rect width="14" height="20" x="5" y="2" rx="2" ry="2" className="group-hover:stroke-green-600"/><path d="M12 18h.01M8 6h8" className="group-hover:stroke-green-600"/><path d="M12 10.5c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zm0 6c2.5 0 4.5-2 4.5-4.5S14.5 7.5 12 7.5c-2.3 0-4.1 1.7-4.4 3.9-.1.6.4 1.1 1 .9 1.1-.3 2.1 1.1 1.5 2.1-.2.4.1.9.6.9.3 0 .6.2.7.5.1.3.1.6 0 1-.3.8-.4 1.7-.1 2.5.3.8 1.1 1.2 2 1.2z" fill="none" className="opacity-0 group-hover:animate-fade-in text-green-500"/><path d="M8 10h3M8 12h5" className="opacity-0 group-hover:animate-data-load text-slate-300"/></svg> },
     { id: 3, title: 'Pagás', desc: 'Aboná con tu medio de pago favorito.', icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-8 h-8 md:w-10 md:h-10 text-slate-400 group-hover:text-blue-500 transition-colors duration-500"><path d="M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" className="group-hover:stroke-slate-600 dark:group-hover:stroke-slate-500"/><path d="M3 10h18M7 14h10M7 16h6" className="group-hover:stroke-slate-600 dark:group-hover:stroke-slate-500"/><rect x="6" y="6" width="12" height="3" rx="0.5" className="group-hover:fill-green-900 group-hover:stroke-green-500 transition-colors duration-500"/><rect x="8" y="1" width="8" height="5" rx="1" fill="currentColor" className="opacity-0 group-hover:animate-card-swipe text-blue-500"/></svg> },
     { id: 4, title: 'Recibís', desc: 'Te lo enviamos al taller o domicilio.', icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-8 h-8 md:w-10 md:h-10 text-slate-400 group-hover:text-green-500 transition-colors duration-500"><path d="M10 17h4M5 17h0M19 17h0" className="group-hover:stroke-green-600"/><path d="M14 17h1l3-3.26a1.9 1.9 0 0 0 .4-.74V9a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h1" className="group-hover:stroke-green-600"/><circle cx="7" cy="17" r="2" className="group-hover:stroke-green-600"/><circle cx="17" cy="17" r="2" className="group-hover:stroke-green-600"/><path d="m9 11 3 3 6-6" className="opacity-0 group-hover:animate-check-draw text-green-500" strokeWidth="2.5"/></svg> }
   ];
@@ -2752,6 +2752,7 @@ function Footer({ navigateTo }) {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-16 pt-8 border-t border-slate-800/50 text-center text-xs font-light text-slate-500 flex flex-col md:flex-row justify-between items-center gap-4">
         <p>© {new Date().getFullYear()} D.A.P.A Repuestos Molle. Todos los derechos reservados.</p>
         <p>Arrecifes, Buenos Aires, Argentina</p>
+        <p>autopartesmolle@gmail.com</p>
       </div>
     </footer>
   );
@@ -2764,12 +2765,26 @@ function AboutSection() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 md:gap-16 items-center">
           <RevealOnScroll className="order-2 lg:order-1">
             <TiltCard>
-              <div className="relative aspect-[4/3] bg-white dark:bg-slate-800 overflow-hidden shadow-xl group cursor-pointer rounded-2xl border border-slate-100 dark:border-slate-700 transition-colors" aria-hidden="true">
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400 p-8 text-center bg-slate-50 dark:bg-slate-900/50 group-hover:bg-slate-100 dark:group-hover:bg-slate-800 transition-colors duration-500">
-                  <Wrench className="w-12 h-12 md:w-16 md:h-16 mb-4 text-slate-300 dark:text-slate-500 group-hover:scale-110 transition-transform duration-500 group-hover:text-blue-400" />
-                  <p className="text-xs md:text-sm uppercase tracking-widest font-semibold group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-colors">Instalaciones DAPA Molle</p>
+              <div className="relative aspect-[4/3] bg-slate-900 overflow-hidden shadow-xl group rounded-2xl border border-slate-200 dark:border-slate-700 transition-colors">
+                <img
+                  src="/local-dapa.jpg"
+                  alt="Instalaciones de D.A.P.A Repuestos Molle en Lamadrid 65, Arrecifes"
+                  className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-700"
+                />
+                {/* Degradado inferior sutil con pie de foto */}
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent opacity-80 group-hover:opacity-60 transition-opacity duration-500" />
+                <div className="absolute bottom-4 left-5 right-4 flex items-center justify-between text-white z-10">
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-blue-400 block font-exo">
+                      Nuestra Casa Central
+                    </span>
+                    <p className="text-xs md:text-sm font-bold tracking-wider uppercase">
+                      Lamadrid 65 • Arrecifes
+                    </p>
+                  </div>
                 </div>
-                <div className="absolute top-0 left-0 w-1 h-full bg-blue-600 group-hover:w-2 transition-all duration-500"></div>
+                {/* Borde lateral azul característico */}
+                <div className="absolute top-0 left-0 w-1.5 h-full bg-blue-600 group-hover:w-2.5 transition-all duration-500 z-10"></div>
               </div>
             </TiltCard>
           </RevealOnScroll>
