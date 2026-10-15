@@ -1,11 +1,15 @@
 @import "tailwindcss";
 @custom-variant dark (&:where(.dark, .dark *));
 
-
-/* Agregar esto justo abajo de las importaciones de Tailwind */
+/* Modo Claro por defecto y Modo Oscuro cuando está activa la clase .dark */
 body {
-  background-color: #0f172a; /* El azul muy oscuro que usás de fondo */
-  color: #ffffff; /* Texto blanco por defecto */
+  background-color: #f8fafc;
+  color: #0f172a;
+}
+
+.dark body {
+  background-color: #0f172a;
+  color: #f1f5f9;
 }
 
 /* ==========================================================================
@@ -58,6 +62,12 @@ body {
   --color-green-700: #15803d;
   --color-green-800: #166534;
 
+  --color-pink-50: #fdf2f8;
+  --color-pink-300: #f9a8d4;
+  --color-pink-400: #f472b6;
+  --color-pink-500: #ec4899;
+  --color-pink-600: #db2777;
+
   --color-red-50: #fef2f2;
   --color-red-100: #fee2e2;
   --color-red-200: #fecaca;
@@ -75,6 +85,7 @@ body {
 
   --color-orange-100: #ffedd5;
   --color-orange-200: #fed7aa;
+  --color-orange-500: #f97316;
   --color-orange-700: #c2410c;
 
   --color-purple-50: #faf5ff;
@@ -98,18 +109,39 @@ body {
   background-image: linear-gradient(to bottom, var(--tw-gradient-from, rgba(15,23,42,0.8)), var(--tw-gradient-to, #0f172a)) !important;
 }
 
-/* Fallbacks para transparencias comunes que usan color-mix() en Tailwind v4 */
+/* Fallbacks para transparencias y bordes que usan color-mix() en Tailwind v4 */
 .bg-white\/95 { background-color: rgba(255, 255, 255, 0.95) !important; }
 .bg-white\/90 { background-color: rgba(255, 255, 255, 0.90) !important; }
+.bg-white\/50 { background-color: rgba(255, 255, 255, 0.50) !important; }
 .bg-white\/20 { background-color: rgba(255, 255, 255, 0.20) !important; }
 .bg-white\/10 { background-color: rgba(255, 255, 255, 0.10) !important; }
 .bg-black\/60 { background-color: rgba(0, 0, 0, 0.60) !important; }
 .bg-black\/80 { background-color: rgba(0, 0, 0, 0.80) !important; }
+.bg-black\/50 { background-color: rgba(0, 0, 0, 0.50) !important; }
+.bg-slate-50\/80 { background-color: rgba(248, 250, 252, 0.80) !important; }
+.bg-slate-50\/50 { background-color: rgba(248, 250, 252, 0.50) !important; }
+.bg-slate-50\/30 { background-color: rgba(248, 250, 252, 0.30) !important; }
 .bg-slate-900\/95 { background-color: rgba(15, 23, 42, 0.95) !important; }
+.bg-slate-900\/90 { background-color: rgba(15, 23, 42, 0.90) !important; }
+.bg-slate-900\/80 { background-color: rgba(15, 23, 42, 0.80) !important; }
+.bg-slate-900\/70 { background-color: rgba(15, 23, 42, 0.70) !important; }
 .bg-slate-900\/60 { background-color: rgba(15, 23, 42, 0.60) !important; }
 .bg-slate-900\/50 { background-color: rgba(15, 23, 42, 0.50) !important; }
+.bg-blue-50\/40 { background-color: rgba(239, 246, 255, 0.40) !important; }
+.bg-blue-50\/30 { background-color: rgba(239, 246, 255, 0.30) !important; }
+
+.border-white\/50 { border-color: rgba(255, 255, 255, 0.50) !important; }
+.border-white\/25 { border-color: rgba(255, 255, 255, 0.25) !important; }
+.border-white\/20 { border-color: rgba(255, 255, 255, 0.20) !important; }
+.border-white\/10 { border-color: rgba(255, 255, 255, 0.10) !important; }
 
 .dark .dark\:bg-slate-900\/95 { background-color: rgba(15, 23, 42, 0.95) !important; }
+.dark .dark\:bg-slate-900\/80 { background-color: rgba(15, 23, 42, 0.80) !important; }
+.dark .dark\:bg-slate-900\/60 { background-color: rgba(15, 23, 42, 0.60) !important; }
 .dark .dark\:bg-slate-900\/50 { background-color: rgba(15, 23, 42, 0.50) !important; }
+.dark .dark\:bg-slate-900\/30 { background-color: rgba(15, 23, 42, 0.30) !important; }
 .dark .dark\:bg-slate-800\/50 { background-color: rgba(30, 41, 59, 0.50) !important; }
+.dark .dark\:bg-slate-700\/60 { background-color: rgba(51, 65, 85, 0.60) !important; }
 .dark .dark\:bg-slate-700\/50 { background-color: rgba(51, 65, 85, 0.50) !important; }
+.dark .dark\:bg-blue-900\/40 { background-color: rgba(30, 58, 138, 0.40) !important; }
+.dark .dark\:bg-blue-900\/20 { background-color: rgba(30, 58, 138, 0.20) !important; }

@@ -645,12 +645,25 @@ export default function AdminPanel() {
         }
       }
 
-      // 3. Limpiar categorías y marcas viejas que hayan quedado vacías (sin productos asignados)
+    // 3. Limpiar categorías y marcas viejas que hayan quedado vacías (leyendo TODOS los productos sin el límite de 1000)
       setImportProgress('Limpiando categorías y marcas en desuso...');
-      const { data: activeProds } = await supabase.from('products').select('category_id, brand_id');
-      if (activeProds && activeProds.length > 0) {
-        const usedCatIds = new Set(activeProds.map(p => p.category_id).filter(Boolean));
-        const usedBrandIds = new Set(activeProds.map(p => p.brand_id).filter(Boolean));
+      let allProdRefs = [];
+      let fromRef = 0;
+      const stepRef = 1000;
+      while (true) {
+        const { data: batchRef, error: refErr } = await supabase
+          .from('products')
+          .select('category_id, brand_id')
+          .range(fromRef, fromRef + stepRef - 1);
+        if (refErr || !batchRef || batchRef.length === 0) break;
+        allProdRefs = [...allProdRefs, ...batchRef];
+        if (batchRef.length < stepRef) break;
+        fromRef += stepRef;
+      }
+
+      if (allProdRefs.length > 0) {
+        const usedCatIds = new Set(allProdRefs.map(p => p.category_id).filter(Boolean));
+        const usedBrandIds = new Set(allProdRefs.map(p => p.brand_id).filter(Boolean));
 
         const { data: allCats } = await supabase.from('categories').select('id');
         const unusedCatIds = (allCats || []).map(c => c.id).filter(id => !usedCatIds.has(id));
@@ -1264,12 +1277,31 @@ export default function AdminPanel() {
     setOrders(orders.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
   };
 
-  // Crear Venta Manual (Mostrador / POS)
+  // Función auxiliar para buscar por palabras sueltas
+  const matchesMultiWordSearch = (prod, rawQuery) => {
+    const words = rawQuery
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+
+    if (words.length === 0) return true;
+
+    const searchableText = `${prod.sku_code || ''} ${prod.name || ''} ${prod.brand?.name || ''} ${prod.category?.name || ''} ${prod.description || ''}`
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+
+    return words.every(word => searchableText.includes(word));
+  };
+
+// 1. En el POS (Venta Manual):
   const posSuggestions = useMemo(() => {
     if (posSearch.trim().length < 2) return [];
-    const q = posSearch.toLowerCase();
     return products
-      .filter(p => p.name?.toLowerCase().includes(q) || p.sku_code?.toLowerCase().includes(q))
+      .filter(p => matchesMultiWordSearch(p, posSearch))
       .slice(0, 8);
   }, [posSearch, products]);
 
@@ -1402,17 +1434,11 @@ export default function AdminPanel() {
     return true;
   });
 
+// 2. En filteredProducts (reemplazando el bloque `if (q) { ... }`):
   const filteredProducts = useMemo(() => {
-    const q = searchTerm.trim().toLowerCase();
-
     const list = products.filter(p => {
-      if (q) {
-        const matchesQuery =
-          p.name?.toLowerCase().includes(q) ||
-          p.sku_code?.toLowerCase().includes(q) ||
-          p.category?.name?.toLowerCase().includes(q) ||
-          p.brand?.name?.toLowerCase().includes(q);
-        if (!matchesQuery) return false;
+      if (searchTerm.trim() && !matchesMultiWordSearch(p, searchTerm)) {
+        return false;
       }
 
       if (filterCategory !== 'todas' && String(p.category_id) !== String(filterCategory)) {
@@ -2006,16 +2032,55 @@ export default function AdminPanel() {
                           </div>
                         )}
 
-                        {order.notes && (
-                          <div className="mt-auto bg-blue-50/50 dark:bg-slate-900/60 border border-blue-100 dark:border-slate-700 rounded-xl p-4">
-                            <h5 className="text-[10px] font-bold uppercase tracking-widest text-blue-600 dark:text-blue-400 mb-2">
-                              Datos de Envío / Especificaciones
-                            </h5>
-                            <p className="text-xs text-slate-700 dark:text-slate-300 whitespace-pre-line leading-relaxed font-mono">
-                              {order.notes}
-                            </p>
-                          </div>
-                        )}
+                      {order.notes && (() => {
+                          // Extraemos URLs de imágenes de las notas automáticamente
+                          const urlRegex = /(https?:\/\/[^\s]+)/g;
+                          const matches = order.notes.match(urlRegex) || [];
+                          const imageLinks = matches.filter(url => /\.(jpg|jpeg|png|webp|avif)(\?.*)?$/i.test(url) || url.includes('supabase.co/storage'));
+                          
+                          // Limpiamos el texto de las notas para que no repita el link gigante si ya mostramos las fotos
+                          let cleanNotes = order.notes;
+                          imageLinks.forEach(link => {
+                            cleanNotes = cleanNotes.replace(link, '').replace(/FOTO REPUESTO:\s*/gi, '').replace(/FOTO CÉDULA \/ CHASIS:\s*/gi, '');
+                          });
+
+                          return (
+                            <div className="mt-auto space-y-3">
+                              <div className="bg-blue-50/50 dark:bg-slate-900/60 border border-blue-100 dark:border-slate-700 rounded-xl p-4">
+                                <h5 className="text-[10px] font-bold uppercase tracking-widest text-blue-600 dark:text-blue-400 mb-2">
+                                  Datos de Envío / Especificaciones
+                                </h5>
+                                <p className="text-xs text-slate-700 dark:text-slate-300 whitespace-pre-line leading-relaxed font-mono">
+                                  {cleanNotes.trim()}
+                                </p>
+                              </div>
+
+                              {imageLinks.length > 0 && (
+                                <div className="bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-700 rounded-xl p-3">
+                                  <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">
+                                    Fotos adjuntas por el cliente ({imageLinks.length})
+                                  </span>
+                                  <div className="flex flex-wrap gap-2">
+                                    {imageLinks.map((imgUrl, imgIdx) => (
+                                      <a
+                                        key={imgIdx}
+                                        href={imgUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="group relative w-20 h-20 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 flex items-center justify-center shadow-sm hover:border-blue-500 transition-all"
+                                      >
+                                        <img src={imgUrl} alt={`Adjunto ${imgIdx + 1}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-[10px] font-bold">
+                                          Ver
+                                        </div>
+                                      </a>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
 
                       <div className="p-5 bg-slate-50 dark:bg-slate-900 border-t border-slate-100 dark:border-slate-700 flex justify-between items-center">
@@ -2553,15 +2618,17 @@ export default function AdminPanel() {
                     <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">
                       Prefijo de Código (Evita choques)
                     </label>
-                    <input
-                      type="text"
-                      value={skuPrefix}
-                      onChange={(e) => setSkuPrefix(e.target.value.toUpperCase())}
-                      placeholder="Ej: TC- o WG-"
-                      className="mt-1 w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs font-mono font-bold text-slate-900 dark:text-white"
-                    />
-                  </div>
-                  <div>
+               <input
+                  type="text"
+                  value={skuPrefix}
+                  onChange={(e) => {
+                    const newPrefix = e.target.value.toUpperCase();
+                    setSkuPrefix(newPrefix);
+                    setExcelPreview(prev => enrichWithExistingSkus(prev, newPrefix));
+                  }}
+                  placeholder="Ej: TC- o WG-"
+                  className="mt-1 w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs font-mono font-bold text-slate-900 dark:text-white"
+                />
                     <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">
                       Sumar % (Ej: 21 por IVA)
                     </label>

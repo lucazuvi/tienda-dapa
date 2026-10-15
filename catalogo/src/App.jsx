@@ -145,70 +145,36 @@ function TiltCard({ children, className = "" }) {
 /* ==========================================================================
    COMPONENTES DE PRODUCTO Y MODALES (Tienda Pública)
    ========================================================================== */
-function ProductCard({ product, categoryName, onAddToCart, onQuickView, isSelected }) {
-  return (
-    <div className={`flex flex-col bg-white dark:bg-slate-800 rounded-xl border p-3 shadow-sm hover:border-blue-500 hover:-translate-y-1 transition-all duration-300 ${isSelected ? 'border-blue-500 shadow-blue-500/20' : 'border-slate-200 dark:border-slate-700'}`}>
-      
-      <div 
-        className="h-32 sm:h-36 bg-slate-100 dark:bg-slate-900/50 rounded-lg flex items-center justify-center mb-3 cursor-pointer overflow-hidden relative group"
-        onClick={() => onQuickView && onQuickView(product, categoryName)}
-      >
-        {product.image_url ? (
-          <img src={product.image_url} alt={product.name} className="object-contain w-full h-full p-2 group-hover:scale-105 transition-transform duration-300" />
-        ) : (
-          <Package className="w-8 h-8 text-slate-400 dark:text-slate-600" />
-        )}
-      </div>
-  
-      <div className="flex-grow flex flex-col">
-        <div className="flex items-center gap-1.5 mb-1.5 overflow-hidden">
-          <span className="text-[10px] bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded font-mono font-bold flex-shrink-0">
-            {product.sku_code}
-          </span>
-          {product.brand?.name && (
-            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase truncate">
-              {product.brand.name}
-            </span>
-          )}
-        </div>
-  
-        <h3 
-          className="text-xs sm:text-sm font-semibold text-slate-800 dark:text-white leading-tight line-clamp-2 min-h-[2.5rem] mb-2 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors" 
-          title={product.name}
-          onClick={() => onQuickView && onQuickView(product, categoryName)}
-        >
-          {product.name}
-        </h3>
-  
-        <p className="text-sm sm:text-base font-bold text-slate-900 dark:text-white mt-auto">
-          ${Number(product.price).toLocaleString('es-AR')}
-        </p>
-      </div>
-  
-      <button 
-        onClick={() => onAddToCart && onAddToCart(product)}
-        className="mt-3 w-full bg-slate-100 dark:bg-slate-700/50 hover:bg-blue-600 dark:hover:bg-blue-600 text-slate-800 hover:text-white dark:text-white text-[11px] font-bold py-2 rounded-lg transition-colors flex items-center justify-center gap-1.5 uppercase tracking-wider"
-      >
-        <ShoppingCart className="w-3.5 h-3.5" />
-        <span>Agregar</span>
-      </button>
-    </div>
-  );
-}
+function ProductImage({ sku, imageUrl, alt, className = "" }) {
+  const [imgError, setImgError] = useState(false);
 
-function SkeletonCard() {
+  useEffect(() => {
+    setImgError(false);
+  }, [imageUrl, sku]);
+
+  if (!imageUrl || imgError) {
+    return (
+      <div className={`flex flex-col items-center justify-center bg-slate-100 dark:bg-slate-900 text-slate-400 dark:text-slate-600 p-4 select-none ${className}`}>
+        <Package className="w-12 h-12 mb-1.5 opacity-60 stroke-[1.5]" />
+        <span className="text-[9px] font-bold uppercase tracking-widest opacity-75 font-exo text-center">
+          {sku || 'D.A.P.A'}
+        </span>
+      </div>
+    );
+  }
+
   return (
-    <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 flex flex-col animate-pulse h-full min-h-[220px]">
-       <div className="flex justify-between items-start mb-4">
-         <div className="h-5 w-16 bg-slate-200 dark:bg-slate-700 rounded-md"></div>
-         <div className="h-5 w-24 bg-slate-200 dark:bg-slate-700 rounded"></div>
-       </div>
-       <div className="h-4 w-full bg-slate-200 dark:bg-slate-700 rounded mb-2"></div>
-       <div className="h-4 w-2/3 bg-slate-200 dark:bg-slate-700 rounded mb-6 flex-grow"></div>
-       <div className="h-10 w-full bg-slate-200 dark:bg-slate-700 rounded-xl mt-auto"></div>
-    </div>
+    <img
+      src={imageUrl}
+      alt={alt || sku || 'Repuesto'}
+      onError={() => setImgError(true)}
+      className={className}
+      loading="lazy"
+    />
   );
 }
+   
+
 
 function QuickViewModal({ product, categoryName, isOpen, onClose, onAddToCart }) {
   if (!isOpen || !product) return null;
@@ -247,10 +213,10 @@ function QuickViewModal({ product, categoryName, isOpen, onClose, onAddToCart })
                 <span className="text-slate-500 dark:text-slate-400 font-light">Marca:</span>
                 <span className="text-blue-600 dark:text-blue-400">{brandName}</span>
               </li>
-              <li className="flex justify-between pb-1">
+            <li className="flex justify-between pb-1">
                 <span className="text-slate-500 dark:text-slate-400 font-light">Disponibilidad:</span>
-                <span className="text-green-600 dark:text-green-400 flex items-center gap-1">
-                  <CheckCircle className="w-3 h-3"/> Stock Confirmado
+                <span className="text-amber-600 dark:text-amber-400 flex items-center gap-1 font-semibold">
+                  <Clock className="w-3.5 h-3.5"/> En local / Por encargue
                 </span>
               </li>
             </ul>
@@ -1195,13 +1161,15 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, current
 
       if (itemsError) throw itemsError;
 
-      if (metodoDeEnvio === 'WHATSAPP') {
-     let text = `¡Hola DAPA Repuestos! Soy ${customerName}.\n\nAcabo de generar el pedido web #${newOrder.id}:\n\n`;
-   cart.forEach(item => {
-     text += `• ${item.quantity}x [${item.product.sku_code}] ${item.product.name}\n`;
-   });
-   text += `\n*Total estimado: $${cartTotal.toLocaleString('es-AR')}*`;
-   if (customerPhone) text += `\nMi teléfono: ${customerPhone}`;
+ if (metodoDeEnvio === 'WHATSAPP') {
+        let wppText = `¡Hola DAPA Repuestos! Soy ${clienteNombre}.\n\nAcabo de generar el pedido web #${newOrder.id}:\n\n`;
+        cart.forEach(item => {
+          wppText += `• ${item.quantity}x [${item.product.sku_code}] ${item.product.name}\n`;
+        });
+        wppText += `\n*Total estimado: $${cartTotal.toLocaleString('es-AR')}*`;
+        if (clienteTelefono && clienteTelefono !== 'No registrado') {
+          wppText += `\nMi teléfono: ${clienteTelefono}`;
+        }
 
         const wppUrl = `${CONTACT_INFO.whatsappLink}?text=${encodeURIComponent(wppText)}`;
         
@@ -1286,12 +1254,21 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, current
               <p className="text-sm mt-2">Buscá repuestos en el catálogo y agregalos aquí.</p>
             </div>
           ) : (
-            <div className="space-y-4">
+         <div className="space-y-4">
               {cart.map((item) => (
                 <div key={item.product.sku_code} className="flex gap-4 border border-slate-100 dark:border-slate-700 p-4 rounded-xl shadow-sm relative group bg-white dark:bg-slate-800 hover:border-blue-200 transition-colors">
                   <div className="flex-1 min-w-0">
-                    <h4 className="font-bold text-slate-800 dark:text-white text-sm leading-tight truncate" title={item.product.name}>{item.product.name}</h4>
-                    <span className="text-[10px] font-bold tracking-widest uppercase text-slate-400 block mt-1">{item.product.sku_code}</span>
+                    <h4 className="font-bold text-slate-800 dark:text-white text-sm leading-tight truncate" title={item.product.name}>
+                      {item.product.name}
+                    </h4>
+                    <div className="flex items-center justify-between mt-1">
+                      <span className="text-[10px] font-bold tracking-widest uppercase text-slate-400">
+                        {item.product.sku_code}
+                      </span>
+                      <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                        ${Number(item.product.price).toLocaleString('es-AR')} c/u
+                      </span>
+                    </div>
                     
                     <div className="flex items-center gap-3 mt-4">
                       <div className="flex items-center border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-900">
@@ -1303,7 +1280,12 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, current
                           <Plus className="w-3 h-3" />
                         </button>
                       </div>
-                      <button onClick={() => removeItem(item.product.sku_code)} className="text-red-400 hover:text-red-600 p-2 rounded-lg hover:bg-red-50 dark:hover:bg-slate-700 transition-colors focus:outline-none ml-auto">
+
+                      <span className="text-sm font-bold font-exo text-blue-600 dark:text-blue-400 ml-auto">
+                        ${(Number(item.product.price) * item.quantity).toLocaleString('es-AR')}
+                      </span>
+
+                      <button onClick={() => removeItem(item.product.sku_code)} className="text-red-400 hover:text-red-600 p-2 rounded-lg hover:bg-red-50 dark:hover:bg-slate-700 transition-colors focus:outline-none">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
@@ -1322,8 +1304,24 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, current
               </div>
             )}
 
+            <div className="mb-4 p-3 rounded-xl bg-amber-50 dark:bg-slate-900/80 border border-amber-200/80 dark:border-slate-700 text-[11px] text-slate-600 dark:text-slate-400 leading-snug flex items-start gap-2">
+              <Clock className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+              <span>
+                <strong>Nota:</strong> Algunos artículos de catálogo se traen directamente de distribuidora <strong>por encargue</strong>. Te confirmaremos la demora exacta al procesar tu pedido.
+              </span>
+            </div>
+
             {drawerError && <div className="mb-3 p-3 rounded-xl bg-red-50 dark:bg-red-900/25 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 text-xs font-bold text-center">{drawerError}</div>}
             
+            <div className="flex justify-between items-center mb-4 pb-3 border-b border-slate-100 dark:border-slate-700">
+              <span className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
+                Subtotal Estimado
+              </span>
+              <span className="text-xl font-bold font-exo text-slate-900 dark:text-white">
+                ${cartTotal.toLocaleString('es-AR')}
+              </span>
+            </div>
+
             {checkoutMode ? (
               <div className="flex flex-col gap-3 animate-in slide-in-from-bottom-2">
                 <p className="text-xs font-bold uppercase tracking-widest text-center text-slate-500 mb-2">¿Cómo querés enviar el pedido?</p>
@@ -1512,6 +1510,25 @@ function FloatingActions() {
   );
 }
 
+function matchesProductQuery(prod, rawQuery) {
+  const words = rawQuery
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (words.length === 0) return true;
+
+  const fullText = `${prod.sku_code || ''} ${prod.name || ''} ${prod.brand?.name || ''} ${prod.category?.name || ''} ${prod.description || ''}`
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+  return words.every(word => fullText.includes(word));
+}
+
 /* ==========================================================================
    NAVBAR CON MENÚS DESPLEGABLES Y BÚSQUEDA
    ========================================================================== */
@@ -1533,21 +1550,22 @@ function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenCart, on
   const handleNavClick = (page, section) => { navigateTo(page, section); setMobileMenuOpen(false); setActiveDropdown(null); };
   const handleCategoryClick = (cat) => { onOpenCategory(cat); setActiveDropdown(null); setMobileMenuOpen(false); };
 
-  const handleSearchChange = (e) => {
+const handleSearchChange = (e) => {
     const value = e.target.value;
     setSearchTerm(value);
-    if (value.trim().length > 2) { 
-      const lowerValue = value.toLowerCase();
+    if (value.trim().length >= 2) {
       const filtered = [];
       for (let i = 0; i < allProducts.length; i++) {
         const p = allProducts[i];
-        if (p.name.toLowerCase().includes(lowerValue) || p.sku_code.toLowerCase().includes(lowerValue)) {
+        if (matchesProductQuery(p, value)) {
           filtered.push(p);
-          if (filtered.length >= 5) break;
+          if (filtered.length >= 6) break;
         }
       }
-      setSuggestions(filtered); 
-    } else { setSuggestions([]); }
+      setSuggestions(filtered);
+    } else {
+      setSuggestions([]);
+    }
   };
 
   const handleSuggestionClick = (prod) => { setSearchTerm(''); setSuggestions([]); setMobileMenuOpen(false); onProductSearchSelect(prod); };
@@ -1781,21 +1799,22 @@ function CatalogSection({ categories, allProducts, onOpenCategory, onProductSear
   const [searchTerm, setSearchTerm] = useState('');
   const [suggestions, setSuggestions] = useState([]);
 
-  const handleSearchChange = (e) => {
+const handleSearchChange = (e) => {
     const value = e.target.value;
     setSearchTerm(value);
-    if (value.trim().length > 2) { 
-      const lowerValue = value.toLowerCase();
+    if (value.trim().length >= 2) {
       const filtered = [];
       for (let i = 0; i < allProducts.length; i++) {
         const p = allProducts[i];
-        if (p.name.toLowerCase().includes(lowerValue) || p.sku_code.toLowerCase().includes(lowerValue)) {
+        if (matchesProductQuery(p, value)) {
           filtered.push(p);
-          if (filtered.length >= 6) break; 
+          if (filtered.length >= 6) break;
         }
       }
-      setSuggestions(filtered); 
-    } else { setSuggestions([]); }
+      setSuggestions(filtered);
+    } else {
+      setSuggestions([]);
+    }
   };
 
   const handleSuggestionClick = (prod) => { setSearchTerm(''); setSuggestions([]); onProductSearchSelect(prod); };
@@ -1853,52 +1872,115 @@ function CatalogSection({ categories, allProducts, onOpenCategory, onProductSear
   );
 }
 
-function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, initialSelectedProduct }) {
+function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, initialSelectedProduct, selectedProduct, onQuickView, onShowToast }) {
   const [selectedBrand, setSelectedBrand] = useState('Todas');
   const [categorySearch, setCategorySearch] = useState('');
+  const [sortBy, setSortBy] = useState('relevancia'); // relevancia | precio_asc | precio_desc | nombre_asc
   const [currentPage, setCurrentPage] = useState(1);
-  const [viewingProduct, setViewingProduct] = useState(initialSelectedProduct || null);
+  const [viewingProduct, setViewingProduct] = useState(selectedProduct || initialSelectedProduct || null);
   const [quantity, setQuantity] = useState(1);
   const [isZoomed, setIsZoomed] = useState(false);
   const [zoomPos, setZoomPos] = useState({ x: 50, y: 50 });
+  const [copiedLink, setCopiedLink] = useState(false);
   const productsPerPage = 12;
 
-  useEffect(() => { setViewingProduct(initialSelectedProduct || null); }, [initialSelectedProduct]);
+  useEffect(() => {
+    setViewingProduct(selectedProduct || initialSelectedProduct || null);
+  }, [selectedProduct, initialSelectedProduct]);
 
-  const categoryProducts = useMemo(() => allProducts.filter(p => p.category_id === category?.id), [allProducts, category]);
-  
+  const categoryProducts = useMemo(
+    () => allProducts.filter(p => p.category_id === category?.id),
+    [allProducts, category]
+  );
+
   const availableBrands = useMemo(() => {
     const brands = new Set(categoryProducts.map(p => p.brand?.name).filter(Boolean));
     return ['Todas', ...Array.from(brands).sort()];
   }, [categoryProducts]);
 
+  // Filtrado por marca + palabras sueltas + ordenamiento de precios/nombre
   const filteredProducts = useMemo(() => {
-    const q = categorySearch.trim().toLowerCase();
-    return categoryProducts.filter(p => {
+    const words = categorySearch
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+
+    const list = categoryProducts.filter(p => {
       const matchesBrand = selectedBrand === 'Todas' || (p.brand?.name || 'Varios') === selectedBrand;
       if (!matchesBrand) return false;
-      if (!q) return true;
-      return (
-        p.name?.toLowerCase().includes(q) ||
-        p.sku_code?.toLowerCase().includes(q) ||
-        p.description?.toLowerCase().includes(q) ||
-        p.brand?.name?.toLowerCase().includes(q)
-      );
+      if (words.length === 0) return true;
+
+      const fullText = `${p.sku_code || ''} ${p.name || ''} ${p.brand?.name || ''} ${p.description || ''}`
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+
+      return words.every(w => fullText.includes(w));
     });
-  }, [categoryProducts, selectedBrand, categorySearch]);
+
+    if (sortBy === 'precio_asc') {
+      list.sort((a, b) => Number(a.price || 0) - Number(b.price || 0));
+    } else if (sortBy === 'precio_desc') {
+      list.sort((a, b) => Number(b.price || 0) - Number(a.price || 0));
+    } else if (sortBy === 'nombre_asc') {
+      list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    }
+
+    return list;
+  }, [categoryProducts, selectedBrand, categorySearch, sortBy]);
 
   const totalPages = Math.ceil(filteredProducts.length / productsPerPage);
-  
+
   const currentProducts = useMemo(() => {
     const indexOfLast = currentPage * productsPerPage;
     const indexOfFirst = indexOfLast - productsPerPage;
     return filteredProducts.slice(indexOfFirst, indexOfLast);
   }, [filteredProducts, currentPage]);
 
-  useEffect(() => { setCurrentPage(1); }, [selectedBrand, category, categorySearch]);
-  useEffect(() => { window.scrollTo({ top: 0, behavior: 'smooth' }); }, [currentPage, viewingProduct]);
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedBrand, category, categorySearch, sortBy]);
 
-  const handleOpenProduct = (prod) => { setViewingProduct(prod); setQuantity(1); };
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [currentPage, viewingProduct]);
+
+  const handleOpenProduct = (prod) => {
+    setViewingProduct(prod);
+    setQuantity(1);
+    setCopiedLink(false);
+    window.history.pushState(
+      { page: 'categoria', category, product: prod },
+      '',
+      `#producto-${prod.sku_code}`
+    );
+  };
+
+  const handleCloseProduct = () => {
+    setViewingProduct(null);
+    window.history.pushState(
+      { page: 'categoria', category },
+      '',
+      `#categoria-${category.id}`
+    );
+  };
+
+  const handleCopyProductLink = (prod) => {
+    const url = `${window.location.origin}/#producto-${encodeURIComponent(prod.sku_code)}`;
+    navigator.clipboard.writeText(url);
+    setCopiedLink(true);
+    if (onShowToast) onShowToast('Enlace del repuesto copiado');
+    setTimeout(() => setCopiedLink(false), 2500);
+  };
+
+  const getProductWhatsAppUrl = (prod) => {
+    const url = `${window.location.origin}/#producto-${encodeURIComponent(prod.sku_code)}`;
+    const text = `¡Hola DAPA Repuestos! Quería consultar por este repuesto del catálogo:\n\n• *Repuesto:* ${prod.name}\n• *Código:* ${prod.sku_code}${prod.price > 0 ? `\n• *Precio web:* $${Number(prod.price).toLocaleString('es-AR')}` : ''}\n• *Enlace:* ${url}`;
+    return `${CONTACT_INFO.whatsappLink}?text=${encodeURIComponent(text)}`;
+  };
 
   const handleMouseMove = (e) => {
     const { left, top, width, height } = e.currentTarget.getBoundingClientRect();
@@ -1914,7 +1996,10 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         
         <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-          <button onClick={viewingProduct ? () => setViewingProduct(null) : onBack} className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors bg-white dark:bg-slate-800 px-5 py-2.5 rounded-full shadow-sm border border-slate-200 dark:border-slate-700 focus:outline-none">
+          <button
+            onClick={viewingProduct ? handleCloseProduct : onBack}
+            className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors bg-white dark:bg-slate-800 px-5 py-2.5 rounded-full shadow-sm border border-slate-200 dark:border-slate-700 focus:outline-none"
+          >
             <ArrowLeft className="w-4 h-4" /> {viewingProduct ? `Volver a ${category.name}` : 'Volver al Catálogo'}
           </button>
           <div className="text-xs font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500 hidden sm:block">
@@ -1947,17 +2032,44 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
                     `}</style>
                   )}
                 </div>
-                <p className="text-center text-[10px] uppercase tracking-widest text-slate-400 mt-3 hidden sm:block">Pasá el mouse por la imagen para hacer zoom</p>
+                <p className="text-center text-[10px] uppercase tracking-widest text-slate-400 mt-3 hidden sm:block">
+                  Pasá el mouse por la imagen para hacer zoom
+                </p>
               </div>
 
               <div className="w-full lg:w-1/2 flex flex-col justify-center">
-                <div className="flex items-center gap-3 mb-3">
-                  <span className="bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-md">
-                    {viewingProduct.brand?.name || 'Genérico'}
-                  </span>
-                  <span className="text-xs font-bold text-slate-400 dark:text-slate-500 font-exo">
-                    CÓDIGO: {viewingProduct.sku_code}
-                  </span>
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                  <div className="flex items-center gap-3">
+                    <span className="bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-md">
+                      {viewingProduct.brand?.name || 'Genérico'}
+                    </span>
+                    <span className="text-xs font-bold text-slate-400 dark:text-slate-500 font-exo">
+                      CÓDIGO: {viewingProduct.sku_code}
+                    </span>
+                  </div>
+
+                  {/* BOTÓN DE COPIAR ENLACE DIRECTO AL PRODUCTO */}
+                  <button
+                    type="button"
+                    onClick={() => handleCopyProductLink(viewingProduct)}
+                    className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                    title="Copiar enlace directo a este repuesto"
+                  >
+                    {copiedLink ? (
+                      <>
+                        <CheckCircle className="w-3.5 h-3.5 text-green-500" />
+                        <span className="text-green-600 dark:text-green-400">¡Copiado!</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
+                          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                        </svg>
+                        <span>Compartir link</span>
+                      </>
+                    )}
+                  </button>
                 </div>
 
                 <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white leading-tight mb-4">
@@ -1969,7 +2081,9 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
                 </div>
 
                 <div className="mb-6">
-                  <h4 className="text-xs font-bold uppercase tracking-widest text-slate-900 dark:text-white mb-2">Descripción y Compatibilidad:</h4>
+                  <h4 className="text-xs font-bold uppercase tracking-widest text-slate-900 dark:text-white mb-2">
+                    Descripción y Compatibilidad:
+                  </h4>
                   <p className="text-slate-600 dark:text-slate-300 font-light text-sm leading-relaxed whitespace-pre-line bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-100 dark:border-slate-700/50">
                     {viewingProduct.description 
                       ? viewingProduct.description 
@@ -1977,26 +2091,45 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2 mb-8">
-                  <div className={`w-3 h-3 rounded-full ${viewingProduct.stock > 0 ? 'bg-green-500' : 'bg-orange-500'}`}></div>
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
-                    {viewingProduct.stock > 0 ? `Stock disponible (${viewingProduct.stock} unidades)` : 'Stock a confirmar en sucursal'}
-                  </span>
+              <div className="mb-8 p-4 rounded-xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 flex items-start gap-3">
+                  <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                  <div className="text-xs leading-relaxed text-slate-700 dark:text-slate-300">
+                    <span className="font-bold uppercase tracking-wider text-amber-800 dark:text-amber-300 block mb-0.5">
+                      Disponibilidad en local o por encargue
+                    </span>
+                    Trabajamos con catálogos directos de múltiples proveedores. Si el repuesto no se encuentra físicamente en el mostrador al momento de tu compra, <strong>lo pedimos por encargue de forma inmediata</strong> y te avisamos apenas ingresa.
+                  </div>
                 </div>
 
-                <div className="flex flex-col sm:flex-row gap-4 mt-auto">
-                  <div className="flex items-center justify-between border border-slate-300 dark:border-slate-600 rounded-xl px-4 py-3 sm:w-36 bg-slate-50 dark:bg-slate-900">
-                    <button onClick={() => setQuantity(q => Math.max(1, q - 1))} className="text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 p-1 focus:outline-none"><Minus className="w-4 h-4"/></button>
-                    <span className="font-bold text-slate-900 dark:text-white">{quantity}</span>
-                    <button onClick={() => setQuantity(q => q + 1)} className="text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 p-1 focus:outline-none"><Plus className="w-4 h-4"/></button>
+                <div className="flex flex-col gap-3 mt-auto">
+                  <div className="flex flex-col sm:flex-row gap-4">
+                    <div className="flex items-center justify-between border border-slate-300 dark:border-slate-600 rounded-xl px-4 py-3 sm:w-36 bg-slate-50 dark:bg-slate-900">
+                      <button onClick={() => setQuantity(q => Math.max(1, q - 1))} className="text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 p-1 focus:outline-none">
+                        <Minus className="w-4 h-4"/>
+                      </button>
+                      <span className="font-bold text-slate-900 dark:text-white">{quantity}</span>
+                      <button onClick={() => setQuantity(q => q + 1)} className="text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 p-1 focus:outline-none">
+                        <Plus className="w-4 h-4"/>
+                      </button>
+                    </div>
+
+                    <button 
+                      onClick={() => onAddToCart(viewingProduct, quantity)} 
+                      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-widest text-xs py-4 px-6 rounded-xl transition-all shadow-lg shadow-blue-600/30 flex items-center justify-center gap-3 focus:outline-none active:scale-[0.98]"
+                    >
+                      <ShoppingCart className="w-5 h-5" /> Agregar al Carrito
+                    </button>
                   </div>
 
-                  <button 
-                    onClick={() => { onAddToCart(viewingProduct, quantity); }} 
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-widest text-xs py-4 px-6 rounded-xl transition-all shadow-lg shadow-blue-600/30 flex items-center justify-center gap-3 focus:outline-none active:scale-[0.98]"
+                  {/* BOTÓN DE CONSULTA DIRECTA POR WHATSAPP */}
+                  <a
+                    href={getProductWhatsAppUrl(viewingProduct)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full bg-green-500/10 hover:bg-green-500 text-green-600 dark:text-green-400 hover:text-white border border-green-500/30 hover:border-green-500 font-bold uppercase tracking-widest text-xs py-3.5 px-6 rounded-xl transition-all flex items-center justify-center gap-2.5 focus:outline-none"
                   >
-                    <ShoppingCart className="w-5 h-5" /> Agregar al Carrito
-                  </button>
+                    <MessageSquare className="w-4 h-4" /> Consultar por este repuesto en WhatsApp
+                  </a>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 mt-8 pt-6 border-t border-slate-100 dark:border-slate-700 text-xs text-slate-500 dark:text-slate-400">
@@ -2028,7 +2161,15 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
                 </div>
                 <div className="flex flex-row lg:flex-col gap-1.5 overflow-x-auto pb-2 lg:pb-0 custom-scrollbar max-h-[60vh]">
                   {availableBrands.map(brand => (
-                    <button key={brand} onClick={() => setSelectedBrand(brand)} className={`text-left px-3 py-2 rounded-lg text-xs transition-all flex items-center justify-between whitespace-nowrap lg:whitespace-normal flex-shrink-0 ${selectedBrand === brand ? 'bg-blue-600 text-white font-bold shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700/50 font-medium'}`}>
+                    <button
+                      key={brand}
+                      onClick={() => setSelectedBrand(brand)}
+                      className={`text-left px-3 py-2 rounded-lg text-xs transition-all flex items-center justify-between whitespace-nowrap lg:whitespace-normal flex-shrink-0 ${
+                        selectedBrand === brand
+                          ? 'bg-blue-600 text-white font-bold shadow-sm'
+                          : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700/50 font-medium'
+                      }`}
+                    >
                       <span className="truncate pr-2">{brand}</span>
                       {selectedBrand === brand && <div className="w-1.5 h-1.5 rounded-full bg-white hidden lg:block flex-shrink-0"></div>}
                     </button>
@@ -2037,15 +2178,15 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
               </div>
 
               <div className="flex-1 w-full">
-                {/* BARRA DE BÚSQUEDA RÁPIDA DENTRO DE LA CATEGORÍA */}
-                <div className="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm mb-6 flex flex-col sm:flex-row items-center gap-3">
-                  <div className="relative w-full">
+                {/* BARRA DE BÚSQUEDA + SELECTOR DE ORDENAMIENTO */}
+                <div className="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm mb-6 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                  <div className="relative flex-1">
                     <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                     <input
                       type="text"
                       value={categorySearch}
                       onChange={(e) => setCategorySearch(e.target.value)}
-                      placeholder={`Buscar modelo, auto o código dentro de ${category.name} (ej: Gol, Corsa, Hilux)...`}
+                      placeholder={`Buscar modelo, auto o código en ${category.name} (ej: Gol, Corsa)...`}
                       className="w-full pl-10 pr-9 py-2.5 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500 transition-colors"
                     />
                     {categorySearch && (
@@ -2057,12 +2198,25 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
                       </button>
                     )}
                   </div>
-                  {(categorySearch || selectedBrand !== 'Todas') && (
+
+                  {/* SELECTOR DE ORDENAMIENTO PARA EL CLIENTE */}
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value)}
+                    className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs sm:text-sm rounded-lg px-3.5 py-2.5 outline-none focus:border-blue-500 font-semibold cursor-pointer"
+                  >
+                    <option value="relevancia">Ordenar: Relevancia</option>
+                    <option value="precio_asc">Precio: Menor a Mayor</option>
+                    <option value="precio_desc">Precio: Mayor a Menor</option>
+                    <option value="nombre_asc">Nombre: A - Z</option>
+                  </select>
+
+                  {(categorySearch || selectedBrand !== 'Todas' || sortBy !== 'relevancia') && (
                     <button
-                      onClick={() => { setCategorySearch(''); setSelectedBrand('Todas'); }}
-                      className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline whitespace-nowrap px-2"
+                      onClick={() => { setCategorySearch(''); setSelectedBrand('Todas'); setSortBy('relevancia'); }}
+                      className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline whitespace-nowrap px-2 py-1"
                     >
-                      Limpiar filtros
+                      Limpiar
                     </button>
                   )}
                 </div>
@@ -2070,19 +2224,42 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
                 {currentProducts.length > 0 ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                     {currentProducts.map((prod) => (
-                      <div key={prod.sku_code} onClick={() => handleOpenProduct(prod)} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm hover:shadow-lg transition-all duration-300 flex flex-col group cursor-pointer">
-                        
+                      <div
+                        key={prod.sku_code}
+                        onClick={() => handleOpenProduct(prod)}
+                        className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm hover:shadow-lg transition-all duration-300 flex flex-col group cursor-pointer"
+                      >
                         <div className="h-44 relative bg-slate-100 dark:bg-slate-900 overflow-hidden flex items-center justify-center">
                           <ProductImage sku={prod.sku_code} imageUrl={prod.image_url} alt={prod.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                           <div className="absolute top-3 left-3 bg-slate-900/80 backdrop-blur-sm text-white text-[9px] font-bold uppercase tracking-widest px-2.5 py-1 rounded">
                             {prod.brand?.name || 'Genérico'}
                           </div>
+
+                          {/* BOTÓN DE VISTA RÁPIDA CONECTADO A QuickViewModal */}
+                          {onQuickView && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onQuickView(prod, category.name);
+                              }}
+                              title="Vista rápida"
+                              className="absolute top-3 right-3 p-2 rounded-full bg-white/90 dark:bg-slate-900/80 text-slate-700 dark:text-slate-200 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 opacity-0 group-hover:opacity-100 transition-all shadow-md focus:opacity-100 focus:outline-none"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                                <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+                                <circle cx="12" cy="12" r="3" />
+                              </svg>
+                            </button>
+                          )}
                         </div>
 
                         <div className="p-4 flex-1 flex flex-col justify-between">
                           <div>
                             <div className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-1 font-exo">CÓDIGO: {prod.sku_code}</div>
-                            <h3 className="font-bold text-slate-800 dark:text-white text-sm leading-snug mb-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors line-clamp-2" title={prod.name}>{prod.name}</h3>
+                            <h3 className="font-bold text-slate-800 dark:text-white text-sm leading-snug mb-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors line-clamp-2" title={prod.name}>
+                              {prod.name}
+                            </h3>
                             <p className="text-lg font-bold font-exo text-blue-600 dark:text-blue-400 mb-3">
                               {prod.price > 0 ? `$${Number(prod.price).toLocaleString('es-AR')}` : 'Consultar'}
                             </p>
@@ -2101,7 +2278,9 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
                 ) : (
                   <div className="bg-white dark:bg-slate-800 p-12 rounded-xl border border-slate-200 dark:border-slate-700 text-center">
                     <p className="text-slate-500 dark:text-slate-400 mb-4">No se encontraron repuestos con esa búsqueda en esta categoría.</p>
-                    <button onClick={() => { setSelectedBrand('Todas'); setCategorySearch(''); }} className="text-blue-600 font-bold text-xs uppercase tracking-wider hover:underline">Ver todos los productos de {category.name}</button>
+                    <button onClick={() => { setSelectedBrand('Todas'); setCategorySearch(''); setSortBy('relevancia'); }} className="text-blue-600 font-bold text-xs uppercase tracking-wider hover:underline">
+                      Ver todos los productos de {category.name}
+                    </button>
                   </div>
                 )}
 
@@ -2237,7 +2416,80 @@ function ProcessSection({ setTutorialOpen }) {
 function ContactSection() {
   const [formStatus, setFormStatus] = useState('idle');
   const [errorMsg, setErrorMsg] = useState('');
-  const [fileName, setFileName] = useState('');
+  const [photo1, setPhoto1] = useState(null); // Foto del repuesto
+  const [photo2, setPhoto2] = useState(null); // Foto de la cédula verde / chasis
+
+  // Comprime la imagen en el navegador a ~120KB para no llenar el almacenamiento de Supabase
+  const compressImage = (file) => {
+    return new Promise((resolve) => {
+      if (!file || !file.type.startsWith('image/')) return resolve(file);
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target.result;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 1280;
+          const MAX_HEIGHT = 1280;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height && width > MAX_WIDTH) {
+            height *= MAX_WIDTH / width;
+            width = MAX_WIDTH;
+          } else if (height > MAX_HEIGHT) {
+            width *= MAX_HEIGHT / height;
+            height = MAX_HEIGHT;
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+
+          canvas.toBlob(
+            (blob) => {
+              if (blob) {
+                resolve(new File([blob], file.name.replace(/\.[^/.]+$/, '.jpg'), { type: 'image/jpeg' }));
+              } else {
+                resolve(file);
+              }
+            },
+            'image/jpeg',
+            0.75
+          );
+        };
+        img.onerror = () => resolve(file);
+      };
+      reader.onerror = () => resolve(file);
+    });
+  };
+
+  const uploadQuotePhoto = async (file, label) => {
+    if (!file) return null;
+    try {
+      const compressedFile = await compressImage(file);
+      const filePath = `cotizaciones/${Date.now()}-${Math.random().toString(36).substring(2, 7)}.jpg`;
+      const { error: uploadError } = await supabase.storage
+        .from('repuestos')
+        .upload(filePath, compressedFile, { contentType: 'image/jpeg' });
+
+      if (uploadError) {
+        console.error(`Error subiendo ${label}:`, uploadError.message);
+        return null;
+      }
+
+      const { data: publicUrlData } = supabase.storage
+        .from('repuestos')
+        .getPublicUrl(filePath);
+
+      return publicUrlData?.publicUrl || null;
+    } catch (err) {
+      console.error('Error al procesar imagen:', err);
+      return null;
+    }
+  };
 
   const handleFormSubmit = async (e) => {
     e.preventDefault();
@@ -2253,28 +2505,20 @@ function ContactSection() {
     const anio = form.anio.value;
     const puertas = form.puertas.value;
     const mensaje = form.mensaje.value;
-    const file = form.imagen_adjunta?.files?.[0];
 
     try {
-      let imageUrl = '';
-      if (file) {
-        const fileExt = file.name.split('.').pop();
-        const filePath = `cotizaciones/${Date.now()}.${fileExt}`;
-        const { error: uploadError } = await supabase.storage
-          .from('repuestos')
-          .upload(filePath, file);
+      // Subimos hasta 2 fotos en paralelo (ya comprimidas)
+      const [urlFotoRepuesto, urlFotoCedula] = await Promise.all([
+        uploadQuotePhoto(photo1, 'repuesto'),
+        uploadQuotePhoto(photo2, 'cedula')
+      ]);
 
-        if (!uploadError) {
-          const { data: publicUrlData } = supabase.storage
-            .from('repuestos')
-            .getPublicUrl(filePath);
-          imageUrl = publicUrlData?.publicUrl || '';
-        }
-      }
+      let infoFotosNotas = '';
+      if (urlFotoRepuesto) infoFotosNotas += `\nFOTO REPUESTO: ${urlFotoRepuesto}`;
+      else if (photo1) infoFotosNotas += `\nFOTO REPUESTO: Seleccionada por el cliente (no se pudo subir al servidor).`;
 
-      const infoFoto = imageUrl 
-        ? `\nFOTO ADJUNTA: ${imageUrl}` 
-        : (file ? `\nFOTO: El cliente seleccionó una foto (${file.name}) para enviar por WhatsApp.` : '');
+      if (urlFotoCedula) infoFotosNotas += `\nFOTO CÉDULA / CHASIS: ${urlFotoCedula}`;
+      else if (photo2) infoFotosNotas += `\nFOTO CÉDULA / CHASIS: Seleccionada por el cliente (no se pudo subir al servidor).`;
 
       const { data: newOrder, error: orderError } = await supabase
         .from('orders')
@@ -2283,31 +2527,37 @@ function ContactSection() {
           customer_phone: telefono,
           status: 'Cotización Web',
           total_estimated: 0,
-          notes: `REPUESTO BUSCADO: ${repuesto}\nVEHÍCULO: ${marca} ${modelo}\nAÑO: ${anio} | PUERTAS: ${puertas}\nOBSERVACIONES: ${mensaje || 'Ninguna'}${infoFoto}`
+          notes: `REPUESTO BUSCADO: ${repuesto}\nVEHÍCULO: ${marca} ${modelo}\nAÑO: ${anio} | PUERTAS: ${puertas}\nOBSERVACIONES: ${mensaje || 'Ninguna'}${infoFotosNotas}`
         }])
         .select()
         .single();
 
       if (orderError) throw orderError;
 
+      // Usamos viñetas limpias (•) en lugar de emojis complejos para evitar el símbolo "" en WhatsApp Web
       let wppText = `¡Hola DAPA Repuestos! Soy ${nombre}.\n\n`;
       wppText += `Estoy buscando cotizar este repuesto por la página web:\n`;
-      wppText += `🔍 *Repuesto:* ${repuesto}\n`;
-      wppText += `🚗 *Vehículo:* ${marca} ${modelo}\n`;
-      wppText += `📅 *Año:* ${anio} | 🚪 *Puertas:* ${puertas}\n`;
-      if (mensaje) wppText += `\n📝 *Notas:* ${mensaje}\n`;
-      if (imageUrl) {
-        wppText += `\n📷 *Foto de muestra:* ${imageUrl}\n`;
-      } else if (file) {
-        wppText += `\n📷 *Tengo una foto de muestra para adjuntar acá en el chat.*\n`;
+      wppText += `• *Repuesto:* ${repuesto}\n`;
+      wppText += `• *Vehículo:* ${marca} ${modelo}\n`;
+      wppText += `• *Año:* ${anio} | *Puertas:* ${puertas}\n`;
+      if (mensaje) wppText += `• *Notas:* ${mensaje}\n`;
+
+      if (urlFotoRepuesto || urlFotoCedula) {
+        wppText += `\n*Fotos adjuntas:*\n`;
+        if (urlFotoRepuesto) wppText += `- Foto del repuesto: ${urlFotoRepuesto}\n`;
+        if (urlFotoCedula) wppText += `- Foto cédula / chasis: ${urlFotoCedula}\n`;
+      } else if (photo1 || photo2) {
+        wppText += `\n*Tengo fotos del repuesto / cédula verde para enviarte acá en el chat.*\n`;
       }
+
       wppText += `\n*(Cotización #${newOrder.id})*`;
 
       const wppUrl = `${CONTACT_INFO.whatsappLink}?text=${encodeURIComponent(wppText)}`;
       
       setFormStatus('success');
       form.reset();
-      setFileName('');
+      setPhoto1(null);
+      setPhoto2(null);
       window.open(wppUrl, '_blank');
 
     } catch (error) {
@@ -2322,10 +2572,15 @@ function ContactSection() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-20">
         <RevealOnScroll>
           <div className="text-center mb-12 md:mb-20">
-            <PremiumTitle dark={true} className="text-2xl sm:text-3xl md:text-4xl font-bold mb-2 md:mb-4 uppercase tracking-widest">Cotización a Medida</PremiumTitle>
-            <p className="text-sm md:text-lg text-slate-500 dark:text-slate-400 font-light">Completá los datos técnicos de tu vehículo para mayor precisión.</p>
+            <PremiumTitle dark={true} className="text-2xl sm:text-3xl md:text-4xl font-bold mb-2 md:mb-4 uppercase tracking-widest">
+              Contactanos! 
+            </PremiumTitle>
+            <p className="text-sm md:text-lg text-slate-500 dark:text-slate-400 font-light">
+              Comunicate por nuestros diferentes medios de comunicación.
+            </p>
           </div>
         </RevealOnScroll>
+
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 md:gap-6 mb-12 md:mb-16">
           <RevealOnScroll delay="delay-0"><a href={CONTACT_INFO.whatsappLink} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center text-center gap-3 p-6 bg-slate-50 dark:bg-slate-800 shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-md hover:border-green-300 dark:hover:border-green-500 lg:hover:-translate-y-2 transition-all duration-300 group focus:ring-2 focus:ring-green-500 outline-none rounded-2xl h-full"><div className="p-3 bg-white dark:bg-slate-900 rounded-full border border-slate-100 dark:border-slate-800 group-hover:bg-green-50 dark:group-hover:bg-green-500/20 transition-colors animate-soft-pulse"><MessageSquare className="w-6 h-6 md:w-8 md:h-8 text-slate-800 dark:text-slate-300 group-hover:text-green-500 dark:group-hover:text-green-400 transition-colors" aria-hidden="true" /></div><div><h4 className="font-bold text-slate-900 dark:text-white text-xs md:text-sm uppercase tracking-widest font-exo">WhatsApp</h4><p className="text-[10px] md:text-xs text-slate-500 dark:text-slate-400 font-light mt-1">{CONTACT_INFO.phone}</p></div></a></RevealOnScroll>
           <RevealOnScroll delay="md:delay-100"><div className="flex flex-col items-center text-center gap-3 p-6 bg-slate-50 dark:bg-slate-800 shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-md hover:border-blue-300 dark:hover:border-blue-500 lg:hover:-translate-y-2 transition-all duration-300 rounded-2xl h-full group"><div className="p-3 bg-white dark:bg-slate-900 rounded-full border border-slate-100 dark:border-slate-800 group-hover:bg-blue-50 dark:group-hover:bg-blue-500/20 transition-colors animate-soft-pulse" style={{ animationDelay: '0.2s' }}><MapPin className="w-6 h-6 md:w-8 md:h-8 text-slate-800 dark:text-slate-300 group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors" aria-hidden="true" /></div><div><h4 className="font-bold text-slate-900 dark:text-white text-xs md:text-sm uppercase tracking-widest font-exo">Dirección</h4><p className="text-[10px] md:text-xs text-slate-500 dark:text-slate-400 font-light mt-1">{CONTACT_INFO.address}</p><p className="text-[9px] text-slate-400 dark:text-slate-500">{CONTACT_INFO.city}</p></div></div></RevealOnScroll>
@@ -2347,7 +2602,9 @@ function ContactSection() {
               ) : (
                 <form onSubmit={handleFormSubmit} className="flex flex-col space-y-4 md:space-y-5">
                   <div className="text-center md:text-left mb-2">
-                    <PremiumTitle dark={true} as="h3" className="text-lg md:text-xl font-bold uppercase tracking-widest mb-1">Solicitar Repuesto</PremiumTitle>
+                    <PremiumTitle dark={true} as="h3" className="text-base md:text-lg font-bold uppercase tracking-wider mb-1">
+                      ¿No encontrás tu repuesto? Completá la plantilla y te lo cotizamos por WhatsApp.
+                    </PremiumTitle>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1"><label htmlFor="user_name" className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500">Nombre o Taller</label><input id="user_name" name="nombre" required minLength="3" type="text" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 outline-none focus:border-blue-500 dark:focus:border-blue-500 transition-colors text-sm text-slate-900 dark:text-white rounded-xl" placeholder="Ej: Taller Martínez" /></div>
@@ -2362,20 +2619,88 @@ function ContactSection() {
                     <div className="space-y-1"><label htmlFor="anio" className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500">Año</label><input id="anio" name="anio" required type="number" min="1950" max={new Date().getFullYear() + 1} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 outline-none focus:border-blue-500 dark:focus:border-blue-500 transition-colors text-sm text-slate-900 dark:text-white rounded-xl" placeholder="Ej: 2018" /></div>
                     <div className="space-y-1"><label htmlFor="puertas" className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500">Puertas</label><select id="puertas" name="puertas" required className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 outline-none focus:border-blue-500 dark:focus:border-blue-500 transition-colors text-sm text-slate-900 dark:text-white rounded-xl appearance-none"><option value="">Elegir...</option><option value="3 Puertas">3 Puertas</option><option value="4 Puertas">4 Puertas</option><option value="5 Puertas">5 Puertas</option><option value="Pick-up / Utilitario">Pick-up / Utilitario</option><option value="Otro">Otro</option></select></div>
                   </div>
-                  <div className="space-y-1 pt-2">
-                    <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500">Foto de muestra o código (Opcional)</label>
-                    <div className="relative w-full">
-                      <input id="imagen_repuesto" name="imagen_adjunta" type="file" accept="image/*" onChange={(e) => setFileName(e.target.files[0]?.name || '')} className="hidden" />
-                      <label htmlFor="imagen_repuesto" className={`flex items-center justify-center gap-2 w-full border-2 border-dashed px-3 py-3 outline-none transition-colors text-sm font-medium rounded-xl cursor-pointer ${fileName ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-400 text-blue-600 dark:text-blue-400' : 'bg-slate-50 dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-500 hover:border-blue-400 dark:hover:border-blue-500'}`}>
-                        {fileName ? <CheckCircle className="w-5 h-5" /> : <Camera className="w-5 h-5" />}<span className="truncate max-w-[80%]">{fileName || "Tocar aquí para adjuntar foto"}</span>
-                      </label>
+
+                  {/* SELECTOR DE HASTA 2 FOTOS (REPUESTO Y CÉDULA VERDE) */}
+                  <div className="space-y-2 pt-2">
+                    <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 block">
+                      Adjuntar Fotos (Opcional - Hasta 2 imágenes)
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* Foto 1: Repuesto */}
+                      <div className="relative">
+                        <input
+                          id="foto_repuesto"
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => setPhoto1(e.target.files?.[0] || null)}
+                          className="hidden"
+                        />
+                        <label
+                          htmlFor="foto_repuesto"
+                          className={`flex items-center justify-between gap-2 w-full border-2 border-dashed px-3 py-2.5 transition-colors text-xs font-medium rounded-xl cursor-pointer ${
+                            photo1
+                              ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-400 text-blue-600 dark:text-blue-400'
+                              : 'bg-slate-50 dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-500 hover:border-blue-400 dark:hover:border-blue-500'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 truncate">
+                            {photo1 ? <CheckCircle className="w-4 h-4 flex-shrink-0" /> : <Camera className="w-4 h-4 flex-shrink-0" />}
+                            <span className="truncate">{photo1 ? photo1.name : '1. Foto del Repuesto'}</span>
+                          </div>
+                          {photo1 && (
+                            <button
+                              type="button"
+                              onClick={(e) => { e.preventDefault(); setPhoto1(null); }}
+                              className="text-slate-400 hover:text-red-500 p-0.5"
+                              title="Quitar foto"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </label>
+                      </div>
+
+                      {/* Foto 2: Cédula Verde / Chasis */}
+                      <div className="relative">
+                        <input
+                          id="foto_cedula"
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => setPhoto2(e.target.files?.[0] || null)}
+                          className="hidden"
+                        />
+                        <label
+                          htmlFor="foto_cedula"
+                          className={`flex items-center justify-between gap-2 w-full border-2 border-dashed px-3 py-2.5 transition-colors text-xs font-medium rounded-xl cursor-pointer ${
+                            photo2
+                              ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-400 text-blue-600 dark:text-blue-400'
+                              : 'bg-slate-50 dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-500 hover:border-blue-400 dark:hover:border-blue-500'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 truncate">
+                            {photo2 ? <CheckCircle className="w-4 h-4 flex-shrink-0" /> : <Camera className="w-4 h-4 flex-shrink-0" />}
+                            <span className="truncate">{photo2 ? photo2.name : '2. Cédula Verde / Chasis'}</span>
+                          </div>
+                          {photo2 && (
+                            <button
+                              type="button"
+                              onClick={(e) => { e.preventDefault(); setPhoto2(null); }}
+                              className="text-slate-400 hover:text-red-500 p-0.5"
+                              title="Quitar foto"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </label>
+                      </div>
                     </div>
                   </div>
+
                   <div className="space-y-1"><label htmlFor="user_message" className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500">Observaciones (Opcional)</label><textarea id="user_message" name="mensaje" maxLength="500" className="w-full h-16 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 outline-none focus:border-blue-500 dark:focus:border-blue-500 transition-colors text-sm text-slate-900 dark:text-white resize-none rounded-xl" placeholder="Ej: Es motor 1.6 de 8 válvulas, naftero..."></textarea></div>
                   <input type="hidden" name="_subject" value="Nueva cotización técnica desde la Web DAPA" />
                   {formStatus === 'error' && <p className="text-red-500 text-xs font-bold text-center bg-red-50 dark:bg-red-900/20 p-3 rounded-xl border border-red-200 dark:border-red-800">{errorMsg}</p>}
                   <button type="submit" disabled={formStatus === 'submitting'} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold uppercase tracking-widest py-3 md:py-4 text-xs md:text-sm transition-colors flex items-center justify-center gap-2 md:gap-3 disabled:opacity-70 disabled:cursor-not-allowed mt-2 shadow-lg focus:outline-none focus:ring-4 focus:ring-blue-300 rounded-xl">
-                    {formStatus === 'submitting' ? <span className="flex items-center gap-2">Enviando Datos <Settings className="w-3 h-3 md:w-4 md:h-4 animate-spin" aria-hidden="true" /></span> : <span className="flex items-center gap-2">Solicitar Cotización <Send className="w-3 h-3 md:w-4 md:h-4" aria-hidden="true" /></span>}
+                    {formStatus === 'submitting' ? <span className="flex items-center gap-2">Subiendo datos y fotos... <Settings className="w-3 h-3 md:w-4 md:h-4 animate-spin" aria-hidden="true" /></span> : <span className="flex items-center gap-2">Solicitar Cotización <Send className="w-3 h-3 md:w-4 md:h-4" aria-hidden="true" /></span>}
                   </button>
                 </form>
               )}
@@ -2716,21 +3041,22 @@ useEffect(() => {
     localStorage.setItem('dapa_cart', JSON.stringify(newCart));
   };
 
-  const handleAddToCart = (product) => {
-    const existingItem = cart.find(item => item.product.sku_code === product.sku_code);
-    if (existingItem) {
-      const newCart = cart.map(item => 
-        item.product.sku_code === product.sku_code 
-          ? { ...item, quantity: item.quantity + 1 } 
-          : item
-      );
-      saveCart(newCart);
-    } else {
-      saveCart([...cart, { product, quantity: 1 }]);
-    }
-    showToast("Repuesto agregado al carrito");
-    setQuickViewData(null); 
-  };
+const handleAddToCart = (product, qty = 1) => {
+  const amount = Math.max(1, Number(qty) || 1);
+  const existingItem = cart.find(item => item.product.sku_code === product.sku_code);
+  if (existingItem) {
+    const newCart = cart.map(item => 
+      item.product.sku_code === product.sku_code 
+        ? { ...item, quantity: item.quantity + amount } 
+        : item
+    );
+    saveCart(newCart);
+  } else {
+    saveCart([...cart, { product, quantity: amount }]);
+  }
+  showToast("Repuesto agregado al carrito");
+  setQuickViewData(null); 
+};
 
   const updateQuantity = (sku_code, delta) => {
     const newCart = cart.map(item => {
@@ -2835,6 +3161,7 @@ useEffect(() => {
               onBack={() => navigateTo('inicio', 'catálogo')} 
               onAddToCart={handleAddToCart}
               onQuickView={openQuickView}
+              onShowToast={showToast}
             />
           </div>
         ) : (
