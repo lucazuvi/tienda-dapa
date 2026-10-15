@@ -2576,7 +2576,7 @@ function ContactSection() {
               Contactanos! 
             </PremiumTitle>
             <p className="text-sm md:text-lg text-slate-500 dark:text-slate-400 font-light">
-              Comunicate por nuestros diferentes medios de comunicación.
+              Comunicate por nuestros diferentes medios de comunicación o acercate hasta nuestro local.
             </p>
           </div>
         </RevealOnScroll>
