@@ -416,39 +416,90 @@ export default function AdminPanel() {
     setIsSubmitting(false);
   };
 
+// =======================================================================
+  // IMPORTACIÓN UNIVERSAL MULTI-PROVEEDOR (11 PROVEEDORES + MAPEO MANUAL)
   // =======================================================================
-  // IMPORTACIÓN MASIVA POR EXCEL (.XLSX / .XLS / .CSV)
-  // =======================================================================
-  const handleDownloadTemplate = async () => {
-    try {
-      const XLSX = await loadXlsxLibrary();
-      const sampleData = [
-        {
-          Codigo: 'OPT-001',
-          Nombre: 'Óptica Delantera Derecha Volkswagen Gol Trend',
-          Precio: 85000,
-          Stock: 5,
-          Categoria: 'Iluminación',
-          Marca: 'Volkswagen',
-          Descripcion: 'Modelos 2013 a 2016'
-        },
-        {
-          Codigo: 'AMO-204',
-          Nombre: 'Amortiguador Delantero Toyota Hilux',
-          Precio: 120000,
-          Stock: 8,
-          Categoria: 'Suspensión',
-          Marca: 'Toyota',
-          Descripcion: 'Aplicable a 4x2 y 4x4'
-        }
-      ];
-      const worksheet = XLSX.utils.json_to_sheet(sampleData);
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Productos');
-      XLSX.writeFile(workbook, 'Plantilla_Productos_DAPA.xlsx');
-    } catch (err) {
-      showNotification('Error al generar la plantilla', 'error');
+  const [detectedSupplier, setDetectedSupplier] = useState('');
+  const [skuPrefix, setSkuPrefix] = useState('');
+  const [importMarkupPct, setImportMarkupPct] = useState('0');
+  const [rawSheetMatrix, setRawSheetMatrix] = useState([]);
+  const [manualMappingMode, setManualMappingMode] = useState(false);
+  const [manualCols, setManualCols] = useState({
+    skuCol: 0,
+    nameCol: 1,
+    priceCol: 2,
+    fixedCategory: 'General',
+    fixedBrand: 'Auto'
+  });
+
+  const extractBrandFromText = (textStr) => {
+    const v = String(textStr || '').toUpperCase().trim();
+    if (!v) return 'Multimarca';
+    if (v.includes('ALFA ROMEO')) return 'Alfa Romeo';
+    if (v.includes('AGRALE')) return 'Agrale';
+    if (v.includes('AUDI')) return 'Audi';
+    if (v.includes('B.M.W') || v.includes('B. M. W') || v.includes('BMW')) return 'BMW';
+    if (v.includes('BYD')) return 'BYD';
+    if (v.includes('CHERY')) return 'Chery';
+    if (v.includes('CHEVROLET') || v.includes('CHEV.') || v.includes('CORSA') || v.includes('S-10') || v.includes('MERIVA') || v.includes('ONIX') || v.includes('CHEVY')) return 'Chevrolet';
+    if (v.includes('CHRYSLER')) return 'Chrysler';
+    if (v.includes('CITROEN') || v.includes('BERLINGO') || v.includes('JUMPER') || v.includes('3 CV') || v.includes('2 CV') || v.includes('AMI 8')) return 'Citroën';
+    if (v.includes('DAEWOO')) return 'Daewoo';
+    if (v.includes('DAIHATSU')) return 'Daihatsu';
+    if (v.includes('DATSUN')) return 'Datsun';
+    if (v.includes('DODGE') || v.includes('RAM')) return 'Dodge';
+    if (v.includes('FIAT') || v.includes('DUNA') || v.includes('PALIO') || v.includes('SIENA') || v.includes('DUCATO') || v.includes('FIORINO') || v.includes('REGATTA') || v.includes('F-147') || v.includes('F-128')) return 'Fiat';
+    if (v.includes('FORD') || v.includes('FALCON') || v.includes('ECOSPORT') || v.includes('ECO-SPORT') || v.includes('RANGER') || v.includes('FIESTA') || v.includes('FOCUS') || v.includes('ESCORT') || v.includes('F-100') || v.includes('TAUNUS')) return 'Ford';
+    if (v.includes('HONDA') || v.includes('CIVIC') || v.includes('FIT') || v.includes('CR-V')) return 'Honda';
+    if (v.includes('HYUNDAI')) return 'Hyundai';
+    if (v.includes('IKA')) return 'IKA';
+    if (v.includes('IVECO')) return 'Iveco';
+    if (v.includes('JEEP')) return 'Jeep';
+    if (v.includes('KIA')) return 'Kia';
+    if (v.includes('LADA')) return 'Lada';
+    if (v.includes('M.BENZ') || v.includes('MERCEDES') || v.includes('SPRINTER') || v.includes('1112') || v.includes('1114')) return 'Mercedes-Benz';
+    if (v.includes('MAZDA')) return 'Mazda';
+    if (v.includes('MINI COOPER')) return 'Mini Cooper';
+    if (v.includes('MITSUBISHI')) return 'Mitsubishi';
+    if (v.includes('NISSAN') || v.includes('FRONTIER')) return 'Nissan';
+    if (v.includes('PEUGEOT') || v.includes('PEUG') || v.includes('PARTNER') || v.includes('504') || v.includes('206') || v.includes('207') || v.includes('208')) return 'Peugeot';
+    if (v.includes('RASTROJERO')) return 'Rastrojero';
+    if (v.includes('RENAULT') || v.includes('CLIO') || v.includes('KANGOO') || v.includes('MEGANE') || v.includes('SANDERO') || v.includes('TRAFIC') || v.includes('LAGUNA')) return 'Renault';
+    if (v.includes('ROVER')) return 'Rover';
+    if (v.includes('SCANIA')) return 'Scania';
+    if (v.includes('SEAT')) return 'Seat';
+    if (v.includes('SUBARU')) return 'Subaru';
+    if (v.includes('SUZUKI') || v.includes('VITARA')) return 'Suzuki';
+    if (v.includes('TORINO')) return 'Torino';
+    if (v.includes('TOYOTA') || v.includes('HILUX') || v.includes('COROLLA') || v.includes('ETIOS')) return 'Toyota';
+    if (v.includes('V.W') || v.includes('VW') || v.includes('VOLKSWAGEN') || v.includes('AMAROK') || v.includes('GOL ') || v.includes('SURAN') || v.includes('FOX')) return 'Volkswagen';
+    if (v.includes('VOLVO')) return 'Volvo';
+    return 'Multimarca';
+  };
+
+  const detectCategoryFromName = (nameStr) => {
+    const n = String(nameStr || '').toUpperCase().trim();
+    if (n.startsWith('OPTICA') || n.startsWith('OPT.') || n.startsWith('VIDRIO OPT') || n.startsWith('VIDRIO DE OPT') || n.startsWith('LENTE OPT') || n.startsWith('LENTE DE OPT') || n.startsWith('ARO OPT') || n.startsWith('ARO DE OPT') || n.startsWith('CASCO OPT') || n.startsWith('CASCO DE OPT')) return 'Ópticas';
+    if (n.startsWith('FARO') || n.startsWith('FAROL') || n.startsWith('FARITO') || n.startsWith('LENTE FARO') || n.startsWith('LENTES FARO') || n.startsWith('VIDRIO FARO') || n.startsWith('CIRCUITO FARO') || n.startsWith('ARO FARO') || n.startsWith('ACRILICO FARO')) return 'Faros';
+    if (n.includes('PARAG') && !n.startsWith('FARO') && !n.startsWith('OPTICA') && !n.startsWith('GUARD') && !n.startsWith('CAPOT') && !n.startsWith('FRENTE')) return 'Paragolpes';
+    return 'Chapas';
+  };
+
+  const parsePriceNumber = (val) => {
+    if (typeof val === 'number') return isNaN(val) ? 0 : Math.round(val * 100) / 100;
+    const s = String(val ?? '').trim();
+    if (!s) return 0;
+    const cleaned = s.replace(/[^0-9.,-]/g, '');
+    if (cleaned.includes(',') && cleaned.includes('.')) {
+      if (cleaned.lastIndexOf(',') > cleaned.lastIndexOf('.')) {
+        return Math.round((parseFloat(cleaned.replace(/\./g, '').replace(',', '.')) || 0) * 100) / 100;
+      }
+      return Math.round((parseFloat(cleaned.replace(/,/g, '')) || 0) * 100) / 100;
     }
+    if (cleaned.includes(',')) {
+      return Math.round((parseFloat(cleaned.replace(',', '.')) || 0) * 100) / 100;
+    }
+    return Math.round((parseFloat(cleaned) || 0) * 100) / 100;
   };
 
   const normalizeKey = (str) =>
@@ -458,103 +509,44 @@ export default function AdminPanel() {
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '');
 
-  const handleExcelFileUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+// Normaliza códigos ignorando espacios y guiones (Así "TC -  3631" coincide con "TC-3631" o "3631")
+  const normalizeSkuCode = (sku) =>
+    String(sku || '').replace(/[\s-]+/g, '').toLowerCase();
 
-    setIsParsingExcel(true);
-    setExcelFileName(file.name);
-    setExcelPreview([]);
+  const enrichWithExistingSkus = (rows, prefixStr) => {
+    const existingSkuMap = new Map();
+    products.forEach(p => {
+      const fullNorm = normalizeSkuCode(p.sku_code);
+      existingSkuMap.set(fullNorm, p);
+      // También indexamos sin el prefijo TC para que coincida aunque subas el código numérico puro
+      const withoutTc = fullNorm.replace(/^tc/, '');
+      if (withoutTc) existingSkuMap.set(withoutTc, p);
+    });
 
-    try {
-      const XLSX = await loadXlsxLibrary();
-      const arrayBuffer = await file.arrayBuffer();
-      const workbook = XLSX.read(arrayBuffer, { type: 'array' });
-      const firstSheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[firstSheetName];
-      const rawRows = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
-
-      if (!rawRows || rawRows.length === 0) {
-        showNotification('El archivo Excel está vacío', 'error');
-        setIsParsingExcel(false);
-        return;
-      }
-
-      const existingSkuMap = new Map(
-        products.map(p => [String(p.sku_code).trim().toLowerCase(), p])
-      );
-
-      const parsedRows = rawRows.map((row, index) => {
-        const normalizedRow = {};
-        Object.keys(row).forEach(k => {
-          normalizedRow[normalizeKey(k)] = row[k];
-        });
-
-        const sku = String(
-          normalizedRow.codigo || normalizedRow.sku || normalizedRow.sku_code || normalizedRow.cod || `SKU-${Date.now()}-${index}`
-        ).trim();
-
-        const name = String(
-          normalizedRow.nombre || normalizedRow.producto || normalizedRow.descripcion || normalizedRow.name || normalizedRow.titulo || ''
-        ).trim();
-
-        const rawPrice = String(normalizedRow.precio || normalizedRow.price || normalizedRow.valor || '0')
-          .replace(/[^0-9.,-]/g, '')
-          .replace(',', '.');
-        const price = parseFloat(rawPrice) || 0;
-
-        const rawStock = String(normalizedRow.stock || normalizedRow.cantidad || '1').replace(/[^0-9]/g, '');
-        const stock = rawStock !== '' ? parseInt(rawStock, 10) : 1;
-
-        const categoryName = String(
-          normalizedRow.categoria || normalizedRow.rubro || normalizedRow.category || 'General'
-        ).trim() || 'General';
-
-        const brandName = String(
-          normalizedRow.marca || normalizedRow.brand || 'Multimarca'
-        ).trim() || 'Multimarca';
-
-        const description = String(
-          normalizedRow.detalle || normalizedRow.observaciones || normalizedRow.descripcion_larga || ''
-        ).trim();
-
-        const existingProduct = existingSkuMap.get(sku.toLowerCase());
-
-        return {
-          sku_code: sku,
-          name,
-          price,
-          stock,
-          categoryName,
-          brandName,
-          description,
-          isUpdate: !!existingProduct,
-          existingId: existingProduct?.id || null
-        };
-      }).filter(item => item.name.length > 0);
-
-      if (parsedRows.length === 0) {
-        showNotification('No se encontraron columnas válidas (Codigo, Nombre, Precio)', 'error');
-      } else {
-        setExcelPreview(parsedRows);
-      }
-    } catch (err) {
-      console.error('Error leyendo Excel:', err);
-      showNotification('No se pudo leer el archivo Excel. Verificá el formato.', 'error');
-    } finally {
-      setIsParsingExcel(false);
-    }
+    return rows.map(item => {
+      const keyWithPrefix = normalizeSkuCode(`${prefixStr}${item.sku_code}`);
+      const keyRaw = normalizeSkuCode(item.sku_code);
+      const existing = existingSkuMap.get(keyWithPrefix) || existingSkuMap.get(keyRaw);
+      return {
+        ...item,
+        isUpdate: !!existing,
+        existingId: existing?.id || null
+      };
+    });
   };
 
   const handleConfirmExcelImport = async () => {
     if (excelPreview.length === 0) return;
     setIsSubmitting(true);
-    setImportProgress('Verificando categorías y marcas...');
+    setImportProgress('Sincronizando categorías y marcas...');
 
     try {
+      const pct = parseFloat(importMarkupPct) || 0;
+
+      // 1. Crear categorías nuevas si no existen (Ópticas, Faros, Paragolpes, Chapas, etc.)
       const catMap = new Map(categories.map(c => [normalizeKey(c.name), c.id]));
       const uniqueNewCats = [...new Set(excelPreview.map(r => r.categoryName))]
-        .filter(name => !catMap.has(normalizeKey(name)));
+        .filter(name => name && !catMap.has(normalizeKey(name)));
 
       if (uniqueNewCats.length > 0) {
         const { data: insertedCats, error: catErr } = await supabase
@@ -565,9 +557,10 @@ export default function AdminPanel() {
         insertedCats?.forEach(c => catMap.set(normalizeKey(c.name), c.id));
       }
 
+      // 2. Crear marcas limpias si no existen (Ford, Volkswagen, Renault, etc.)
       const brandMap = new Map(brands.map(b => [normalizeKey(b.name), b.id]));
       const uniqueNewBrands = [...new Set(excelPreview.map(r => r.brandName))]
-        .filter(name => !brandMap.has(normalizeKey(name)));
+        .filter(name => name && !brandMap.has(normalizeKey(name)));
 
       if (uniqueNewBrands.length > 0) {
         const { data: insertedBrands, error: brandErr } = await supabase
@@ -578,32 +571,65 @@ export default function AdminPanel() {
         insertedBrands?.forEach(b => brandMap.set(normalizeKey(b.name), b.id));
       }
 
+      // Mapa de productos existentes ignorando espacios/guiones
+      const existingSkuMap = new Map();
+      products.forEach(p => {
+        const fullNorm = normalizeSkuCode(p.sku_code);
+        existingSkuMap.set(fullNorm, p);
+        const withoutTc = fullNorm.replace(/^tc/, '');
+        if (withoutTc) existingSkuMap.set(withoutTc, p);
+      });
+
       const toInsert = [];
       const toUpdate = [];
+      const seenSkusInBatch = new Set();
 
       excelPreview.forEach(item => {
-        const payload = {
-          sku_code: item.sku_code,
-          name: item.name,
-          price: item.price,
-          stock: item.stock,
-          category_id: catMap.get(normalizeKey(item.categoryName)) || categories[0]?.id,
-          brand_id: brandMap.get(normalizeKey(item.brandName)) || brands[0]?.id,
-          is_active: true
-        };
-        if (item.description) payload.description = item.description;
+        const finalSku = `${skuPrefix}${item.sku_code}`.trim();
+        const normKeyWithPrefix = normalizeSkuCode(finalSku);
+        const normKeyRaw = normalizeSkuCode(item.sku_code);
 
-        if (item.isUpdate && item.existingId) {
-          toUpdate.push({ id: item.existingId, ...payload });
+        if (seenSkusInBatch.has(normKeyWithPrefix)) return;
+        seenSkusInBatch.add(normKeyWithPrefix);
+
+        const adjustedPrice = Math.round(item.price * (1 + pct / 100));
+        const newCategoryId = catMap.get(normalizeKey(item.categoryName)) || categories[0]?.id;
+        const newBrandId = brandMap.get(normalizeKey(item.brandName)) || brands[0]?.id;
+
+        const existingProd = existingSkuMap.get(normKeyWithPrefix) || existingSkuMap.get(normKeyRaw);
+
+        if (existingProd) {
+          // Actualiza Precio, Nombre, Categoría (Ópticas/Faros/Paragolpes/Chapas) y Marca limpia:
+          toUpdate.push({
+            id: existingProd.id,
+            sku_code: finalSku,
+            name: item.name,
+            price: adjustedPrice,
+            stock: existingProd.stock ?? item.stock,
+            category_id: newCategoryId,
+            brand_id: newBrandId,
+            is_active: true
+          });
         } else {
+          const payload = {
+            sku_code: finalSku,
+            name: item.name,
+            price: adjustedPrice,
+            stock: item.stock,
+            category_id: newCategoryId,
+            brand_id: newBrandId,
+            is_active: true
+          };
+          if (item.description) payload.description = item.description;
           toInsert.push(payload);
         }
       });
 
+      const batchSize = 400;
+
       if (toInsert.length > 0) {
-        setImportProgress(`Cargando ${toInsert.length} productos nuevos...`);
-        const batchSize = 200;
         for (let i = 0; i < toInsert.length; i += batchSize) {
+          setImportProgress(`Subiendo nuevos: ${Math.min(i + batchSize, toInsert.length).toLocaleString('es-AR')} de ${toInsert.length.toLocaleString('es-AR')}...`);
           const batch = toInsert.slice(i, i + batchSize);
           const { error: insertErr } = await supabase.from('products').insert(batch);
           if (insertErr) throw insertErr;
@@ -611,14 +637,37 @@ export default function AdminPanel() {
       }
 
       if (toUpdate.length > 0) {
-        setImportProgress(`Actualizando ${toUpdate.length} productos existentes...`);
-        for (const prod of toUpdate) {
-          const { id, ...updateFields } = prod;
-          await supabase.from('products').update(updateFields).eq('id', id);
+        for (let i = 0; i < toUpdate.length; i += batchSize) {
+          setImportProgress(`Reclasificando y actualizando: ${Math.min(i + batchSize, toUpdate.length).toLocaleString('es-AR')} de ${toUpdate.length.toLocaleString('es-AR')}...`);
+          const batch = toUpdate.slice(i, i + batchSize);
+          const { error: updateErr } = await supabase.from('products').upsert(batch, { onConflict: 'id' });
+          if (updateErr) throw updateErr;
         }
       }
 
-      showNotification(`¡Importación exitosa! (${toInsert.length} nuevos, ${toUpdate.length} actualizados)`, 'success');
+      // 3. Limpiar categorías y marcas viejas que hayan quedado vacías (sin productos asignados)
+      setImportProgress('Limpiando categorías y marcas en desuso...');
+      const { data: activeProds } = await supabase.from('products').select('category_id, brand_id');
+      if (activeProds && activeProds.length > 0) {
+        const usedCatIds = new Set(activeProds.map(p => p.category_id).filter(Boolean));
+        const usedBrandIds = new Set(activeProds.map(p => p.brand_id).filter(Boolean));
+
+        const { data: allCats } = await supabase.from('categories').select('id');
+        const unusedCatIds = (allCats || []).map(c => c.id).filter(id => !usedCatIds.has(id));
+        if (unusedCatIds.length > 0) {
+          await supabase.from('categories').delete().in('id', unusedCatIds);
+        }
+
+        const { data: allBrands } = await supabase.from('brands').select('id');
+        const unusedBrandIds = (allBrands || []).map(b => b.id).filter(id => !usedBrandIds.has(id));
+        if (unusedBrandIds.length > 0) {
+          for (let i = 0; i < unusedBrandIds.length; i += 200) {
+            await supabase.from('brands').delete().in('id', unusedBrandIds.slice(i, i + 200));
+          }
+        }
+      }
+
+      showNotification(`¡Listo! ${toInsert.length.toLocaleString('es-AR')} nuevos y ${toUpdate.length.toLocaleString('es-AR')} reclasificados/actualizados.`, 'success');
       setIsExcelModalOpen(false);
       setExcelPreview([]);
       setExcelFileName('');
@@ -629,6 +678,520 @@ export default function AdminPanel() {
     } finally {
       setIsSubmitting(false);
       setImportProgress('');
+    }
+  };
+
+  // Función para aplicar el Mapeo Manual de Columnas sobre cualquier archivo nuevo
+  const applyManualColumnMapping = (customCols = manualCols) => {
+    if (!rawSheetMatrix || rawSheetMatrix.length === 0) return;
+    const sCol = Number(customCols.skuCol);
+    const nCol = Number(customCols.nameCol);
+    const pCol = Number(customCols.priceCol);
+
+    const manualRows = [];
+    rawSheetMatrix.forEach(row => {
+      const sku = String(row[sCol] ?? '').replace(/\.0$/, '').trim();
+      const name = String(row[nCol] ?? '').replace(/\s+/g, ' ').trim();
+      const price = parsePriceNumber(row[pCol]);
+
+      if (
+        sku &&
+        name &&
+        price > 0 &&
+        !['CODIGO', 'CÓDIGO', 'SKU', 'ART', 'ARTICULO'].includes(sku.toUpperCase())
+      ) {
+        const cat = customCols.fixedCategory.trim() === 'Auto'
+          ? detectCategoryFromName(name)
+          : (customCols.fixedCategory.trim() || 'General');
+        const brd = customCols.fixedBrand.trim() === 'Auto'
+          ? extractBrandFromText(name)
+          : (customCols.fixedBrand.trim() || 'Multimarca');
+
+        manualRows.push({
+          sku_code: sku,
+          name,
+          price,
+          stock: 1,
+          categoryName: cat,
+          brandName: brd,
+          description: ''
+        });
+      }
+    });
+
+    setDetectedSupplier('Mapeo Manual Personalizado');
+    setExcelPreview(enrichWithExistingSkus(manualRows, skuPrefix));
+  };
+
+  const handleDownloadTemplate = async () => {
+    try {
+      const XLSX = await loadXlsxLibrary();
+      const pct = parseFloat(importMarkupPct) || 0;
+      const dataToExport = excelPreview.length > 0
+        ? excelPreview.map(item => ({
+            Codigo: `${skuPrefix}${item.sku_code}`,
+            Nombre: item.name,
+            Precio: Math.round(item.price * (1 + pct / 100) * 100) / 100,
+            Stock: item.stock,
+            Categoria: item.categoryName,
+            Marca: item.brandName,
+            Descripcion: item.description || ''
+          }))
+        : [
+            { Codigo: 'TC-8203', Nombre: 'OPTICA ALFA ROMEO 33 IMP (ALFA ROMEO 33)', Precio: 981571.5, Stock: 1, Categoria: 'Ópticas', Marca: 'Alfa Romeo', Descripcion: '' },
+            { Codigo: 'WG-4372', Nombre: 'ANTENA DE TECHO ALUMI 38 CM KS37334', Precio: 15226.59, Stock: 1, Categoria: 'Accesorios', Marca: 'Multimarca', Descripcion: '' }
+          ];
+
+      const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Productos');
+      const outName = excelPreview.length > 0
+        ? `Convertido_${detectedSupplier.replace(/[^a-zA-Z0-9]/g, '_')}_DAPA.xlsx`
+        : 'Plantilla_Productos_DAPA.xlsx';
+      XLSX.writeFile(workbook, outName);
+    } catch (err) {
+      showNotification('Error al generar el archivo Excel', 'error');
+    }
+  };
+
+  const handleExcelFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsParsingExcel(true);
+    setExcelFileName(file.name);
+    setExcelPreview([]);
+    setDetectedSupplier('');
+    setManualMappingMode(false);
+
+    try {
+      const XLSX = await loadXlsxLibrary();
+      const arrayBuffer = await file.arrayBuffer();
+      const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+      const sheetNames = workbook.SheetNames;
+      const firstSheet = workbook.Sheets[sheetNames[0]];
+      const firstMatrix = XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: '' });
+      setRawSheetMatrix(firstMatrix);
+
+      const flatSampleText = firstMatrix.slice(0, 55).map(r => r.join(' ')).join(' ').toUpperCase();
+
+      let parsedRows = [];
+      let supplierLabel = 'Plantilla Estándar';
+      let defaultPrefix = '';
+
+      // -----------------------------------------------------------------------
+      // 1. ESPEJOS FB (Hoja 'LISTA' consolida los 1.878 productos de las 10 hojas)
+      // -----------------------------------------------------------------------
+      if (sheetNames.includes('LISTA') && sheetNames.includes('ESPEJOS') && sheetNames.includes('LUNAS')) {
+        supplierLabel = 'Espejos FB (Espejos, Lunas, Frentes y Tapas)';
+        defaultPrefix = 'FB-';
+        let currentCat = 'Espejos y Lunas';
+
+        firstMatrix.forEach(row => {
+          const col0 = String(row[0] ?? '').trim();
+          const col1 = String(row[1] ?? '').trim();
+          const price = parsePriceNumber(row[3]);
+
+          if (col0 && !col1 && price === 0 && !['CODIGO', 'CÓDIGO'].includes(col0.toUpperCase())) {
+            const secUpper = col0.toUpperCase();
+            if (secUpper.includes('TAPA')) currentCat = 'Tapas de Combustible y Radiador';
+            else if (secUpper.includes('ESPEJO') || secUpper.includes('FRENTE') || secUpper.includes('LUNA') || secUpper.includes('BRAZO')) currentCat = 'Espejos y Lunas';
+            else currentCat = 'Accesorios Varios';
+            return;
+          }
+
+          if (col0 && col1 && price > 0 && !['CODIGO', 'CÓDIGO'].includes(col0.toUpperCase())) {
+            // Limpiamos si la descripción repite el código al principio (ej: "450 d - Gol 99/2005")
+            const cleanDesc = col1.replace(/^[0-9a-zA-Z\s]+\s-\s/, '').trim();
+            parsedRows.push({
+              sku_code: col0,
+              name: cleanDesc || col1,
+              price,
+              stock: 1,
+              categoryName: currentCat,
+              brandName: extractBrandFromText(col1),
+              description: ''
+            });
+          }
+        });
+      }
+      // -----------------------------------------------------------------------
+      // 2. RGL AUTOPARTES (Col 1=CODIGO, Col 3=Nombre/Rubro, Col 4=PRECIO)
+      // -----------------------------------------------------------------------
+      else if (flatSampleText.includes('RGL AUTOPARTES') || flatSampleText.includes('RGL-AUTOPARTES')) {
+        supplierLabel = 'RGL Autopartes S.R.L.';
+        defaultPrefix = 'RGL-';
+        let currentBrand = 'Multimarca';
+        let currentCat = 'Cerrajería y Levanta Cristales';
+
+        firstMatrix.forEach(row => {
+          const col1 = String(row[1] ?? '').trim();
+          const col2 = String(row[2] ?? '').trim();
+          const col3 = String(row[3] ?? '').trim();
+          const price = parsePriceNumber(row[4]);
+
+          if (col1.toUpperCase().includes('ADAPTABLES A') || col1.toUpperCase().includes('LÍNEA')) {
+            currentBrand = extractBrandFromText(col1);
+            return;
+          }
+          if (col1.toUpperCase() === 'CODIGO' && col3) {
+            currentCat = col3.charAt(0).toUpperCase() + col3.slice(1).toLowerCase();
+            return;
+          }
+          if (col1 && col3 && price > 0 && col1.toUpperCase() !== 'CODIGO') {
+            parsedRows.push({
+              sku_code: col1,
+              name: col3.replace(/\s+/g, ' '),
+              price,
+              stock: 1,
+              categoryName: currentCat,
+              brandName: currentBrand !== 'Multimarca' ? currentBrand : extractBrandFromText(col3),
+              description: col2 ? `OEM: ${col2}` : ''
+            });
+          }
+        });
+      }
+      // -----------------------------------------------------------------------
+      // 3. LISTA AUTOCONS (Hoja 'Listado de Precios por Cliente', Col 0=Cod, Col 1=Desc, Col 5=Precio)
+      // -----------------------------------------------------------------------
+      else if (sheetNames.includes('Listado de Precios por Cliente') || flatSampleText.includes('LISTADO DE PRECIOS POR CLIENTE')) {
+        supplierLabel = 'Autocons (Motores, Calefactores y Levanta Cristales)';
+        defaultPrefix = 'AU-';
+        let currentBrand = 'Multimarca';
+
+        firstMatrix.forEach(row => {
+          const col0 = String(row[0] ?? '').trim();
+          const col1 = String(row[1] ?? '').trim();
+          const col2 = String(row[2] ?? '').trim();
+          const col3 = String(row[3] ?? '').trim();
+          const price = parsePriceNumber(row[5]);
+
+          if (col2.toUpperCase().startsWith('MARCA')) {
+            currentBrand = extractBrandFromText(col3) !== 'Multimarca' ? extractBrandFromText(col3) : (col3 || 'Multimarca');
+            return;
+          }
+          if (col0 && col1 && price > 0 && !['CODIGO', 'CÓDIGO'].includes(col0.toUpperCase())) {
+            parsedRows.push({
+              sku_code: col0,
+              name: `${col1} ${currentBrand !== 'Multimarca' ? `(${currentBrand})` : ''}`.trim(),
+              price,
+              stock: 1,
+              categoryName: 'Cerrajería y Levanta Cristales',
+              brandName: currentBrand !== 'Multimarca' ? currentBrand : extractBrandFromText(col1),
+              description: ''
+            });
+          }
+        });
+      }
+      // -----------------------------------------------------------------------
+      // 4. WARGOM (Múltiples hojas, ej: 32 pestañas por rubro)
+      // -----------------------------------------------------------------------
+      else if (flatSampleText.includes('WARGOM') || sheetNames.length >= 10) {
+        supplierLabel = `Wargom S.R.L. (${sheetNames.length} rubros)`;
+        defaultPrefix = 'WG-';
+        sheetNames.forEach(sName => {
+          const ws = workbook.Sheets[sName];
+          const mat = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+          const cleanCategory = sName.trim().charAt(0).toUpperCase() + sName.trim().slice(1).toLowerCase();
+          let currentSubBrand = 'Multimarca';
+
+          mat.forEach((row, idx) => {
+            if (idx < 5) return;
+            const col0 = String(row[0] ?? '').trim();
+            const col2 = String(row[2] ?? '').trim();
+            const col3 = row[3];
+
+            if (col0 && !col2 && (col3 === '' || col3 === null || col3 === undefined)) {
+              const b = extractBrandFromText(col0);
+              currentSubBrand = b !== 'Multimarca' ? b : 'Multimarca';
+              return;
+            }
+
+            const price = parsePriceNumber(col3);
+            if (col0 && col2 && price > 0 && col0.toUpperCase() !== 'CÓDIGO' && col0.toUpperCase() !== 'CODIGO') {
+              const detectedB = extractBrandFromText(col2);
+              parsedRows.push({
+                sku_code: col0.replace(/\.0$/, ''),
+                name: col2.replace(/\s+/g, ' ').trim(),
+                price,
+                stock: 1,
+                categoryName: cleanCategory,
+                brandName: detectedB !== 'Multimarca' ? detectedB : currentSubBrand,
+                description: ''
+              });
+            }
+          });
+        });
+      }
+      // -----------------------------------------------------------------------
+      // 5. CRISTEM LISTA GENERAL
+      // -----------------------------------------------------------------------
+      else if (flatSampleText.includes('GRUPO DE  PIEZA') || flatSampleText.includes('GRUPO DE PIEZA')) {
+        supplierLabel = 'Cristem (Lista General Cristales)';
+        defaultPrefix = 'CR-';
+        firstMatrix.slice(1).forEach(row => {
+          const brand = String(row[0] ?? '').trim();
+          const model = String(row[1] ?? '').trim();
+          const pieceCode = String(row[2] ?? '').trim();
+          const sku = String(row[3] ?? '').trim();
+          const group = String(row[4] ?? '').trim() || 'Cristales';
+          const price = parsePriceNumber(row[7]);
+          const obs = String(row[8] ?? '').trim();
+
+          if (sku && price > 0) {
+            parsedRows.push({
+              sku_code: sku,
+              name: `${group} ${brand} ${model} (${pieceCode})`.replace(/\s+/g, ' ').trim(),
+              price,
+              stock: 1,
+              categoryName: 'Cristales y Parabrisas',
+              brandName: extractBrandFromText(brand) !== 'Multimarca' ? extractBrandFromText(brand) : (brand || 'Multimarca'),
+              description: obs
+            });
+          }
+        });
+      }
+      // -----------------------------------------------------------------------
+      // 6. CRISTEM OFERTAS
+      // -----------------------------------------------------------------------
+      else if (sheetNames.includes('Parabrisas') && sheetNames.includes('Lunetas')) {
+        supplierLabel = 'Cristem (Ofertas Parabrisas / Laterales / Lunetas)';
+        defaultPrefix = 'CROF-';
+        sheetNames.forEach(sName => {
+          const ws = workbook.Sheets[sName];
+          const mat = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+          mat.forEach(row => {
+            const sku = String(row[0] ?? '').trim();
+            const desc = String(row[1] ?? '').trim();
+            const price = parsePriceNumber(row[2]);
+            if (sku && desc && price > 0 && sku.toUpperCase() !== 'ART') {
+              parsedRows.push({
+                sku_code: sku,
+                name: `${sName.slice(0, -1)} - ${desc}`,
+                price,
+                stock: 1,
+                categoryName: 'Cristales y Parabrisas',
+                brandName: extractBrandFromText(desc),
+                description: 'Oferta Cristem'
+              });
+            }
+          });
+        });
+      }
+      // -----------------------------------------------------------------------
+      // 7. AUTOCLIP / VAER
+      // -----------------------------------------------------------------------
+      else if (flatSampleText.includes('VAER.COM.AR') || (firstMatrix[8] && String(firstMatrix[8][4] || '').toUpperCase().includes('DESCRIPCION') && String(firstMatrix[8][16] || '').toUpperCase().includes('PRECIO'))) {
+        supplierLabel = 'Autoclip / Vaer';
+        defaultPrefix = 'AC-';
+        firstMatrix.forEach(row => {
+          const sku = String(row[0] ?? '').trim();
+          const name = String(row[4] ?? '').trim();
+          const price = parsePriceNumber(row[16]);
+          const pack = String(row[1] ?? '').trim();
+          if (sku && name && price > 0 && sku.toUpperCase() !== 'CODIGO') {
+            parsedRows.push({
+              sku_code: sku,
+              name: name.replace(/\s+/g, ' '),
+              price,
+              stock: 1,
+              categoryName: 'Fijaciones y Grampas',
+              brandName: extractBrandFromText(name),
+              description: pack ? `Envase: ${pack} u.` : ''
+            });
+          }
+        });
+      }
+      // -----------------------------------------------------------------------
+      // 8. RIDAC / ANGELETTI
+      // -----------------------------------------------------------------------
+      else if (flatSampleText.includes('ANGELETTI') || sheetNames.some(s => s.includes('LISTA NAC'))) {
+        supplierLabel = 'Ridac (Angeletti H. e Hijos)';
+        defaultPrefix = 'RD-';
+        sheetNames.forEach(sName => {
+          if (sName.toUpperCase().includes('ALFA')) return;
+          const ws = workbook.Sheets[sName];
+          const mat = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+          mat.forEach(row => {
+            const name = String(row[0] ?? '').trim();
+            const sku = String(row[2] || row[1] || '').trim();
+            const price = parsePriceNumber(row[3]);
+            if (name && sku && price > 0 && !['DETALLE', 'DESCRIPCION'].includes(name.toUpperCase())) {
+              parsedRows.push({
+                sku_code: sku,
+                name: name.replace(/\s+/g, ' '),
+                price,
+                stock: 1,
+                categoryName: 'Accesorios y Repuestos Varios',
+                brandName: extractBrandFromText(name),
+                description: ''
+              });
+            }
+          });
+        });
+      }
+      // -----------------------------------------------------------------------
+      // 9. RETOV / TOVLENT
+      // -----------------------------------------------------------------------
+      else if (flatSampleText.includes('TOVLENT') || flatSampleText.includes('RETOV')) {
+        supplierLabel = 'Retov (Tovlent S.A.)';
+        defaultPrefix = 'RT-';
+        let currentCat = 'Tazas y Plásticos';
+        let currentBrand = 'Multimarca';
+
+        firstMatrix.forEach(row => {
+          const col0 = String(row[0] ?? '').trim();
+          const col1 = String(row[1] ?? '').trim();
+          const col2 = String(row[2] ?? '').trim();
+          const price = parsePriceNumber(row[4]);
+
+          if (col0 && col0 !== '*' && !col1) {
+            if (col0.toUpperCase().includes('ADAPTABLE')) {
+              currentBrand = extractBrandFromText(col0);
+            } else {
+              currentCat = col0.charAt(0).toUpperCase() + col0.slice(1).toLowerCase();
+            }
+            return;
+          }
+
+          if (col1 && col2 && price > 0 && col1.toUpperCase() !== 'COD. ART.') {
+            const prefixItem = currentCat.toUpperCase().includes('TAZA') ? 'Taza de Rueda' : currentCat;
+            parsedRows.push({
+              sku_code: col1,
+              name: `${prefixItem} ${currentBrand !== 'Multimarca' ? currentBrand : ''} ${col2}`.replace(/\s+/g, ' ').trim(),
+              price,
+              stock: 1,
+              categoryName: currentCat,
+              brandName: currentBrand !== 'Multimarca' ? currentBrand : extractBrandFromText(col2),
+              description: ''
+            });
+          }
+        });
+      }
+      // -----------------------------------------------------------------------
+      // 10. VARPEN / VAPREN
+      // -----------------------------------------------------------------------
+      else if (firstMatrix.slice(0, 12).some(r => ['HABITACULOS', 'BAULES'].includes(String(r[0] || '').trim().toUpperCase()))) {
+        supplierLabel = 'Varpen (Cubre Alfombras)';
+        defaultPrefix = 'VP-';
+        let currentSection = 'Alfombra Habitáculo';
+        let currentBrand = 'Multimarca';
+
+        firstMatrix.forEach(row => {
+          const col0 = String(row[0] ?? '').trim();
+          const col1 = String(row[1] ?? '').trim();
+          const col2 = String(row[2] ?? '').trim();
+          const price = parsePriceNumber(row[3]);
+
+          if (col0 && ['HABITACULOS', 'BAULES'].includes(col0.toUpperCase())) {
+            currentSection = col0.toUpperCase() === 'BAULES' ? 'Cubre Baúl' : 'Alfombra Habitáculo';
+          }
+          if (col2 && price === 0 && isNaN(Number(col2))) {
+            const b = extractBrandFromText(col2);
+            currentBrand = b !== 'Multimarca' ? b : col2;
+            return;
+          }
+
+          if (col2 && price > 0 && !isNaN(Number(col2))) {
+            const modelDesc = col1 || col0 || 'Universal';
+            parsedRows.push({
+              sku_code: col2.replace(/\.0$/, ''),
+              name: `${currentSection} ${currentBrand} - ${modelDesc}`.replace(/\s+/g, ' ').trim(),
+              price,
+              stock: 1,
+              categoryName: 'Alfombras',
+              brandName: currentBrand,
+              description: ''
+            });
+          }
+        });
+      }
+      // -----------------------------------------------------------------------
+      // 11. TECNOCHAPA (LISTA SEP TECNO)
+      // -----------------------------------------------------------------------
+      else if (flatSampleText.includes('LISTA TECNO')) {
+        supplierLabel = 'TecnoChapa (Ópticas, Faros, Paragolpes y Chapas)';
+        defaultPrefix = 'TC-';
+        firstMatrix
+          .filter(row => {
+            const col0 = String(row[0] ?? '').trim();
+            const col1 = String(row[1] ?? '').trim();
+            return col0 !== '' && col1 !== '' && !isNaN(Number(col0.replace(',', '.')));
+          })
+          .forEach(row => {
+            const sku = String(Math.trunc(Number(row[0])) || String(row[0]).trim());
+            const rawName = String(row[1] || '').trim();
+            const rawVehicle = String(row[3] || '').trim();
+            const cleanVeh = rawVehicle.replace(/V\.W\./g, 'VW ').replace(/V\.W /g, 'VW ').replace(/B\.M\.W\./g, 'BMW').replace(/B\. M\. W\./g, 'BMW').replace(/\s+/g, ' ').trim();
+            const fullName = cleanVeh && !['VARIOS', 'DUALES'].includes(cleanVeh.toUpperCase()) ? `${rawName} (${cleanVeh})` : rawName;
+            const price = parsePriceNumber(row[4]);
+
+            parsedRows.push({
+              sku_code: sku,
+              name: fullName,
+              price,
+              stock: 1,
+              categoryName: detectCategoryFromName(rawName),
+              brandName: extractBrandFromText(rawVehicle),
+              description: ''
+            });
+          });
+      }
+      // -----------------------------------------------------------------------
+      // 12. PLANTILLAS ESTÁNDAR (DAPA / EMPRETIENDA / TIENDANUBE)
+      // -----------------------------------------------------------------------
+      else {
+        supplierLabel = 'Plantilla Estándar / Personalizada';
+        defaultPrefix = '';
+        let headerRowIndex = -1;
+        for (let i = 0; i < Math.min(20, firstMatrix.length); i++) {
+          const rowNorm = firstMatrix[i].map(c => normalizeKey(c));
+          if (rowNorm.some(c => ['nombre', 'producto', 'descripcion', 'titulo'].includes(c))) {
+            headerRowIndex = i;
+            break;
+          }
+        }
+
+        if (headerRowIndex !== -1) {
+          const headers = firstMatrix[headerRowIndex].map(h => normalizeKey(h));
+          firstMatrix.slice(headerRowIndex + 1).forEach((rowArray, idx) => {
+            const rowObj = {};
+            headers.forEach((h, cIdx) => { if (h) rowObj[h] = rowArray[cIdx]; });
+            const name = String(rowObj.nombre || rowObj.producto || rowObj.descripcion || '').trim();
+            if (!name) return;
+            const sku = String(rowObj.codigo ?? rowObj.sku ?? rowObj.sku_code ?? rowObj['cod. art.'] ?? `SKU-${Date.now()}-${idx}`).replace(/\.0$/, '').trim();
+            const price = parsePriceNumber(rowObj.precio ?? rowObj.price ?? rowObj.neto ?? rowObj['precio lista'] ?? rowObj['precio unitario'] ?? 0);
+            if (price <= 0) return;
+            const rawStock = String(rowObj.stock ?? rowObj.cantidad ?? '1').replace(/[^0-9]/g, '');
+            const stock = rawStock !== '' ? parseInt(rawStock, 10) : 1;
+            const categoryName = String(rowObj.categoria || rowObj.categorias || rowObj.rubro || 'General').trim() || 'General';
+            const brandName = String(rowObj.marca || '').trim() || extractBrandFromText(name);
+            const description = String(rowObj.descripcion || rowObj.observaciones || '').trim();
+
+            parsedRows.push({ sku_code: sku, name, price, stock, categoryName, brandName, description });
+          });
+        } else {
+          // Si es un Excel totalmente nuevo sin encabezados conocidos, activamos el selector manual
+          setManualMappingMode(true);
+        }
+      }
+
+      const enrichedRows = enrichWithExistingSkus(parsedRows, defaultPrefix);
+      setSkuPrefix(defaultPrefix);
+      setDetectedSupplier(supplierLabel);
+
+      if (enrichedRows.length === 0) {
+        setManualMappingMode(true);
+        showNotification('Seleccioná manualmente a qué columna corresponde el Código, Nombre y Precio.', 'error');
+      } else {
+        setExcelPreview(enrichedRows);
+        showNotification(`Formato detectado: ${supplierLabel} (${enrichedRows.length.toLocaleString('es-AR')} artículos)`, 'success');
+      }
+    } catch (err) {
+      console.error('Error leyendo Excel:', err);
+      showNotification('No se pudo leer el archivo. Verificá que no esté dañado.', 'error');
+    } finally {
+      setIsParsingExcel(false);
     }
   };
 
@@ -1976,6 +2539,111 @@ export default function AdminPanel() {
                 <div className="text-center py-6 text-sm text-slate-500 flex items-center justify-center gap-2">
                   <RefreshCw className="w-4 h-4 animate-spin text-emerald-600" /> Analizando planilla...
                 </div>
+              )}
+
+              {excelPreview.length > 0 && (
+                <div className="bg-emerald-50/60 dark:bg-slate-900/80 border border-emerald-200 dark:border-slate-700 rounded-2xl p-4 grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-600 dark:text-emerald-400 block">
+                      Proveedor Detectado
+                    </span>
+                    <p className="text-xs font-bold text-slate-800 dark:text-white mt-0.5">{detectedSupplier}</p>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">
+                      Prefijo de Código (Evita choques)
+                    </label>
+                    <input
+                      type="text"
+                      value={skuPrefix}
+                      onChange={(e) => setSkuPrefix(e.target.value.toUpperCase())}
+                      placeholder="Ej: TC- o WG-"
+                      className="mt-1 w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs font-mono font-bold text-slate-900 dark:text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">
+                      Sumar % (Ej: 21 por IVA)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={importMarkupPct}
+                      onChange={(e) => setImportMarkupPct(e.target.value)}
+                      placeholder="0"
+                      className="mt-1 w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
+                    />
+                  </div>
+                  {rawSheetMatrix.length > 0 && (
+                <div className="bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      ¿Subiste un Excel de un proveedor nuevo con otro diseño?
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setManualMappingMode(!manualMappingMode)}
+                      className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline"
+                    >
+                      {manualMappingMode ? 'Ocultar selector manual' : 'Asignar columnas manualmente'}
+                    </button>
+                  </div>
+
+                  {manualMappingMode && (
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-2 border-t border-slate-200 dark:border-slate-700">
+                      {[
+                        { key: 'skuCol', label: 'Columna Código' },
+                        { key: 'nameCol', label: 'Columna Nombre' },
+                        { key: 'priceCol', label: 'Columna Precio' }
+                      ].map(colField => (
+                        <div key={colField.key}>
+                          <label className="text-[10px] font-bold uppercase text-slate-500 block">{colField.label}</label>
+                          <select
+                            value={manualCols[colField.key]}
+                            onChange={(e) => {
+                              const next = { ...manualCols, [colField.key]: Number(e.target.value) };
+                              setManualCols(next);
+                              applyManualColumnMapping(next);
+                            }}
+                            className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
+                          >
+                            {['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S'].map((letter, idx) => (
+                              <option key={letter} value={idx}>Columna {letter}</option>
+                            ))}
+                          </select>
+                        </div>
+                      ))}
+
+                      <div>
+                        <label className="text-[10px] font-bold uppercase text-slate-500 block">Categoría (o Auto)</label>
+                        <input
+                          type="text"
+                          value={manualCols.fixedCategory}
+                          onChange={(e) => {
+                            const next = { ...manualCols, fixedCategory: e.target.value };
+                            setManualCols(next);
+                            applyManualColumnMapping(next);
+                          }}
+                          placeholder="Ej: Chapas o Auto"
+                          className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white"
+                        />
+                      </div>
+
+                      <div className="flex items-end">
+                        <button
+                          type="button"
+                          onClick={() => applyManualColumnMapping(manualCols)}
+                          className="w-full py-1.5 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase"
+                        >
+                          Aplicar Mapeo
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+                </div>
+                
               )}
 
               {excelPreview.length > 0 && (

@@ -7,3 +7,109 @@ body {
   background-color: #0f172a; /* El azul muy oscuro que usás de fondo */
   color: #ffffff; /* Texto blanco por defecto */
 }
+
+/* ==========================================================================
+   COMPATIBILIDAD TOTAL CON WINDOWS 7 (CHROME 109) Y NAVEGADORES ANTIGUOS
+   Convierte la paleta oklch() y color-mix() de Tailwind v4 a HEX y RGBA
+   ========================================================================== */
+:root, :host {
+  --color-white: #ffffff;
+  --color-black: #000000;
+
+  --color-slate-50: #f8fafc;
+  --color-slate-100: #f1f5f9;
+  --color-slate-200: #e2e8f0;
+  --color-slate-300: #cbd5e1;
+  --color-slate-400: #94a3b8;
+  --color-slate-500: #64748b;
+  --color-slate-600: #475569;
+  --color-slate-700: #334155;
+  --color-slate-800: #1e293b;
+  --color-slate-900: #0f172a;
+  --color-slate-950: #020617;
+
+  --color-blue-50: #eff6ff;
+  --color-blue-100: #dbeafe;
+  --color-blue-200: #bfdbfe;
+  --color-blue-300: #93c5fd;
+  --color-blue-400: #60a5fa;
+  --color-blue-500: #3b82f6;
+  --color-blue-600: #2563eb;
+  --color-blue-700: #1d4ed8;
+  --color-blue-800: #1e40af;
+  --color-blue-900: #1e3a8a;
+
+  --color-cyan-300: #67e8f9;
+  --color-cyan-400: #22d3ee;
+  --color-cyan-500: #06b6d4;
+
+  --color-emerald-50: #ecfdf5;
+  --color-emerald-100: #d1fae5;
+  --color-emerald-400: #34d399;
+  --color-emerald-500: #10b981;
+  --color-emerald-600: #059669;
+  --color-emerald-700: #047857;
+
+  --color-green-50: #f0fdf4;
+  --color-green-100: #dcfce7;
+  --color-green-400: #4ade80;
+  --color-green-500: #22c55e;
+  --color-green-600: #16a34a;
+  --color-green-700: #15803d;
+  --color-green-800: #166534;
+
+  --color-red-50: #fef2f2;
+  --color-red-100: #fee2e2;
+  --color-red-200: #fecaca;
+  --color-red-400: #f87171;
+  --color-red-500: #ef4444;
+  --color-red-600: #dc2626;
+  --color-red-700: #b91c1c;
+  --color-red-800: #991b1b;
+  --color-red-900: #7f1d1d;
+
+  --color-amber-100: #fef3c7;
+  --color-amber-400: #fbbf24;
+  --color-amber-500: #f59e0b;
+  --color-amber-700: #b45309;
+
+  --color-orange-100: #ffedd5;
+  --color-orange-200: #fed7aa;
+  --color-orange-700: #c2410c;
+
+  --color-purple-50: #faf5ff;
+  --color-purple-100: #f3e8ff;
+  --color-purple-200: #e9d5ff;
+  --color-purple-400: #c084fc;
+  --color-purple-500: #a855f7;
+  --color-purple-600: #9333ea;
+
+  --color-yellow-400: #facc15;
+}
+
+/* Fallbacks para degradados en Chrome <= 109 (sin "in oklab") */
+.bg-gradient-to-r {
+  background-image: linear-gradient(to right, var(--tw-gradient-from, #60a5fa), var(--tw-gradient-to, #67e8f9)) !important;
+}
+.bg-gradient-to-t {
+  background-image: linear-gradient(to top, var(--tw-gradient-from, #0f172a), var(--tw-gradient-to, transparent)) !important;
+}
+.bg-gradient-to-b {
+  background-image: linear-gradient(to bottom, var(--tw-gradient-from, rgba(15,23,42,0.8)), var(--tw-gradient-to, #0f172a)) !important;
+}
+
+/* Fallbacks para transparencias comunes que usan color-mix() en Tailwind v4 */
+.bg-white\/95 { background-color: rgba(255, 255, 255, 0.95) !important; }
+.bg-white\/90 { background-color: rgba(255, 255, 255, 0.90) !important; }
+.bg-white\/20 { background-color: rgba(255, 255, 255, 0.20) !important; }
+.bg-white\/10 { background-color: rgba(255, 255, 255, 0.10) !important; }
+.bg-black\/60 { background-color: rgba(0, 0, 0, 0.60) !important; }
+.bg-black\/80 { background-color: rgba(0, 0, 0, 0.80) !important; }
+.bg-slate-900\/95 { background-color: rgba(15, 23, 42, 0.95) !important; }
+.bg-slate-900\/60 { background-color: rgba(15, 23, 42, 0.60) !important; }
+.bg-slate-900\/50 { background-color: rgba(15, 23, 42, 0.50) !important; }
+
+.dark .dark\:bg-slate-900\/95 { background-color: rgba(15, 23, 42, 0.95) !important; }
+.dark .dark\:bg-slate-900\/50 { background-color: rgba(15, 23, 42, 0.50) !important; }
+.dark .dark\:bg-slate-800\/50 { background-color: rgba(30, 41, 59, 0.50) !important; }
+.dark .dark\:bg-slate-700\/50 { background-color: rgba(51, 65, 85, 0.50) !important; }
