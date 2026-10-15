@@ -1467,13 +1467,6 @@ function GlobalStyles() {
       .line-clamp-3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
       @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
       .animate-fade-up { animation: fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; opacity: 0; }
-      @keyframes floatParticle {
-        0% { transform: translateY(0) scale(1); opacity: 0; }
-        20% { opacity: 0.8; }
-        80% { opacity: 0.5; }
-        100% { transform: translateY(-260px) scale(0.4); opacity: 0; }
-      }
-      .css-particle { position: absolute; background-color: #60a5fa; border-radius: 9999px; animation-name: floatParticle; animation-timing-function: linear; animation-iteration-count: infinite; }
       @keyframes softPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
       .animate-soft-pulse { animation: softPulse 3s ease-in-out infinite; }
     `}} />
@@ -1544,6 +1537,8 @@ function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenCart, on
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState(null);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [suggestions, setSuggestions] = useState([]);
 
@@ -1551,6 +1546,20 @@ function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenCart, on
     const handleScroll = () => setIsScrolled(window.scrollY > 50);
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target)) {
+        setUserMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
   }, []);
 
   const isNavbarSolid = isScrolled || activePage !== 'inicio' || mobileMenuOpen;
@@ -1635,12 +1644,22 @@ const handleSearchChange = (e) => {
           </button>
 
           {currentUser ? (
-            <div className="relative group cursor-pointer flex items-center gap-2 pr-1">
-              <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold border border-blue-200 dark:border-blue-800">
+            <div className="relative group flex items-center gap-2 pr-1" ref={userMenuRef}>
+              <button 
+                type="button"
+                onClick={() => setUserMenuOpen(prev => !prev)}
+                className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold border border-blue-200 dark:border-blue-800 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
+                aria-label="Abrir opciones de usuario"
+                aria-expanded={userMenuOpen}
+              >
                 {currentUser.name.charAt(0).toUpperCase()}
-              </div>
+              </button>
               
-              <div className="absolute top-full right-0 mt-2 w-52 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[110] overflow-hidden">
+              <div className={`absolute top-full right-0 mt-2 w-52 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 transition-all duration-200 z-[110] overflow-hidden ${
+                userMenuOpen 
+                  ? 'opacity-100 visible pointer-events-auto' 
+                  : 'opacity-0 invisible pointer-events-none md:group-hover:opacity-100 md:group-hover:visible md:group-hover:pointer-events-auto'
+              }`}>
                 <div className="p-3 border-b border-slate-100 dark:border-slate-700">
                   <p className="text-sm font-bold text-slate-800 dark:text-white truncate">{currentUser.name}</p>
                   {currentUser.email && <p className="text-[11px] text-slate-400 truncate">{currentUser.email}</p>}
@@ -1648,16 +1667,20 @@ const handleSearchChange = (e) => {
                 {currentUser.email?.toLowerCase() === 'admin@dapa.com' && (
                   <a 
                     href="/admin" 
+                    onClick={() => setUserMenuOpen(false)}
                     className="w-full text-left px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-slate-700/60 flex items-center gap-2 border-b border-slate-100 dark:border-slate-700 transition-colors"
                   >
                     <Settings className="w-4 h-4" /> Panel Admin
                   </a>
                 )}
                 <button 
-                  onClick={onLogout} 
-                  className="w-full text-left px-4 py-3 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 font-medium transition-colors"
+                  onClick={() => {
+                    setUserMenuOpen(false);
+                    onLogout();
+                  }} 
+                  className="w-full text-left px-4 py-3 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 font-medium transition-colors flex items-center gap-2"
                 >
-                  Cerrar Sesión
+                  <LogOut className="w-4 h-4" /> Cerrar Sesión
                 </button>
               </div>
             </div>
@@ -1696,7 +1719,36 @@ const handleSearchChange = (e) => {
       {mobileMenuOpen && (
         <div className="lg:hidden absolute top-full left-0 w-full bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 p-6 flex flex-col gap-6 shadow-2xl animate-in slide-in-from-top-2 h-[calc(100vh-80px)] overflow-y-auto">
           
-          {!currentUser && (
+          {currentUser ? (
+            <div className="w-full p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex flex-col gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-base shadow-sm">
+                  {currentUser.name.charAt(0).toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-slate-800 dark:text-white truncate">{currentUser.name}</p>
+                  {currentUser.email && <p className="text-xs text-slate-400 truncate">{currentUser.email}</p>}
+                </div>
+              </div>
+              <div className="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+                {currentUser.email?.toLowerCase() === 'admin@dapa.com' && (
+                  <a 
+                    href="/admin" 
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="w-full py-2.5 px-3 rounded-lg text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-slate-700/60 flex items-center gap-2 transition-colors"
+                  >
+                    <Settings className="w-4 h-4" /> Panel Admin
+                  </a>
+                )}
+                <button 
+                  onClick={() => { setMobileMenuOpen(false); onLogout(); }}
+                  className="w-full py-2.5 px-3 rounded-lg text-xs font-bold uppercase tracking-wider text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2 transition-colors"
+                >
+                  <LogOut className="w-4 h-4" /> Cerrar Sesión
+                </button>
+              </div>
+            </div>
+          ) : (
             <button 
               onClick={() => { setMobileMenuOpen(false); onLoginClick(); }}
               className="w-full py-3 px-4 rounded-xl bg-blue-600 text-white font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-md"
@@ -1739,15 +1791,8 @@ const handleSearchChange = (e) => {
 
 /* COMPONENTE TEXTO HERO */
 function CSSHeroTitle() {
-  const particles = useMemo(() => Array.from({ length: 30 }).map((_, i) => ({
-    id: i, left: `${Math.random() * 100}%`, delay: `${Math.random() * 5}s`, duration: `${Math.random() * 5 + 3}s`
-  })), []);
-
   return (
     <div className="relative w-full h-[180px] sm:h-[220px] md:h-[280px] mb-6 flex flex-col justify-center items-center md:items-start z-10 pointer-events-none">
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        {particles.map(p => (<div key={p.id} className="css-particle shadow-[0_0_10px_rgba(96,165,250,0.8)]" style={{ left: p.left, bottom: '-20px', width: '4px', height: '4px', animationDelay: p.delay, animationDuration: p.duration }} />))}
-      </div>
       <h2 className="text-[42px] sm:text-[50px] md:text-[65px] lg:text-[80px] font-black font-exo leading-[1.1] uppercase text-white tracking-tight z-10 text-center md:text-left drop-shadow-lg">
         <span className="inline-block animate-fade-up" style={{ animationDelay: '100ms' }}>TU SOCIO DE</span><br />
         <span 
