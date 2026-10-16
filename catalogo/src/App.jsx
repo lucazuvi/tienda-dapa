@@ -1531,12 +1531,56 @@ function matchesProductQuery(prod, rawQuery) {
 }
 
 /* ==========================================================================
-   NAVBAR CON MENÚS DESPLEGABLES Y BÚSQUEDA
+   HELPER: IMAGEN REPRESENTATIVA POR CATEGORÍA Y BUSCADOR BISELADO
+   ========================================================================== */
+function getCategoryVisualImage(category) {
+  if (category?.image_url) return category.image_url;
+  const rawName = (category?.name || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+  if (rawName.includes('cristal')) {
+    return 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=900&q=80';
+  }
+  if (rawName.includes('parabrisa') || rawName.includes('vidrio') || rawName.includes('luneta')) {
+    return 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=900&q=80';
+  }
+  if (rawName.includes('optica') || rawName.includes('faro') || rawName.includes('iluminacion') || rawName.includes('led') || rawName.includes('luz')) {
+    return 'https://images.unsplash.com/photo-1544829099-b9a0c07fad1a?auto=format&fit=crop&w=900&q=80';
+  }
+  if (rawName.includes('freno') || rawName.includes('pastilla') || rawName.includes('disco') || rawName.includes('embrague')) {
+    return 'https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=900&q=80';
+  }
+  if (rawName.includes('chapa') || rawName.includes('carroceria') || rawName.includes('paragolpe') || rawName.includes('capot') || rawName.includes('guardabarro')) {
+    return 'https://images.unsplash.com/photo-1618843479313-40f8afb4b4d8?auto=format&fit=crop&w=900&q=80';
+  }
+  if (rawName.includes('espejo') || rawName.includes('retrovisor')) {
+    return 'https://images.unsplash.com/photo-1502877338535-766e1452684a?auto=format&fit=crop&w=900&q=80';
+  }
+  if (rawName.includes('cerrajeria') || rawName.includes('cerradura') || rawName.includes('manija') || rawName.includes('llave')) {
+    return 'https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?auto=format&fit=crop&w=900&q=80';
+  }
+  if (rawName.includes('accesorio') || rawName.includes('alfombra') || rawName.includes('interior')) {
+    return 'https://images.unsplash.com/photo-1511919884226-fd3cad34687c?auto=format&fit=crop&w=900&q=80';
+  }
+  if (rawName.includes('toxic') || rawName.includes('shine') || rawName.includes('cosmetica') || rawName.includes('limpieza') || rawName.includes('estetica')) {
+    return 'https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?auto=format&fit=crop&w=900&q=80';
+  }
+  if (rawName.includes('motor') || rawName.includes('distribucion') || rawName.includes('bateria') || rawName.includes('encendido') || rawName.includes('filtro')) {
+    return 'https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?auto=format&fit=crop&w=900&q=80';
+  }
+  return 'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=900&q=80';
+}
+
+/* ==========================================================================
+   NAVBAR CON MEGA-MENÚ A PANTALLA COMPLETA Y BUSCADOR CON ESTILO BISELADO
    ========================================================================== */
 function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenCart, onLogout, toggleDarkMode, isDarkMode, categories, allProducts, onOpenCategory, onProductSearchSelect, onLoginClick }) {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState(null);
+  const [hoveredMegaCatId, setHoveredMegaCatId] = useState(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -1562,12 +1606,29 @@ function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenCart, on
     };
   }, []);
 
-  const isNavbarSolid = isScrolled || activePage !== 'inicio' || mobileMenuOpen;
+  const isNavbarSolid = isScrolled || activePage !== 'inicio' || mobileMenuOpen || activeDropdown === 'catalog';
 
   const handleNavClick = (page, section) => { navigateTo(page, section); setMobileMenuOpen(false); setActiveDropdown(null); };
   const handleCategoryClick = (cat) => { onOpenCategory(cat); setActiveDropdown(null); setMobileMenuOpen(false); };
 
-const handleSearchChange = (e) => {
+  const activeMegaCat = useMemo(() => {
+    if (!categories || categories.length === 0) return null;
+    return categories.find(c => c.id === hoveredMegaCatId) || categories[0];
+  }, [categories, hoveredMegaCatId]);
+
+  const activeMegaCatProducts = useMemo(() => {
+    if (!activeMegaCat || !allProducts) return [];
+    const list = [];
+    for (let i = 0; i < allProducts.length; i++) {
+      if (allProducts[i].category_id === activeMegaCat.id) {
+        list.push(allProducts[i]);
+        if (list.length >= 6) break;
+      }
+    }
+    return list;
+  }, [activeMegaCat, allProducts]);
+
+  const handleSearchChange = (e) => {
     const value = e.target.value;
     setSearchTerm(value);
     if (value.trim().length >= 2) {
@@ -1585,10 +1646,12 @@ const handleSearchChange = (e) => {
     }
   };
 
-  const handleSuggestionClick = (prod) => { setSearchTerm(''); setSuggestions([]); setMobileMenuOpen(false); onProductSearchSelect(prod); };
+  const handleSuggestionClick = (prod) => { setSearchTerm(''); setSuggestions([]); setMobileMenuOpen(false); setActiveDropdown(null); onProductSearchSelect(prod); };
+
+  const chamferClipSm = 'polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px)';
 
   return (
-    <nav className={`fixed w-full z-[100] transition-all duration-300 ${isNavbarSolid ? "bg-white/95 dark:bg-slate-900/95 backdrop-blur-md shadow-sm py-4 border-b border-slate-100 dark:border-slate-800" : "bg-transparent py-6"}`}>
+    <nav className={`fixed w-full z-[100] transition-all duration-300 ${isNavbarSolid ? "bg-white/95 dark:bg-slate-900/95 backdrop-blur-md shadow-sm py-3.5 border-b border-slate-100 dark:border-slate-800" : "bg-transparent py-5"}`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center gap-4">
         
         <button onClick={() => handleNavClick('inicio', 'inicio')} className="flex flex-col items-start group text-left focus:outline-none flex-shrink-0">
@@ -1597,35 +1660,228 @@ const handleSearchChange = (e) => {
         </button>
         
         <div className="hidden lg:flex items-center space-x-1">
-          <button onClick={() => handleNavClick('inicio', 'inicio')} className={`px-4 py-2 text-xs font-semibold uppercase tracking-widest transition-all hover:text-blue-600 ${isNavbarSolid ? 'text-slate-600 dark:text-slate-300' : 'text-white'}`}>Inicio</button>
-          <div className="relative group" onMouseEnter={() => setActiveDropdown('catalog')} onMouseLeave={() => setActiveDropdown(null)}>
-            <button onClick={() => handleNavClick('inicio', 'catálogo')} className={`px-4 py-2 text-xs font-semibold uppercase tracking-widest transition-all flex items-center gap-1 group-hover:text-blue-600 ${isNavbarSolid ? 'text-slate-600 dark:text-slate-300' : 'text-white'}`}>
-              Catálogo <ChevronDown className={`w-3 h-3 transition-transform duration-300 ${activeDropdown === 'catalog' ? 'rotate-180' : ''}`} />
+          <button onClick={() => handleNavClick('inicio', 'inicio')} className={`px-4 py-2 text-xs font-bold uppercase tracking-widest transition-all hover:text-blue-600 ${isNavbarSolid ? 'text-slate-700 dark:text-slate-200' : 'text-white'}`}>Inicio</button>
+          
+          {/* ITEM CATÁLOGO CON MEGA-MENÚ A PANTALLA COMPLETA AL PASAR EL MOUSE */}
+          <div
+            className="static"
+            onMouseEnter={() => {
+              setActiveDropdown('catalog');
+              if (!hoveredMegaCatId && categories.length > 0) {
+                setHoveredMegaCatId(categories[0].id);
+              }
+            }}
+            onMouseLeave={() => setActiveDropdown(null)}
+          >
+            <button
+              onClick={() => handleNavClick('inicio', 'catálogo')}
+              className={`px-5 py-2 text-xs font-extrabold uppercase tracking-widest transition-all flex items-center gap-1.5 ${
+                activeDropdown === 'catalog'
+                  ? 'bg-amber-400 text-slate-950 -skew-x-12 shadow-md'
+                  : isNavbarSolid
+                    ? 'text-slate-700 dark:text-slate-200 hover:text-blue-600'
+                    : 'text-white hover:text-amber-400'
+              }`}
+            >
+              <span className={`flex items-center gap-1.5 ${activeDropdown === 'catalog' ? 'skew-x-12' : ''}`}>
+                Catálogo <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-300 ${activeDropdown === 'catalog' ? 'rotate-180' : ''}`} />
+              </span>
             </button>
-            <div className={`absolute top-full left-0 w-64 bg-white dark:bg-slate-800 shadow-2xl rounded-2xl border border-slate-100 dark:border-slate-700 p-2 transition-all duration-300 origin-top-left ${activeDropdown === 'catalog' ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 -translate-y-2 pointer-events-none'}`}>
-              <div className="grid grid-cols-1 gap-1 max-h-[60vh] overflow-y-auto custom-scrollbar">
-                {categories.map(cat => (
-                  <button key={cat.id} onClick={() => handleCategoryClick(cat)} className="w-full text-left px-4 py-3 rounded-xl text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 hover:bg-blue-50 dark:hover:bg-slate-700/50 hover:text-blue-600 dark:hover:text-blue-400 transition-all flex justify-between items-center group/item">
-                    {cat.name} <ChevronRight className="w-3 h-3 opacity-0 group-hover/item:opacity-100 transition-all -translate-x-2 group-hover/item:translate-x-0" />
-                  </button>
-                ))}
-                {categories.length === 0 && <div className="text-xs p-4 text-slate-400">Cargando categorías...</div>}
+
+            {/* MEGA-MENÚ EXPANDIDO EN TODA LA PANTALLA (Estilo imagen 2) */}
+            <div
+              className={`absolute top-full left-0 w-full bg-[#070b14]/98 backdrop-blur-xl text-white border-t-2 border-amber-400 shadow-[0_35px_70px_rgba(0,0,0,0.85)] transition-all duration-300 origin-top before:content-[''] before:absolute before:-top-6 before:left-0 before:w-full before:h-6 ${
+                activeDropdown === 'catalog'
+                  ? 'opacity-100 visible translate-y-0 pointer-events-auto'
+                  : 'opacity-0 invisible -translate-y-2 pointer-events-none'
+              }`}
+              style={{ clipPath: 'polygon(0 0, 100% 0, 100% calc(100% - 18px), calc(100% - 18px) 100%, 18px 100%, 0 calc(100% - 18px))' }}
+            >
+              {/* Detalle geométrico amarillo superior derecho */}
+              <div
+                className="hidden md:block absolute top-0 right-0 w-16 h-10 bg-amber-400 pointer-events-none"
+                style={{ clipPath: 'polygon(35% 0, 100% 0, 100% 100%, 0 100%)' }}
+              ></div>
+
+              <div className="max-w-7xl mx-auto px-6 lg:px-10 py-8">
+                <div className="grid grid-cols-12 gap-8 min-h-[340px]">
+                  
+                  {/* COLUMNA IZQUIERDA: LISTA DE CATEGORÍAS + BOTÓN VER TODOS */}
+                  <div className="col-span-4 lg:col-span-3 border-r border-slate-800/90 pr-4 flex flex-col justify-between">
+                    <div className="max-h-[44vh] overflow-y-auto pr-2 space-y-1 custom-scrollbar">
+                      {categories.map((cat) => {
+                        const isCatActive = activeMegaCat?.id === cat.id;
+                        return (
+                          <button
+                            key={cat.id}
+                            onMouseEnter={() => setHoveredMegaCatId(cat.id)}
+                            onClick={() => handleCategoryClick(cat)}
+                            className={`w-full text-left px-4 py-2.5 text-xs uppercase tracking-wider font-exo transition-all flex items-center justify-between ${
+                              isCatActive
+                                ? 'bg-amber-400 text-slate-950 font-black shadow-sm'
+                                : 'text-slate-200 hover:text-amber-400 font-bold hover:bg-white/5'
+                            }`}
+                            style={isCatActive ? { clipPath: 'polygon(0 0, 100% 0, 95% 100%, 0 100%)' } : undefined}
+                          >
+                            <span className="truncate pr-2">{cat.name}</span>
+                            <ChevronRight className={`w-3.5 h-3.5 flex-shrink-0 transition-transform ${isCatActive ? 'translate-x-0 opacity-100' : '-translate-x-1 opacity-0'}`} />
+                          </button>
+                        );
+                      })}
+                      {categories.length === 0 && (
+                        <div className="text-xs p-4 text-slate-400">Cargando categorías...</div>
+                      )}
+                    </div>
+
+                    <div className="pt-5 mt-4 border-t border-slate-800/90">
+                      <button
+                        onClick={() => handleNavClick('inicio', 'catálogo')}
+                        className="w-full bg-amber-400 hover:bg-amber-300 text-slate-950 font-black uppercase tracking-wider text-[11px] py-3.5 px-5 text-center transition-colors shadow-md"
+                        style={{ clipPath: 'polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px)' }}
+                      >
+                        Ver todos los productos
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* COLUMNA DERECHA: DETALLE DE LA CATEGORÍA SELECCIONADA Y VISTA PREVIA */}
+                  <div className="col-span-8 lg:col-span-9 pl-2 flex flex-col justify-between">
+                    {activeMegaCat ? (
+                      <>
+                        <div>
+                          <div className="flex flex-wrap items-baseline justify-between gap-4 border-b border-slate-800/80 pb-4 mb-6">
+                            <div>
+                              <h3 className="text-2xl lg:text-3xl font-black font-exo uppercase tracking-wider text-white">
+                                {activeMegaCat.name}
+                              </h3>
+                              <button
+                                onClick={() => handleCategoryClick(activeMegaCat)}
+                                className="text-amber-400 hover:text-amber-300 text-xs font-bold inline-flex items-center gap-1.5 mt-1.5 group/ver transition-colors"
+                              >
+                                Ver todo <span className="group-hover/ver:translate-x-1 transition-transform">→</span>
+                              </button>
+                            </div>
+                            {activeMegaCat.description && (
+                              <p className="text-xs text-slate-400 font-light max-w-md">
+                                {activeMegaCat.description}
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="grid grid-cols-12 gap-6 items-stretch">
+                            {/* Lista rápida de productos destacados de esta categoría */}
+                            <div className="col-span-7 grid grid-cols-2 gap-3 content-start">
+                              {activeMegaCatProducts.length > 0 ? (
+                                activeMegaCatProducts.map((prod) => (
+                                  <button
+                                    key={prod.sku_code}
+                                    onClick={() => handleSuggestionClick(prod)}
+                                    className="text-left p-3 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-slate-800 hover:border-amber-400/50 transition-all group/mprod flex items-center gap-3"
+                                  >
+                                    <div className="w-11 h-11 rounded-lg bg-slate-950 border border-slate-800 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                                      <ProductImage sku={prod.sku_code} imageUrl={prod.image_url} alt={prod.name} className="w-full h-full object-cover" />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <div className="text-[9px] font-bold text-amber-400 uppercase tracking-wider truncate">
+                                        {prod.brand?.name || 'Multimarca'} • {prod.sku_code}
+                                      </div>
+                                      <div className="text-xs font-semibold text-slate-200 group-hover/mprod:text-white truncate">
+                                        {prod.name}
+                                      </div>
+                                    </div>
+                                  </button>
+                                ))
+                              ) : (
+                                <div className="col-span-2 p-6 rounded-2xl bg-slate-900/50 border border-slate-800/80 text-slate-400 text-xs">
+                                  Explorá todos los repuestos disponibles en <strong className="text-white">{activeMegaCat.name}</strong> haciendo clic en &ldquo;Ver todo&rdquo;.
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Tarjeta visual representativa de la categoría */}
+                            <div
+                              onClick={() => handleCategoryClick(activeMegaCat)}
+                              className="col-span-5 relative rounded-2xl overflow-hidden cursor-pointer group/catbanner border border-blue-500/30 min-h-[210px] flex items-center justify-center"
+                            >
+                              <img
+                                src={getCategoryVisualImage(activeMegaCat)}
+                                alt={activeMegaCat.name}
+                                className="absolute inset-0 w-full h-full object-cover group-hover/catbanner:scale-110 transition-transform duration-700"
+                              />
+                              <div className="absolute inset-0 bg-gradient-to-t from-[#030917]/95 via-[#07193d]/65 to-[#040d21]/75" />
+                              <div className="relative z-10 text-center p-5">
+                                <span className="inline-block bg-amber-400 text-slate-950 text-[9px] font-black uppercase tracking-widest px-2.5 py-0.5 -skew-x-12 mb-2">
+                                  <span className="inline-block skew-x-12">Categoría</span>
+                                </span>
+                                <h4 className="text-xl font-black font-exo uppercase tracking-wider text-white drop-shadow-md">
+                                  {activeMegaCat.name}
+                                </h4>
+                                <span className="mt-3 inline-flex items-center gap-1 text-[11px] font-bold text-cyan-300 group-hover/catbanner:text-amber-400 transition-colors">
+                                  Ingresar a la sección <ChevronRight className="w-3.5 h-3.5" />
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+
+                </div>
               </div>
             </div>
           </div>
-          <button onClick={() => handleNavClick('nosotros')} className={`px-4 py-2 text-xs font-semibold uppercase tracking-widest transition-all hover:text-blue-600 ${isNavbarSolid ? 'text-slate-600 dark:text-slate-300' : 'text-white'}`}>Nosotros</button>
-          <button onClick={() => handleNavClick('inicio', 'contacto')} className={`px-4 py-2 text-xs font-semibold uppercase tracking-widest transition-all hover:text-blue-600 ${isNavbarSolid ? 'text-slate-600 dark:text-slate-300' : 'text-white'}`}>Contacto</button>      
-          </div>
+
+          <button onClick={() => handleNavClick('nosotros')} className={`px-4 py-2 text-xs font-bold uppercase tracking-widest transition-all hover:text-blue-600 ${isNavbarSolid ? 'text-slate-700 dark:text-slate-200' : 'text-white'}`}>Nosotros</button>
+          <button onClick={() => handleNavClick('inicio', 'contacto')} className={`px-4 py-2 text-xs font-bold uppercase tracking-widest transition-all hover:text-blue-600 ${isNavbarSolid ? 'text-slate-700 dark:text-slate-200' : 'text-white'}`}>Contacto</button>      
+        </div>
 
         <div className="flex items-center gap-2 md:gap-3 flex-grow justify-end relative z-50">
           
-          <div className="hidden lg:block relative mr-1 w-full max-w-[200px]">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Search className={`h-4 w-4 ${isNavbarSolid ? 'text-slate-400' : 'text-slate-300'}`} />
+          {/* BUSCADOR EN NAVBAR CON ESTILO BISELADO Y BOTÓN DIAGONAL AMARILLO (Imagen 1) */}
+          <div className="hidden lg:block relative mr-1 w-full max-w-[270px] group">
+            <div
+              className="p-[1.5px] bg-slate-900 dark:bg-slate-600 group-focus-within:bg-amber-400 transition-colors shadow-sm"
+              style={{ clipPath: chamferClipSm }}
+            >
+              <div
+                className="flex items-stretch bg-white dark:bg-slate-900 overflow-hidden"
+                style={{ clipPath: chamferClipSm }}
+              >
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={handleSearchChange}
+                  placeholder="¿Qué estás buscando?"
+                  className="w-full pl-3.5 pr-2 py-2 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 bg-transparent outline-none"
+                />
+                {searchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => { setSearchTerm(''); setSuggestions([]); }}
+                    className="px-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-white flex items-center"
+                    aria-label="Limpiar búsqueda"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (suggestions.length > 0) handleSuggestionClick(suggestions[0]);
+                    else handleNavClick('inicio', 'catálogo');
+                  }}
+                  className="bg-amber-400 hover:bg-amber-300 text-slate-950 pl-5 pr-3.5 flex items-center justify-center transition-colors flex-shrink-0"
+                  style={{ clipPath: 'polygon(24% 0, 100% 0, 100% 100%, 0% 100%)' }}
+                  aria-label="Buscar"
+                >
+                  <Search className="h-4 w-4 stroke-[2.2]" />
+                </button>
+              </div>
             </div>
-            <input type="text" value={searchTerm} onChange={handleSearchChange} placeholder="Buscar..." className={`w-full pl-9 pr-4 py-2 rounded-full text-xs outline-none transition-all ${isNavbarSolid ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900' : 'bg-white/10 border border-white/20 text-white placeholder-slate-300 focus:bg-white/20 focus:border-white'}`} />
+
             {suggestions.length > 0 && (
-              <div className="absolute top-full mt-2 w-full min-w-[300px] right-0 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-700 overflow-hidden z-[110]">
+              <div className="absolute top-full mt-2 w-full min-w-[320px] right-0 bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden z-[110]">
                 {suggestions.map((prod, idx) => (
                   <button key={idx} onClick={() => handleSuggestionClick(prod)} className="w-full text-left block px-4 py-3 hover:bg-blue-50 dark:hover:bg-slate-700 border-b border-slate-50 dark:border-slate-700 last:border-0 transition-colors focus:outline-none group/sugg">
                     <div className="flex justify-between items-center mb-1">
@@ -1757,9 +2013,36 @@ const handleSearchChange = (e) => {
             </button>
           )}
 
+          {/* BUSCADOR MOBILE CON ESTILO BISELADO */}
           <div className="relative w-full mb-2">
-            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Search className="h-5 w-5 text-slate-400" /></div>
-            <input type="text" value={searchTerm} onChange={handleSearchChange} placeholder="Buscar repuesto..." className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full pl-11 pr-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900" />
+            <div
+              className="p-[2px] bg-slate-900 dark:bg-slate-600"
+              style={{ clipPath: chamferClipSm }}
+            >
+              <div
+                className="flex items-stretch bg-white dark:bg-slate-800 overflow-hidden"
+                style={{ clipPath: chamferClipSm }}
+              >
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={handleSearchChange}
+                  placeholder="¿Qué estás buscando?"
+                  className="w-full bg-transparent pl-4 pr-2 py-3 text-sm text-slate-900 dark:text-white outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (suggestions.length > 0) handleSuggestionClick(suggestions[0]);
+                  }}
+                  className="bg-amber-400 text-slate-950 pl-6 pr-5 flex items-center justify-center"
+                  style={{ clipPath: 'polygon(22% 0, 100% 0, 100% 100%, 0% 100%)' }}
+                  aria-label="Buscar"
+                >
+                  <Search className="h-5 w-5 stroke-[2.2]" />
+                </button>
+              </div>
+            </div>
             {suggestions.length > 0 && (
               <div className="absolute top-full mt-2 w-full bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-700 overflow-hidden z-50">
                 {suggestions.map((prod, idx) => (
@@ -1776,12 +2059,12 @@ const handleSearchChange = (e) => {
           
           <div className="border-t border-slate-100 dark:border-slate-800 pt-4">
             <button onClick={() => handleNavClick('inicio', 'catálogo')} className="text-left text-sm font-bold uppercase tracking-widest text-blue-600 mb-4 w-full flex justify-between">Catálogo</button>
-            <div className="grid grid-cols-2 gap-3 pl-4 border-l-2 border-blue-100 dark:border-slate-800">
-              {categories.map(cat => (<button key={cat.id} onClick={() => handleCategoryClick(cat)} className="text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 hover:text-blue-600">{cat.name}</button>))}
+            <div className="grid grid-cols-2 gap-3 pl-4 border-l-2 border-amber-400">
+              {categories.map(cat => (<button key={cat.id} onClick={() => handleCategoryClick(cat)} className="text-left text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300 hover:text-blue-600">{cat.name}</button>))}
             </div>
           </div>
           
-        <button onClick={() => handleNavClick('nosotros')} className="text-left text-sm font-bold uppercase tracking-widest text-slate-800 dark:text-white border-t border-slate-100 dark:border-slate-800 pt-4">Nosotros</button>
+          <button onClick={() => handleNavClick('nosotros')} className="text-left text-sm font-bold uppercase tracking-widest text-slate-800 dark:text-white border-t border-slate-100 dark:border-slate-800 pt-4">Nosotros</button>
           <button onClick={() => handleNavClick('inicio', 'contacto')} className="text-left text-sm font-bold uppercase tracking-widest text-slate-800 dark:text-white border-t border-slate-100 dark:border-slate-800 pt-4">Contacto</button>
         </div>
       )}
@@ -1875,78 +2158,130 @@ function HeroSection({ navigateTo }) {
 }
 
 /* ==========================================================================
-   VITRINA MULTIMEDIA (VIDEOS E IMÁGENES DE PRODUCTOS DESTACADOS)
+   DESTACADOS D.A.P.A (BANNERS A ANCHO COMPLETO + CINTA AUTOMÁTICA DE PRODUCTOS Y VIDEOS DE INSTAGRAM)
+   ==========================================================================
+   CÓMO AGREGAR TUS FOTOS REALES Y VIDEOS DESCARGADOS DE INSTAGRAM:
+   1) Guardá tus fotos (ej: 'optica-hilux.jpg') o videos de Instagram (ej: 'reel-1.mp4')
+      dentro de la carpeta `catalogo/public/`.
+   2) En `SHOWCASE_GALLERY_ITEMS` (abajo), cambiá `src` por `'/optica-hilux.jpg'` o `'/reel-1.mp4'`
+      y usá `type: 'image'` para fotos o `type: 'video'` para los reels de Instagram.
    ========================================================================== */
-const SHOWCASE_MEDIA = [
+const SHOWCASE_BANNERS = [
   {
-    id: 1,
-    type: 'video', // 'video' o 'image'
-    // Podés poner un archivo tuyo en public/ (ej: '/video-opticas.mp4') o una URL externa
-    src: 'https://assets.mixkit.co/videos/preview/mixkit-mechanic-working-on-a-car-engine-41612-large.mp4',
-    poster: 'https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?auto=format&fit=crop&q=80',
-    badge: 'ILUMINACIÓN Y CHAPERÍA',
-    title: 'Ópticas, Faros y Paragolpes todas las marcas',
-    description: 'Línea completa nacional e importada. Consultá por el modelo exacto de tu vehículo y recibilo en tu taller o domicilio.',
-    ctaText: 'Ver Catálogo',
+    id: 'banner-1',
+    layout: 'chevron-split',
+    leftImg: '/local-dapa.jpg',
+    rightImg: 'https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=1200&q=80',
+    headlineTop: '¡TODO LO QUE',
+    headlineBottom: 'TU AUTO NECESITA!',
+    subtitle: 'Calidad, variedad y confianza en un solo lugar.',
+    ctaText: 'Ver Catálogo Completo',
     ctaAction: 'catalogo'
   },
   {
-    id: 2,
-    type: 'image',
-    src: '/local-dapa.jpg', // Podés reemplazarlo por flyers o fotos de repuestos en public/
-    badge: 'STOCK Y ENCARGUES',
-    title: 'Cubre Alfombras, Espejos, Cristales y Cerrajería',
-    description: 'Trabajamos con más de 10 distribuidores directos para conseguir tu repuesto al mejor precio en Arrecifes y todo el país.',
+    id: 'banner-2',
+    layout: 'welcome-emblem',
+    leftImg: 'https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?auto=format&fit=crop&w=1200&q=80',
+    rightImg: 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=1200&q=80',
+    headline: '¡¡BIENVENIDOS!!',
+    brandTitle: 'D.A.P.A',
+    brandSub: 'REPUESTOS MOLLE',
+    subtitle: 'Más de 50 años de trayectoria en Arrecifes • Envíos a todo el país',
     ctaText: 'Consultar por WhatsApp',
     ctaAction: 'whatsapp'
   },
   {
-    id: 3,
-    type: 'image',
-    src: 'https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&q=80',
-    badge: 'ENVÍOS A TODO EL PAÍS',
-    title: 'Despachos diarios por Correo Argentino',
-    description: 'Calculá el costo de envío con tu Código Postal directamente en el carrito y aboná con Mercado Pago o transferencia.',
-    ctaText: 'Cotizar Repuesto',
+    id: 'banner-3',
+    layout: 'video-full',
+    // Reemplazá este link por tu video descargado de Instagram en public/ (ej: '/reel-local.mp4')
+    videoSrc: 'https://assets.mixkit.co/videos/preview/mixkit-mechanic-working-on-a-car-engine-41612-large.mp4',
+    poster: '/local-dapa.jpg',
+    badge: 'INSTAGRAM @AUTOPARTESMOLLE',
+    headlineTop: 'NOVEDADES Y REPUESTOS',
+    headlineBottom: 'EN NUESTRO LOCAL',
+    subtitle: 'Ópticas, parabrisas, chapería, frenos y accesorios multimarca directo a tu taller o domicilio.',
+    ctaText: 'Cotizar mi Repuesto',
     ctaAction: 'contacto'
   }
 ];
 
+const SHOWCASE_GALLERY_ITEMS = [
+  {
+    id: 101,
+    type: 'image', // Cambiá src por '/tu-foto-1.jpg' cuando subas fotos reales del local
+    src: 'https://images.unsplash.com/photo-1544829099-b9a0c07fad1a?auto=format&fit=crop&w=800&q=80',
+    tag: 'ILUMINACIÓN',
+    title: 'Ópticas Delanteras y Faros LED'
+  },
+  {
+    id: 102,
+    type: 'video', // Podés reemplazar src por tu video descargado de Instagram: ej. '/instagram-reel-1.mp4'
+    src: 'https://assets.mixkit.co/videos/preview/mixkit-mechanic-working-on-a-car-engine-41612-large.mp4',
+    poster: 'https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?auto=format&fit=crop&w=800&q=80',
+    tag: 'REEL INSTAGRAM',
+    title: 'Asesoramiento Técnico y Repuestos'
+  },
+  {
+    id: 103,
+    type: 'image',
+    src: '/local-dapa.jpg',
+    tag: 'CASA CENTRAL',
+    title: 'Stock Permanente en Lamadrid 65'
+  },
+  {
+    id: 104,
+    type: 'image',
+    src: 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=800&q=80',
+    tag: 'CRISTALES',
+    title: 'Parabrisas y Lunetas todas las marcas'
+  },
+  {
+    id: 105,
+    type: 'image',
+    src: 'https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=800&q=80',
+    tag: 'FRENOS',
+    title: 'Discos, Pastillas y Campanas'
+  },
+  {
+    id: 106,
+    type: 'image',
+    src: 'https://images.unsplash.com/photo-1618843479313-40f8afb4b4d8?auto=format&fit=crop&w=800&q=80',
+    tag: 'CARROCERÍA',
+    title: 'Paragolpes, Capot y Guardabarros'
+  },
+  {
+    id: 107,
+    type: 'image',
+    src: 'https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?auto=format&fit=crop&w=800&q=80',
+    tag: 'ESTÉTICA VEHICULAR',
+    title: 'Línea Completa de Cuidado Automotor'
+  }
+];
+
 function MediaShowcaseSection({ navigateTo }) {
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [currentBanner, setCurrentBanner] = useState(0);
   const [isMuted, setIsMuted] = useState(true);
-  const videoRef = useRef(null);
+  const [isPaused, setIsPaused] = useState(false);
 
-  const currentItem = SHOWCASE_MEDIA[currentIndex];
-
-  const handleNext = useCallback(() => {
-    setCurrentIndex((prev) => (prev + 1) % SHOWCASE_MEDIA.length);
+  const handleNextBanner = useCallback(() => {
+    setCurrentBanner((prev) => (prev + 1) % SHOWCASE_BANNERS.length);
   }, []);
 
-  const handlePrev = () => {
-    setCurrentIndex((prev) => (prev - 1 + SHOWCASE_MEDIA.length) % SHOWCASE_MEDIA.length);
+  const handlePrevBanner = () => {
+    setCurrentBanner((prev) => (prev - 1 + SHOWCASE_BANNERS.length) % SHOWCASE_BANNERS.length);
   };
 
-  // Si el slide actual es una imagen, pasa automáticamente cada 6 segundos.
-  // Si es un video, avanza cuando termina de reproducirse (onEnded).
+  // Desplazamiento automático de los banners a pantalla completa cada 5.5 segundos
   useEffect(() => {
-    if (currentItem.type === 'image') {
-      const timer = setTimeout(handleNext, 6000);
-      return () => clearTimeout(timer);
-    }
-  }, [currentIndex, currentItem.type, handleNext]);
+    if (isPaused) return;
+    const timer = setInterval(handleNextBanner, 5500);
+    return () => clearInterval(timer);
+  }, [isPaused, handleNextBanner]);
 
-  useEffect(() => {
-    if (currentItem.type === 'video' && videoRef.current) {
-      videoRef.current.load();
-      videoRef.current.play().catch(() => {});
-    }
-  }, [currentIndex, currentItem.type]);
-
-  const handleCtaClick = () => {
-    if (currentItem.ctaAction === 'whatsapp') {
+  const handleBannerAction = (action) => {
+    if (action === 'whatsapp') {
       window.open(CONTACT_INFO.whatsappLink, '_blank');
-    } else if (currentItem.ctaAction === 'contacto') {
+    } else if (action === 'contacto') {
       navigateTo('inicio', 'contacto');
     } else {
       navigateTo('inicio', 'catálogo');
@@ -1955,145 +2290,295 @@ function MediaShowcaseSection({ navigateTo }) {
 
   return (
     <section
-      className="py-28 md:py-36 relative z-20 text-white overflow-hidden"
-      style={{ background: 'linear-gradient(135deg, #0a2252 0%, #144299 50%, #091d47 100%)' }}
+      className="pt-20 pb-28 md:pt-28 md:pb-36 relative z-20 text-white overflow-hidden w-full"
+      style={{ background: 'linear-gradient(135deg, #061536 0%, #0d2f75 50%, #05112b 100%)' }}
     >
       {/* Divisor diagonal superior (Subida de izquierda a derecha) */}
-      <div className="absolute top-0 left-0 w-full overflow-hidden leading-none pointer-events-none z-20 -mt-[1px]">
+      <div className="absolute top-0 left-0 w-full overflow-hidden leading-none pointer-events-none z-30 -mt-[1px]">
         <svg viewBox="0 0 1440 90" preserveAspectRatio="none" className="w-full h-10 sm:h-14 md:h-20 block">
           <polygon points="0,0 1440,0 0,90" className="fill-white dark:fill-slate-900 transition-colors duration-300" />
         </svg>
       </div>
 
-      {/* Franjas diagonales y triángulos geométricos decorativos (Estilo competición/autopartes) */}
-      <div className="hidden lg:block absolute inset-y-0 right-16 w-28 bg-white/[0.03] -skew-x-12 pointer-events-none"></div>
-      <div className="hidden lg:block absolute inset-y-0 right-52 w-12 bg-white/[0.02] -skew-x-12 pointer-events-none"></div>
+      {/* Triángulos geométricos decorativos */}
       <div
-        className="hidden sm:block absolute top-14 md:top-20 right-6 md:right-16 w-10 h-10 md:w-14 md:h-14 bg-amber-400 pointer-events-none z-10 shadow-lg"
+        className="hidden sm:block absolute top-12 md:top-16 right-6 md:right-16 w-10 h-10 md:w-12 md:h-12 bg-amber-400 pointer-events-none z-30 shadow-lg"
         style={{ clipPath: 'polygon(0 0, 100% 0, 100% 100%)' }}
         aria-hidden="true"
       ></div>
       <div
-        className="hidden sm:block absolute bottom-10 md:bottom-16 left-0 w-24 md:w-36 h-12 md:h-16 bg-amber-400 pointer-events-none z-10"
+        className="hidden sm:block absolute bottom-10 md:bottom-14 left-0 w-24 md:w-36 h-12 md:h-16 bg-amber-400 pointer-events-none z-30"
         style={{ clipPath: 'polygon(0 0, 100% 100%, 0 100%)' }}
         aria-hidden="true"
       ></div>
 
-      {/* Brillos decorativos de fondo */}
-      <div className="absolute -top-24 -left-24 w-96 h-96 rounded-full bg-blue-400/10 blur-3xl pointer-events-none"></div>
-      <div className="absolute -bottom-24 -right-24 w-96 h-96 rounded-full bg-cyan-400/10 blur-3xl pointer-events-none"></div>
-
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-        <div className="flex flex-col md:flex-row md:items-end justify-between mb-10 gap-4">
-          <div>
-            <span className="inline-block border border-amber-400 text-amber-400 text-[10px] font-black uppercase tracking-[0.2em] px-3.5 py-1 -skew-x-12 mb-3">
-              <span className="inline-block skew-x-12">Destacados D.A.P.A</span>
-            </span>
-            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold font-exo uppercase tracking-wider text-white">
-              Productos y Novedades en Acción
-            </h2>
-          </div>
-
-          {/* Botones de control del carrusel */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handlePrev}
-              className="p-3 rounded-full bg-white/10 hover:bg-white/25 text-white border border-white/20 transition-all focus:outline-none"
-              aria-label="Anterior"
-            >
-              <ChevronLeft className="w-5 h-5" />
-            </button>
-            <button
-              onClick={handleNext}
-              className="p-3 rounded-full bg-white/10 hover:bg-white/25 text-white border border-white/20 transition-all focus:outline-none"
-              aria-label="Siguiente"
-            >
-              <ChevronRight className="w-5 h-5" />
-            </button>
-          </div>
+      {/* Encabezado de la sección */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-8 relative z-20 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+        <div>
+          <span className="inline-block border border-amber-400 text-amber-400 text-[10px] font-black uppercase tracking-[0.2em] px-3.5 py-1 -skew-x-12 mb-2.5">
+            <span className="inline-block skew-x-12">Destacados D.A.P.A</span>
+          </span>
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold font-exo uppercase tracking-wider text-white">
+            Productos y Novedades en Acción
+          </h2>
         </div>
 
-        {/* Contenedor Principal del Slide (Video o Imagen + Info) */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center bg-[#071636]/70 border border-blue-400/30 rounded-3xl p-4 sm:p-6 md:p-8 shadow-2xl backdrop-blur-md">
-          
-          {/* Visor Multimedia (7 columnas en PC) */}
-          <div className="lg:col-span-7 relative rounded-2xl overflow-hidden bg-slate-950 aspect-video border border-white/10 shadow-lg">
-            {currentItem.type === 'video' ? (
-              <>
-                <video
-                  ref={videoRef}
-                  src={currentItem.src}
-                  poster={currentItem.poster}
-                  muted={isMuted}
-                  playsInline
-                  autoPlay
-                  onEnded={handleNext}
-                  className="w-full h-full object-cover"
-                />
-                <button
-                  type="button"
-                  onClick={() => setIsMuted(!isMuted)}
-                  className="absolute bottom-4 right-4 bg-slate-900/80 hover:bg-slate-900 text-white text-xs font-bold uppercase tracking-wider px-3.5 py-2 rounded-full border border-white/20 backdrop-blur-sm transition-colors"
+        <a
+          href={CONTACT_INFO.instagramLink}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-400 hover:text-amber-300 bg-white/5 hover:bg-white/10 border border-white/15 px-4 py-2.5 rounded-xl transition-all w-fit"
+        >
+          <CustomInstagram className="w-4 h-4" /> Seguinos en @autopartesmolle
+        </a>
+      </div>
+
+      {/* 1) CARRUSEL PANORÁMICO A TODO EL ANCHO DE LA PÁGINA (Estilo Imágenes 3 y 4) */}
+      <div
+        className="relative w-full overflow-hidden border-y-2 border-blue-500/40 shadow-[0_20px_50px_rgba(0,0,0,0.6)] mb-12"
+        onMouseEnter={() => setIsPaused(true)}
+        onMouseLeave={() => setIsPaused(false)}
+      >
+        <div
+          className="flex transition-transform duration-700 ease-out w-full"
+          style={{ transform: `translateX(-${currentBanner * 100}%)` }}
+        >
+          {SHOWCASE_BANNERS.map((slide) => (
+            <div key={slide.id} className="w-full flex-shrink-0 relative h-[320px] sm:h-[380px] md:h-[440px] bg-[#040c21] overflow-hidden">
+              
+              {slide.layout === 'chevron-split' && (
+                <>
+                  {/* Imagen izquierda y derecha a pantalla completa */}
+                  <div className="absolute inset-y-0 left-0 w-1/2 overflow-hidden">
+                    <img src={slide.leftImg} alt="" className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-slate-950/25" />
+                  </div>
+                  <div className="absolute inset-y-0 right-0 w-1/2 overflow-hidden">
+                    <img src={slide.rightImg} alt="" className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-slate-950/25" />
+                  </div>
+
+                  {/* Escudo central azul geométrico en punta (Estilo Imagen 3) */}
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    {/* Borde luminoso azul exterior */}
+                    <div
+                      className="w-[92%] sm:w-[70%] md:w-[58%] lg:w-[50%] h-full bg-gradient-to-r from-blue-400 via-blue-500 to-blue-400 p-[6px] shadow-[0_0_50px_rgba(37,99,235,0.9)]"
+                      style={{ clipPath: 'polygon(0 0, 86% 0, 100% 50%, 86% 100%, 0 100%, 14% 50%)' }}
+                    >
+                      <div
+                        className="w-full h-full flex flex-col items-center justify-center text-center px-8 sm:px-14 md:px-20 pointer-events-auto"
+                        style={{
+                          background: 'linear-gradient(135deg, #031242 0%, #082578 55%, #020c2e 100%)',
+                          clipPath: 'polygon(0 0, 86% 0, 100% 50%, 86% 100%, 0 100%, 14% 50%)'
+                        }}
+                      >
+                        <h3 className="text-2xl sm:text-4xl md:text-5xl font-black font-exo uppercase tracking-tight text-white leading-none mb-1 drop-shadow-md">
+                          {slide.headlineTop}
+                        </h3>
+                        <p className="text-lg sm:text-2xl md:text-3xl font-light font-exo uppercase tracking-wide text-white mb-4">
+                          {slide.headlineBottom}
+                        </p>
+                        <div className="w-4/5 max-w-xs h-[2px] bg-gradient-to-r from-transparent via-cyan-400 to-transparent mb-4" />
+                        <p className="text-xs sm:text-base md:text-lg text-slate-200 font-light max-w-md mb-6">
+                          {slide.subtitle}
+                        </p>
+                        <button
+                          onClick={() => handleBannerAction(slide.ctaAction)}
+                          className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-black uppercase tracking-widest text-[11px] sm:text-xs px-6 py-3 transition-all shadow-lg"
+                          style={{ clipPath: 'polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px)' }}
+                        >
+                          {slide.ctaText}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {slide.layout === 'welcome-emblem' && (
+                <>
+                  {/* Imagen izquierda y derecha */}
+                  <div className="absolute inset-y-0 left-0 w-1/2 overflow-hidden">
+                    <img src={slide.leftImg} alt="" className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-slate-950/30" />
+                  </div>
+                  <div className="absolute inset-y-0 right-0 w-1/2 overflow-hidden">
+                    <img src={slide.rightImg} alt="" className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-slate-950/30" />
+                  </div>
+
+                  {/* Trapecio central azul con bienvenida y emblema (Estilo Imagen 4) */}
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div
+                      className="w-[94%] sm:w-[75%] md:w-[64%] lg:w-[56%] h-full bg-gradient-to-r from-blue-500 via-cyan-400 to-blue-500 p-[6px] shadow-[0_0_50px_rgba(37,99,235,0.9)]"
+                      style={{ clipPath: 'polygon(10% 0, 90% 0, 100% 100%, 0% 100%)' }}
+                    >
+                      <div
+                        className="w-full h-full flex flex-col items-center justify-center text-center px-6 sm:px-12 pointer-events-auto"
+                        style={{
+                          background: 'linear-gradient(180deg, #03154a 0%, #072370 60%, #031038 100%)',
+                          clipPath: 'polygon(10% 0, 90% 0, 100% 100%, 0% 100%)'
+                        }}
+                      >
+                        <h3 className="text-2xl sm:text-4xl md:text-5xl font-black font-exo uppercase tracking-widest text-white mb-4 drop-shadow-[0_4px_12px_rgba(0,0,0,0.6)]">
+                          {slide.headline}
+                        </h3>
+
+                        {/* Emblema central blanco estilo engranaje/insignia automotriz */}
+                        <div className="bg-white text-slate-950 px-7 py-4 sm:px-10 sm:py-5 rounded-3xl shadow-2xl border-4 border-blue-500/40 mb-4 flex flex-col items-center">
+                          <span className="font-michroma font-bold text-xl sm:text-3xl tracking-tighter text-blue-800 leading-none">
+                            {slide.brandTitle}
+                          </span>
+                          <span className="font-exo font-black text-[10px] sm:text-xs tracking-[0.25em] text-slate-700 uppercase mt-1">
+                            {slide.brandSub}
+                          </span>
+                        </div>
+
+                        <p className="text-xs sm:text-sm text-blue-100 font-light max-w-md mb-4">
+                          {slide.subtitle}
+                        </p>
+                        <button
+                          onClick={() => handleBannerAction(slide.ctaAction)}
+                          className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-black uppercase tracking-widest text-[11px] px-6 py-2.5 transition-all shadow-lg"
+                          style={{ clipPath: 'polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px)' }}
+                        >
+                          {slide.ctaText}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {slide.layout === 'video-full' && (
+                <>
+                  <video
+                    src={slide.videoSrc}
+                    poster={slide.poster}
+                    muted={isMuted}
+                    loop
+                    playsInline
+                    autoPlay
+                    className="absolute inset-0 w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-r from-[#040e29]/95 via-[#061947]/80 to-transparent" />
+                  <div className="relative z-10 h-full max-w-7xl mx-auto px-6 sm:px-10 flex flex-col justify-center items-start">
+                    <span className="bg-amber-400 text-slate-950 text-[10px] font-black uppercase tracking-widest px-3 py-1 -skew-x-12 mb-3">
+                      <span className="inline-block skew-x-12">{slide.badge}</span>
+                    </span>
+                    <h3 className="text-2xl sm:text-4xl md:text-5xl font-black font-exo uppercase text-white leading-tight">
+                      {slide.headlineTop} <br />
+                      <span className="text-cyan-300">{slide.headlineBottom}</span>
+                    </h3>
+                    <p className="text-xs sm:text-base text-slate-200 max-w-xl mt-3 mb-6 font-light">
+                      {slide.subtitle}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <button
+                        onClick={() => handleBannerAction(slide.ctaAction)}
+                        className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-black uppercase tracking-widest text-xs px-7 py-3.5 transition-all shadow-lg"
+                        style={{ clipPath: 'polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px)' }}
+                      >
+                        {slide.ctaText}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsMuted(!isMuted)}
+                        className="bg-slate-900/80 hover:bg-slate-900 text-white text-xs font-bold uppercase tracking-wider px-4 py-3.5 rounded-xl border border-white/20 backdrop-blur-sm transition-colors"
+                      >
+                        {isMuted ? '🔇 Activar sonido' : '🔊 Silenciar'}
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+
+            </div>
+          ))}
+        </div>
+
+        {/* Flechas laterales sobre el banner a todo ancho */}
+        <button
+          onClick={handlePrevBanner}
+          className="absolute left-3 sm:left-6 top-1/2 -translate-y-1/2 z-20 p-2.5 sm:p-3 rounded-full bg-slate-950/70 hover:bg-amber-400 text-white hover:text-slate-950 border border-white/20 transition-all"
+          aria-label="Banner anterior"
+        >
+          <ChevronLeft className="w-5 h-5" />
+        </button>
+        <button
+          onClick={handleNextBanner}
+          className="absolute right-3 sm:right-6 top-1/2 -translate-y-1/2 z-20 p-2.5 sm:p-3 rounded-full bg-slate-950/70 hover:bg-amber-400 text-white hover:text-slate-950 border border-white/20 transition-all"
+          aria-label="Siguiente banner"
+        >
+          <ChevronRight className="w-5 h-5" />
+        </button>
+
+        {/* Indicadores inferiores */}
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 bg-slate-950/60 px-3 py-1.5 rounded-full backdrop-blur-sm">
+          {SHOWCASE_BANNERS.map((b, i) => (
+            <button
+              key={b.id}
+              onClick={() => setCurrentBanner(i)}
+              className={`h-2 rounded-full transition-all ${currentBanner === i ? 'w-7 bg-amber-400' : 'w-2 bg-white/40 hover:bg-white/70'}`}
+              aria-label={`Ir al banner ${i + 1}`}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* 2) CINTA DE DESPLAZAMIENTO AUTOMÁTICO A TODO LO ANCHO (FOTOS DE PRODUCTOS + VIDEOS DE INSTAGRAM) */}
+      <div className="w-full overflow-hidden pause-on-hover relative z-20">
+        <div className="marquee-container animate-marquee-left">
+          {[0, 1].map((copyIdx) => (
+            <div
+              key={copyIdx}
+              aria-hidden={copyIdx === 1}
+              className="flex items-stretch gap-5 pr-5"
+            >
+              {SHOWCASE_GALLERY_ITEMS.map((item, idx) => (
+                <div
+                  key={`${copyIdx}-${item.id}-${idx}`}
+                  onClick={() => navigateTo('inicio', 'catálogo')}
+                  className="w-[270px] sm:w-[320px] md:w-[360px] h-[220px] sm:h-[250px] flex-shrink-0 relative rounded-2xl overflow-hidden border border-blue-400/30 hover:border-amber-400 group cursor-pointer shadow-xl bg-slate-950"
                 >
-                  {isMuted ? '🔇 Activar sonido' : '🔊 Silenciar'}
-                </button>
-              </>
-            ) : (
-              <img
-                src={currentItem.src}
-                alt={currentItem.title}
-                className="w-full h-full object-cover animate-in fade-in duration-500"
-              />
-            )}
-
-            <span className="absolute top-4 left-4 bg-blue-600/90 backdrop-blur-sm text-white text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-lg border border-blue-400/40">
-              {currentItem.type === 'video' ? '▶ VIDEO' : '📷 GALERÍA'}
-            </span>
-          </div>
-
-          {/* Información del Producto / Promoción (5 columnas en PC) */}
-          <div className="lg:col-span-5 flex flex-col justify-center space-y-5 p-2">
-            <span className="text-cyan-300 font-exo text-xs font-bold uppercase tracking-[0.2em]">
-              {currentItem.badge}
-            </span>
-            <h3 className="text-2xl sm:text-3xl font-bold font-exo text-white leading-tight">
-              {currentItem.title}
-            </h3>
-            <p className="text-slate-200 text-sm sm:text-base font-light leading-relaxed">
-              {currentItem.description}
-            </p>
-
-            <div className="pt-2 flex flex-wrap gap-3">
-              <button
-                onClick={handleCtaClick}
-                className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-black uppercase tracking-widest text-xs px-7 py-4 rounded-xl transition-all shadow-lg flex items-center gap-2"
-              >
-                {currentItem.ctaText} <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Miniaturas / Selector rápido de diapositivas */}
-            <div className="pt-6 border-t border-white/10 flex items-center gap-3">
-              {SHOWCASE_MEDIA.map((item, idx) => (
-                <button
-                  key={item.id}
-                  onClick={() => setCurrentIndex(idx)}
-                  className={`h-2.5 rounded-full transition-all ${
-                    idx === currentIndex ? 'w-10 bg-amber-400' : 'w-2.5 bg-white/30 hover:bg-white/60'
-                  }`}
-                  aria-label={`Ver destacado ${idx + 1}`}
-                />
+                  {item.type === 'video' ? (
+                    <video
+                      src={item.src}
+                      poster={item.poster}
+                      muted
+                      loop
+                      playsInline
+                      autoPlay
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                    />
+                  ) : (
+                    <img
+                      src={item.src}
+                      alt={item.title}
+                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                      loading="lazy"
+                    />
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/25 to-transparent" />
+                  <span className="absolute top-3 left-3 bg-amber-400 text-slate-950 text-[9px] font-black uppercase tracking-widest px-2.5 py-1 -skew-x-12">
+                    <span className="inline-block skew-x-12">
+                      {item.type === 'video' ? `▶ ${item.tag}` : item.tag}
+                    </span>
+                  </span>
+                  <div className="absolute bottom-3 left-4 right-4">
+                    <h4 className="text-sm sm:text-base font-bold font-exo uppercase tracking-wide text-white group-hover:text-amber-300 transition-colors">
+                      {item.title}
+                    </h4>
+                  </div>
+                </div>
               ))}
-              <span className="ml-auto text-xs text-blue-200 font-mono">
-                {currentIndex + 1} / {SHOWCASE_MEDIA.length}
-              </span>
             </div>
-          </div>
+          ))}
         </div>
       </div>
 
       {/* Divisor diagonal inferior (Subida hacia Proceso de Compra) */}
-      <div className="absolute bottom-0 left-0 w-full overflow-hidden leading-none pointer-events-none z-20 -mb-[1px]">
+      <div className="absolute bottom-0 left-0 w-full overflow-hidden leading-none pointer-events-none z-30 -mb-[1px]">
         <svg viewBox="0 0 1440 90" preserveAspectRatio="none" className="w-full h-10 sm:h-14 md:h-20 block">
           <polygon points="0,90 1440,0 1440,90" className="fill-white dark:fill-slate-900 transition-colors duration-300" />
         </svg>
@@ -2106,7 +2591,7 @@ function CatalogSection({ categories, allProducts, onOpenCategory, onProductSear
   const [searchTerm, setSearchTerm] = useState('');
   const [suggestions, setSuggestions] = useState([]);
 
-const handleSearchChange = (e) => {
+  const handleSearchChange = (e) => {
     const value = e.target.value;
     setSearchTerm(value);
     if (value.trim().length >= 2) {
@@ -2126,6 +2611,8 @@ const handleSearchChange = (e) => {
 
   const handleSuggestionClick = (prod) => { setSearchTerm(''); setSuggestions([]); onProductSearchSelect(prod); };
 
+  const chamferClipLg = 'polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px)';
+
   return (
     <section id="catálogo" className="pt-20 pb-16 md:pt-28 md:pb-24 bg-white dark:bg-slate-900 relative z-20 transition-colors duration-300">
       {/* Divisor diagonal superior desde la barra de beneficios */}
@@ -2139,16 +2626,57 @@ const handleSearchChange = (e) => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center mb-10 md:mb-16 relative z-30">
         <RevealOnScroll>
           <PremiumTitle dark={true} className="text-2xl sm:text-3xl md:text-4xl font-bold mb-2 uppercase tracking-widest">Nuestro Catálogo</PremiumTitle>
-          <div className="w-12 h-1 bg-amber-400 mx-auto my-3 rounded-full"></div>
+          <div className="w-16 h-1.5 bg-amber-400 mx-auto my-3 -skew-x-12 rounded-sm"></div>
           <p className="text-sm md:text-lg text-slate-500 dark:text-slate-400 max-w-2xl mx-auto font-light">Buscá el repuesto para tu vehículo y agregalo al carrito de cotización.</p>
         </RevealOnScroll>
+
+        {/* BUSCADOR PRINCIPAL CON BORDES BISELADOS Y BOTÓN AMARILLO EN DIAGONAL (Estilo Imagen 1) */}
         <RevealOnScroll delay="md:delay-100">
-          <form className="w-full max-w-xl mx-auto mt-6 md:mt-10 mb-6 md:mb-8 relative group" onSubmit={e => e.preventDefault()}>
+          <form className="w-full max-w-2xl mx-auto mt-6 md:mt-10 mb-6 md:mb-8 relative group" onSubmit={e => e.preventDefault()}>
             <label htmlFor="search" className="sr-only">Buscar repuesto</label>
-            <div className="absolute inset-y-0 left-0 pl-4 md:pl-5 flex items-center pointer-events-none"><Search className="h-4 w-4 md:h-5 md:w-5 text-slate-400 dark:text-slate-500 group-focus-within:text-blue-600 transition-colors" aria-hidden="true" /></div>
-            <input id="search" type="search" value={searchTerm} onChange={handleSearchChange} className="block w-full pl-10 md:pl-12 pr-4 py-3 md:py-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full text-xs md:text-sm placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 shadow-sm hover:shadow-md transition-all text-slate-800 dark:text-white" placeholder="Buscar por modelo o código (Ej: Hilux, Corsa)..." autoComplete="off" />
+            <div
+              className="p-[2px] bg-slate-900 dark:bg-slate-500 group-focus-within:bg-amber-400 transition-colors shadow-lg"
+              style={{ clipPath: chamferClipLg }}
+            >
+              <div
+                className="flex items-stretch bg-white dark:bg-slate-800 overflow-hidden"
+                style={{ clipPath: chamferClipLg }}
+              >
+                <input
+                  id="search"
+                  type="text"
+                  value={searchTerm}
+                  onChange={handleSearchChange}
+                  className="block w-full pl-5 md:pl-6 pr-3 py-3.5 md:py-4 bg-transparent text-xs sm:text-sm md:text-base placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none text-slate-900 dark:text-white"
+                  placeholder="¿Qué estás buscando? (Ej: Hilux, Corsa, Óptica)..."
+                  autoComplete="off"
+                />
+                {searchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => { setSearchTerm(''); setSuggestions([]); }}
+                    className="px-2 text-slate-400 hover:text-slate-700 dark:hover:text-white flex items-center"
+                    aria-label="Limpiar"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (suggestions.length > 0) handleSuggestionClick(suggestions[0]);
+                  }}
+                  className="bg-amber-400 hover:bg-amber-300 text-slate-950 pl-8 pr-6 md:pl-10 md:pr-8 flex items-center justify-center transition-colors flex-shrink-0"
+                  style={{ clipPath: 'polygon(24% 0, 100% 0, 100% 100%, 0% 100%)' }}
+                  aria-label="Buscar repuesto"
+                >
+                  <Search className="h-5 w-5 md:h-6 md:w-6 stroke-[2.2]" />
+                </button>
+              </div>
+            </div>
+
             {suggestions.length > 0 && (
-              <div className="absolute top-full left-0 right-0 mt-3 bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-100 dark:border-slate-700 z-50 text-left overflow-hidden animate-in slide-in-from-top-2">
+              <div className="absolute top-full left-0 right-0 mt-3 bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 z-50 text-left overflow-hidden animate-in slide-in-from-top-2">
                 {suggestions.map((prod, idx) => (
                   <button key={idx} onClick={() => handleSuggestionClick(prod)} type="button" className="w-full text-left block px-5 py-4 hover:bg-blue-50 dark:hover:bg-slate-700 border-b border-slate-50 dark:border-slate-700 last:border-0 transition-colors focus:outline-none focus:bg-blue-50 dark:focus:bg-slate-700 group/sugg">
                     <div className="flex justify-between items-center mb-1">
@@ -2168,16 +2696,63 @@ const handleSearchChange = (e) => {
          <div className="text-center py-10"><Settings className="w-8 h-8 animate-spin mx-auto text-blue-500" /></div>
       ) : (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
+          {/* TARJETAS DE CATEGORÍAS CON IMAGEN REPRESENTATIVA DE FONDO (Estilo Imagen 5) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
             {categories.map((cat, idx) => (
-              <RevealOnScroll key={cat.id} delay={`delay-${(idx % 4) * 100}`}>
+              <RevealOnScroll key={cat.id} delay={`delay-${(idx % 3) * 100}`}>
                 <article 
                   onClick={() => onOpenCategory(cat)} 
-                  className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-xl hover:border-blue-300 dark:hover:border-blue-500 hover:-translate-y-2 transition-all duration-300 cursor-pointer group flex flex-col items-center text-center h-full"
+                  className="relative h-72 sm:h-80 md:h-[380px] rounded-xl overflow-hidden border border-slate-900/15 dark:border-blue-500/25 shadow-lg hover:shadow-[0_20px_45px_rgba(13,45,108,0.45)] hover:-translate-y-2 transition-all duration-500 cursor-pointer group flex items-center justify-center text-center bg-[#030917]"
                 >
-                  <div className="w-12 h-1.5 bg-blue-600 mb-4 group-hover:w-20 group-hover:bg-amber-400 transition-all rounded-full"></div>
-                  <h4 className="text-slate-900 dark:text-white font-bold text-sm md:text-lg uppercase tracking-widest font-exo mb-2 transition-colors">{cat.name}</h4>
-                  <p className="text-slate-500 dark:text-slate-400 text-xs font-light transition-colors line-clamp-2">{cat.description || 'Ver repuestos'}</p>
+                  {/* Imagen de fondo representativa de la categoría */}
+                  <img
+                    src={getCategoryVisualImage(cat)}
+                    alt={cat.name}
+                    loading="lazy"
+                    className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                  />
+
+                  {/* Filtro oscuro azulado profundo estilo estudio automotriz */}
+                  <div className="absolute inset-0 bg-gradient-to-b from-[#040e24]/80 via-[#071c47]/55 to-[#020714]/90 group-hover:via-[#071c47]/35 transition-all duration-500" />
+
+                  {/* Líneas geométricas azules neón en la esquina superior izquierda (como en la Imagen 5) */}
+                  <svg
+                    viewBox="0 0 200 200"
+                    className="absolute top-0 left-0 w-40 h-40 pointer-events-none opacity-85 group-hover:opacity-100 transition-opacity"
+                    aria-hidden="true"
+                  >
+                    <polyline
+                      points="115,0 35,95 100,175"
+                      fill="none"
+                      stroke="#3b82f6"
+                      strokeWidth="3"
+                      style={{ filter: 'drop-shadow(0 0 8px #3b82f6)' }}
+                    />
+                    <polyline
+                      points="140,0 60,95 125,175"
+                      fill="none"
+                      stroke="#60a5fa"
+                      strokeWidth="1.5"
+                      opacity="0.7"
+                    />
+                  </svg>
+
+                  {/* Contenido central de la categoría */}
+                  <div className="relative z-10 px-6 flex flex-col items-center justify-center">
+                    <h4 className="text-white font-black text-2xl sm:text-3xl uppercase tracking-wider font-exo drop-shadow-[0_4px_14px_rgba(0,0,0,0.95)] group-hover:scale-105 transition-transform duration-300">
+                      {cat.name}
+                    </h4>
+                    {cat.description && (
+                      <p className="text-blue-100/90 text-xs sm:text-sm font-light mt-2 max-w-xs drop-shadow">
+                        {cat.description}
+                      </p>
+                    )}
+                    <span className="mt-4 inline-flex items-center gap-1.5 bg-amber-400 text-slate-950 text-[10px] font-black uppercase tracking-widest px-4 py-1.5 -skew-x-12 opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 shadow-md">
+                      <span className="inline-block skew-x-12 flex items-center gap-1">
+                        Ver productos <ChevronRight className="w-3.5 h-3.5" />
+                      </span>
+                    </span>
+                  </div>
                 </article>
               </RevealOnScroll>
             ))}
@@ -2457,13 +3032,19 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
           </div>
         ) : (
           <>
-            <div className="bg-slate-900 rounded-2xl p-6 md:p-8 text-white mb-8 shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative overflow-hidden">
+            <div className="bg-slate-900 rounded-2xl p-6 md:p-8 text-white mb-8 shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative overflow-hidden border border-blue-500/30">
+              <img
+                src={getCategoryVisualImage(category)}
+                alt=""
+                className="absolute inset-0 w-full h-full object-cover opacity-35"
+              />
+              <div className="absolute inset-0 bg-gradient-to-r from-[#040d21]/95 via-[#07193e]/80 to-[#040d21]/75" />
               <div className="relative z-10">
-                <span className="text-blue-400 font-bold tracking-widest uppercase text-[10px] mb-1 block">Línea Completa</span>
+                <span className="text-amber-400 font-bold tracking-widest uppercase text-[10px] mb-1 block">Línea Completa</span>
                 <h1 className="text-2xl md:text-4xl font-bold font-michroma uppercase tracking-wide">{category.name}</h1>
               </div>
               <div className="bg-white/10 px-4 py-2 rounded-lg backdrop-blur-sm border border-white/10 text-right relative z-10 flex-shrink-0">
-                <span className="text-xl font-bold font-exo text-blue-400 block leading-none">{filteredProducts.length}</span>
+                <span className="text-xl font-bold font-exo text-amber-400 block leading-none">{filteredProducts.length}</span>
                 <span className="text-[9px] uppercase tracking-widest text-slate-300">Productos</span>
               </div>
             </div>
@@ -2494,25 +3075,41 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
               </div>
 
               <div className="flex-1 w-full">
-                {/* BARRA DE BÚSQUEDA + SELECTOR DE ORDENAMIENTO */}
+                {/* BARRA DE BÚSQUEDA BISELADA + SELECTOR DE ORDENAMIENTO */}
                 <div className="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm mb-6 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                  <div className="relative flex-1">
-                    <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      value={categorySearch}
-                      onChange={(e) => setCategorySearch(e.target.value)}
-                      placeholder={`Buscar modelo, auto o código en ${category.name} (ej: Gol, Corsa)...`}
-                      className="w-full pl-10 pr-9 py-2.5 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500 transition-colors"
-                    />
-                    {categorySearch && (
-                      <button
-                        onClick={() => setCategorySearch('')}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-white"
+                  <div className="relative flex-1 group">
+                    <div
+                      className="p-[1.5px] bg-slate-900 dark:bg-slate-600 group-focus-within:bg-amber-400 transition-colors"
+                      style={{ clipPath: 'polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px)' }}
+                    >
+                      <div
+                        className="flex items-stretch bg-white dark:bg-slate-900 overflow-hidden"
+                        style={{ clipPath: 'polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px)' }}
                       >
-                        <X className="w-4 h-4" />
-                      </button>
-                    )}
+                        <input
+                          type="text"
+                          value={categorySearch}
+                          onChange={(e) => setCategorySearch(e.target.value)}
+                          placeholder={`¿Qué estás buscando en ${category.name}? (ej: Gol, Corsa)...`}
+                          className="w-full pl-4 pr-2 py-2.5 bg-transparent text-xs sm:text-sm text-slate-900 dark:text-white outline-none"
+                        />
+                        {categorySearch && (
+                          <button
+                            type="button"
+                            onClick={() => setCategorySearch('')}
+                            className="px-2 text-slate-400 hover:text-slate-600 dark:hover:text-white flex items-center"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
+                        <div
+                          className="bg-amber-400 text-slate-950 pl-6 pr-4 flex items-center justify-center flex-shrink-0"
+                          style={{ clipPath: 'polygon(24% 0, 100% 0, 100% 100%, 0% 100%)' }}
+                        >
+                          <Search className="w-4 h-4 stroke-[2.2]" />
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                   {/* SELECTOR DE ORDENAMIENTO PARA EL CLIENTE */}
