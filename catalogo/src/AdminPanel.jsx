@@ -11,6 +11,117 @@ import { supabase } from './supabase';
 
 const ADMIN_EMAILS = ['admin@dapa.com'];
 
+// =======================================================================
+// NORMALIZACIÓN DE CATEGORÍAS (evita duplicados al importar listas de distintos proveedores)
+// =======================================================================
+const stripAccentsLower = (str) =>
+  String(str || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const CATCH_ALL_CATEGORY = 'Accesorios y Varios';
+
+// Cada palabra clave se busca al inicio de una palabra (así "led" no coincide con "toledo" ni "aro" con "faro").
+const CANONICAL_CATEGORY_RULES = [
+  ['Cerraduras y Cerrajería', ['cerradur', 'cerraj', 'cilindro', 'tambor', 'reten de puerta', 'traba']],
+  ['Manijas y Tiradores', ['manij', 'tirador', 'abrepuerta', 'levanta manija']],
+  ['Alzacristales y Levantavidrios', ['alzacristal', 'levantavidrio', 'levantacristal', 'maquina de vidrio', 'maquina levanta', 'coliza']],
+  ['Espejos y Retrovisores', ['espej', 'retrovisor', 'cacha', 'vidrio espejo']],
+  ['Iluminación, Ópticas y Faros', ['optic', 'faro', 'farol', 'lampar', 'led', 'giro', 'buscahuella', 'auxiliar', 'plafon']],
+  ['Paragolpes, Parrillas y Carrocería', ['paragolp', 'parachoque', 'parrill', 'guardabarro', 'capot', 'frente', 'alma', 'moldura', 'spoiler', 'babero']],
+  ['Burletes y Gomas', ['burlet', 'goma', 'fuelle', 'tope']],
+  ['Bisagras, Capot y Baúl', ['bisagr', 'amortiguador de baul', 'amortiguador de porton', 'resorte a gas', 'cable capot']],
+  ['Limpiaparabrisas y Lavaparabrisas', ['escobill', 'limpiaparabrisa', 'sapito', 'brazo limpia', 'lavaparabrisa']],
+  ['Insignias, Emblemas y Tazas', ['insigni', 'emblem', 'logo', 'taza', 'centro de llanta', 'acrilico']],
+  ['Refrigeración y Climatización', ['radiador', 'electro', 'termostat', 'bomba de agua', 'calefac', 'manguera', 'bidon', 'deposito']],
+  ['Motor y Distribución', ['motor', 'junta', 'correa', 'tensor', 'distribuc', 'filtro', 'piston', 'aro', 'valvul']],
+  ['Suspensión y Tren Delantero', ['amortiguador', 'espiral', 'rotul', 'extremo', 'bielet', 'buje', 'cazolet', 'ruleman', 'rodamiento', 'homocinetic', 'semieje']],
+  ['Frenos y Embrague', ['freno', 'pastill', 'disco', 'campana', 'zapata', 'embrague', 'crapodina']],
+  ['Electricidad, Encendido e Inyección', ['bobina', 'bujia', 'sensor', 'bulbo', 'tecla', 'interruptor', 'llave de luz', 'comando', 'destellador', 'relay', 'rele', 'arranque', 'alternador', 'fusibl']],
+  ['Interior y Tapicería', ['tapiz', 'alfombr', 'pomo', 'bocha', 'cofia', 'pedalera', 'parasol', 'cenicero', 'consola', 'tablero', 'guantera']],
+  [CATCH_ALL_CATEGORY, ['accesorio', 'cinta', 'adhesiv', 'quimic', 'lubricant', 'aditiv', 'herramient', 'bulon', 'grapa', 'clip', 'fijacion']]
+].map(([name, keywords], ruleIndex) => ({
+  name,
+  ruleIndex,
+  regexes: keywords.map(k => new RegExp('(?:^|[^a-z0-9])' + k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+}));
+
+const GENERIC_CATEGORY_KEYS = new Set([
+  '', 'general', 'varios', 'varias', 'vario', 'otros', 'otras', 'otro', 'multimarca', 'sin categoria', 'sin clasificar', 's/c', '-'
+]);
+
+// Devuelve la regla canónica cuya palabra clave aparece primero en el texto (ante empate, gana el orden de la lista).
+const matchCanonicalCategory = (normalizedText) => {
+  if (!normalizedText) return null;
+  let best = null;
+  for (const rule of CANONICAL_CATEGORY_RULES) {
+    for (const rx of rule.regexes) {
+      const m = rx.exec(normalizedText);
+      if (!m) continue;
+      const pos = m.index;
+      if (!best || pos < best.pos || (pos === best.pos && rule.ruleIndex < best.rule.ruleIndex)) {
+        best = { rule, pos };
+      }
+    }
+  }
+  return best ? best.rule.name : null;
+};
+
+const stripPluralS = (w) => (w.length > 3 && w.endsWith('s') ? w.slice(0, -1) : w);
+const stripPluralEs = (w) => (w.length > 4 && w.endsWith('es') ? w.slice(0, -2) : w);
+
+const sameWordIgnoringPlural = (a, b) =>
+  a === b ||
+  stripPluralS(a) === b || stripPluralEs(a) === b ||
+  a === stripPluralS(b) || a === stripPluralEs(b) ||
+  stripPluralS(a) === stripPluralS(b);
+
+const samePhraseIgnoringPlural = (a, b) => {
+  const wa = a.split(' ');
+  const wb = b.split(' ');
+  return wa.length === wb.length && wa.every((w, i) => sameWordIgnoringPlural(w, wb[i]));
+};
+
+/**
+ * Unifica el nombre de una categoría en una de las categorías canónicas.
+ * 1) Evalúa rawCategory; si está vacía/genérica ("General", "Varios"...) evalúa productName.
+ * 2) Si no coincide con ninguna regla devuelve el nombre limpio (primera letra en mayúscula),
+ *    reutilizando una categoría ya existente (knownNames) si solo difiere en tildes/mayúsculas/plural.
+ * knownNames es opcional: lista de nombres de categorías existentes para evitar duplicados singular/plural.
+ */
+function normalizeCategoryName(rawCategory = '', productName = '', knownNames = []) {
+  const rawKey = stripAccentsLower(rawCategory);
+  const nameKey = stripAccentsLower(productName);
+  const isGeneric = GENERIC_CATEGORY_KEYS.has(rawKey);
+
+  let canonical = null;
+  if (!isGeneric) {
+    canonical = matchCanonicalCategory(rawKey);
+    // Si la categoría original solo cae en el cajón de "Accesorios y Varios", el nombre del producto puede ser más específico.
+    if (canonical === CATCH_ALL_CATEGORY) {
+      canonical = matchCanonicalCategory(nameKey) || CATCH_ALL_CATEGORY;
+    }
+  } else {
+    canonical = matchCanonicalCategory(nameKey);
+  }
+  if (canonical) return canonical;
+
+  // Sin regla: categoría vacía/genérica va al cajón general; el resto conserva su nombre limpio.
+  if (isGeneric) return CATCH_ALL_CATEGORY;
+
+  const cleaned = String(rawCategory).replace(/\s+/g, ' ').trim();
+  const display = cleaned.charAt(0).toUpperCase() + cleaned.slice(1).toLowerCase();
+  const displayKey = stripAccentsLower(display);
+  const known = (knownNames || []).find(n => {
+    const k = stripAccentsLower(n);
+    return k === displayKey || samePhraseIgnoringPlural(k, displayKey);
+  });
+  return known || display;
+}
+
 // Cargador dinámico de SheetJS (permite leer .xlsx y .xls sin instalar paquetes extra)
 const loadXlsxLibrary = () => {
   return new Promise((resolve, reject) => {
@@ -66,6 +177,9 @@ export default function AdminPanel() {
   const [productToDelete, setProductToDelete] = useState(null);
   const [orderToDelete, setOrderToDelete] = useState(null);
   const [confirmClearCompleted, setConfirmClearCompleted] = useState(false);
+  const [confirmUnify, setConfirmUnify] = useState(false);
+  const [isUnifying, setIsUnifying] = useState(false);
+  const [unifyProgress, setUnifyProgress] = useState('');
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [notification, setNotification] = useState(null);
@@ -544,9 +658,25 @@ export default function AdminPanel() {
       const pct = parseFloat(importMarkupPct) || 0;
 
       // 1. Crear categorías nuevas si no existen (Ópticas, Faros, Paragolpes, Chapas, etc.)
-      const catMap = new Map(categories.map(c => [normalizeKey(c.name), c.id]));
-      const uniqueNewCats = [...new Set(excelPreview.map(r => r.categoryName))]
-        .filter(name => name && !catMap.has(normalizeKey(name)));
+      // Categorías existentes leídas directamente de Supabase (se comparan sin tildes ni mayúsculas)
+      const { data: freshCats } = await supabase.from('categories').select('id, name');
+      const existingCats = freshCats && freshCats.length > 0 ? freshCats : categories;
+      const catMap = new Map(existingCats.map(c => [normalizeKey(c.name), c.id]));
+      const knownCatNames = existingCats.map(c => c.name);
+
+      // Unifica la categoría de cada fila en una categoría canónica (nunca más duplicados entre proveedores)
+      const normalizedRows = excelPreview.map(r => {
+        const canonicalName = normalizeCategoryName(r.categoryName, r.name, knownCatNames);
+        if (!knownCatNames.some(n => normalizeKey(n) === normalizeKey(canonicalName))) knownCatNames.push(canonicalName);
+        return { ...r, categoryName: canonicalName };
+      });
+
+      const newCatsByKey = new Map();
+      normalizedRows.forEach(r => {
+        const key = normalizeKey(r.categoryName);
+        if (r.categoryName && !catMap.has(key) && !newCatsByKey.has(key)) newCatsByKey.set(key, r.categoryName);
+      });
+      const uniqueNewCats = [...newCatsByKey.values()];
 
       if (uniqueNewCats.length > 0) {
         const { data: insertedCats, error: catErr } = await supabase
@@ -584,7 +714,7 @@ export default function AdminPanel() {
       const toUpdate = [];
       const seenSkusInBatch = new Set();
 
-      excelPreview.forEach(item => {
+      normalizedRows.forEach(item => {
         const finalSku = `${skuPrefix}${item.sku_code}`.trim();
         const normKeyWithPrefix = normalizeSkuCode(finalSku);
         const normKeyRaw = normalizeSkuCode(item.sku_code);
@@ -1227,6 +1357,127 @@ export default function AdminPanel() {
     setIsSubmitting(false);
   };
 
+  // =======================================================================
+  // UNIFICAR CATEGORÍAS: reasigna productos a categorías canónicas por lotes y borra las huérfanas
+  // =======================================================================
+  const handleUnificarCategorias = async () => {
+    if (isUnifying) return;
+    setConfirmUnify(false);
+    setIsUnifying(true);
+    try {
+      // a) Leer todas las categorías y productos actuales
+      setUnifyProgress('Leyendo categorías y productos...');
+      const { data: allCats, error: catsErr } = await supabase.from('categories').select('id, name');
+      if (catsErr) throw catsErr;
+
+      const allProds = [];
+      let from = 0;
+      const step = 1000;
+      while (true) {
+        const { data: batch, error: prodErr } = await supabase
+          .from('products')
+          .select('id, name, category_id')
+          .order('id', { ascending: true })
+          .range(from, from + step - 1);
+        if (prodErr) throw prodErr;
+        if (!batch || batch.length === 0) break;
+        allProds.push(...batch);
+        setUnifyProgress(`Leyendo productos: ${allProds.length.toLocaleString('es-AR')}...`);
+        if (batch.length < step) break;
+        from += step;
+      }
+
+      if (!allCats || allCats.length === 0 || allProds.length === 0) {
+        showNotification('No hay categorías o productos para unificar', 'error');
+        return;
+      }
+
+      // b) Categoría canónica de cada producto
+      setUnifyProgress('Calculando categorías canónicas...');
+      const catNameById = new Map(allCats.map(c => [c.id, c.name]));
+      const knownNames = allCats.map(c => c.name);
+      const targetNames = new Map(); // key normalizada -> nombre final
+      const assignments = [];
+      allProds.forEach(p => {
+        const currentName = catNameById.get(p.category_id) || '';
+        const target = normalizeCategoryName(currentName, p.name, knownNames);
+        const key = normalizeKey(target);
+        if (!targetNames.has(key)) {
+          targetNames.set(key, target);
+          if (!knownNames.some(n => normalizeKey(n) === key)) knownNames.push(target);
+        }
+        assignments.push({ id: p.id, currentCatId: p.category_id, key });
+      });
+
+      // c) Crear las categorías canónicas que todavía no existen
+      const catIdByKey = new Map(allCats.map(c => [normalizeKey(c.name), c.id]));
+      const toCreate = [...targetNames.entries()]
+        .filter(([key]) => !catIdByKey.has(key))
+        .map(([, name]) => ({ name, is_active: true }));
+
+      if (toCreate.length > 0) {
+        setUnifyProgress(`Creando ${toCreate.length} categorías canónicas...`);
+        const { data: inserted, error: insErr } = await supabase.from('categories').insert(toCreate).select('id, name');
+        if (insErr) throw insErr;
+        (inserted || []).forEach(c => catIdByKey.set(normalizeKey(c.name), c.id));
+      }
+
+      // d) Agrupar por categoría destino y actualizar por lotes
+      const groups = new Map(); // targetCategoryId -> [productIds a mover]
+      const usedCatIds = new Set();
+      assignments.forEach(a => {
+        const targetId = catIdByKey.get(a.key);
+        usedCatIds.add(targetId);
+        if (a.currentCatId !== targetId) {
+          if (!groups.has(targetId)) groups.set(targetId, []);
+          groups.get(targetId).push(a.id);
+        }
+      });
+
+      const totalToMove = [...groups.values()].reduce((acc, ids) => acc + ids.length, 0);
+      const batchSize = 200;
+      let moved = 0;
+      for (const [targetCategoryId, ids] of groups.entries()) {
+        for (let i = 0; i < ids.length; i += batchSize) {
+          const productIdsBatch = ids.slice(i, i + batchSize);
+          const { error: updErr } = await supabase
+            .from('products')
+            .update({ category_id: targetCategoryId })
+            .in('id', productIdsBatch);
+          if (updErr) throw updErr;
+          moved += productIdsBatch.length;
+          setUnifyProgress(`Reasignando productos: ${moved.toLocaleString('es-AR')} de ${totalToMove.toLocaleString('es-AR')}...`);
+        }
+      }
+
+      // e) Eliminar las categorías que quedaron sin productos
+      const orphanIds = allCats.map(c => c.id).filter(id => !usedCatIds.has(id));
+      let deleted = 0;
+      for (let i = 0; i < orphanIds.length; i += 100) {
+        setUnifyProgress(`Eliminando categorías vacías: ${deleted} de ${orphanIds.length}...`);
+        const idsBatch = orphanIds.slice(i, i + 100);
+        const { error: delErr } = await supabase.from('categories').delete().in('id', idsBatch);
+        if (delErr) throw delErr;
+        deleted += idsBatch.length;
+      }
+
+      // f) Recargar datos
+      setUnifyProgress('Actualizando panel...');
+      await fetchData();
+      showNotification(
+        `Categorías unificadas: ${totalToMove.toLocaleString('es-AR')} productos reasignados, ${toCreate.length} creadas y ${deleted} eliminadas.`,
+        'success'
+      );
+    } catch (err) {
+      console.error('Error al unificar categorías:', err);
+      showNotification('Error al unificar categorías: ' + (err.message || err), 'error');
+      fetchData();
+    } finally {
+      setIsUnifying(false);
+      setUnifyProgress('');
+    }
+  };
+
   const handleAddBrand = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -1656,6 +1907,14 @@ export default function AdminPanel() {
                   <div className="flex flex-wrap gap-2">
                     <button onClick={() => setIsCategoryModalOpen(true)} className="bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-3 py-2 rounded-none font-bold uppercase tracking-widest text-[11px] flex items-center gap-1.5 transition-colors focus:outline-none">
                       <ListPlus className="w-4 h-4" /> + Categoría
+                    </button>
+                    <button
+                      onClick={() => setConfirmUnify(true)}
+                      disabled={isUnifying}
+                      title="Agrupa las categorías repetidas o similares en categorías principales"
+                      className="bg-amber-500 hover:bg-amber-400 text-slate-950 px-3 py-2 rounded-none font-bold uppercase tracking-widest text-[11px] flex items-center gap-1.5 shadow-lg shadow-amber-500/20 transition-colors focus:outline-none disabled:opacity-60"
+                    >
+                      <RefreshCw className={`w-4 h-4 ${isUnifying ? 'animate-spin' : ''}`} /> Unificar Categorías
                     </button>
                     <button onClick={() => setIsBrandModalOpen(true)} className="bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-3 py-2 rounded-none font-bold uppercase tracking-widest text-[11px] flex items-center gap-1.5 transition-colors focus:outline-none">
                       <Tag className="w-4 h-4" /> + Marca
@@ -2755,7 +3014,7 @@ export default function AdminPanel() {
                             </td>
                             <td className="p-2.5 font-mono font-bold text-slate-700 dark:text-slate-300">{item.sku_code}</td>
                             <td className="p-2.5 text-slate-900 dark:text-white truncate max-w-[220px]">{item.name}</td>
-                            <td className="p-2.5 text-slate-500">{item.categoryName} / {item.brandName}</td>
+                            <td className="p-2.5 text-slate-500">{normalizeCategoryName(item.categoryName, item.name)} / {item.brandName}</td>
                             <td className="p-2.5 text-right font-bold text-slate-900 dark:text-white">${item.price.toLocaleString('es-AR')}</td>
                             <td className="p-2.5 text-center font-bold">{item.stock}</td>
                           </tr>
@@ -2895,6 +3154,53 @@ export default function AdminPanel() {
                 {isSubmitting ? 'Limpiando...' : 'Sí, Limpiar Todo'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CONFIRMACIÓN PARA UNIFICAR CATEGORÍAS */}
+      {confirmUnify && (
+        <div className="fixed inset-0 bg-slate-900/70 z-[220] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-800 rounded-none shadow-2xl w-full max-w-md p-6 border border-slate-200 dark:border-slate-700 animate-in zoom-in-95 duration-200 text-center">
+            <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-none flex items-center justify-center mx-auto mb-4">
+              <RefreshCw className="w-8 h-8" />
+            </div>
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white uppercase tracking-widest mb-2">
+              ¿Unificar Categorías?
+            </h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
+              Se agruparán las <strong className="text-slate-800 dark:text-white">{categories.length} categorías</strong> actuales en categorías principales (Cerraduras, Espejos, Frenos, etc.), se reasignarán los productos y se eliminarán las categorías que queden vacías. Esta acción no se puede deshacer.
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setConfirmUnify(false)}
+                className="flex-1 py-3 rounded-none font-bold uppercase tracking-widest text-xs bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleUnificarCategorias}
+                className="flex-1 py-3 rounded-none font-bold uppercase tracking-widest text-xs bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/30 transition-colors"
+              >
+                Sí, Unificar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PROGRESO DE UNIFICACIÓN DE CATEGORÍAS */}
+      {isUnifying && (
+        <div className="fixed inset-0 bg-slate-900/80 z-[230] flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 rounded-none shadow-2xl w-full max-w-sm p-6 border border-slate-200 dark:border-slate-700 text-center">
+            <RefreshCw className="w-10 h-10 text-blue-600 dark:text-blue-400 mx-auto mb-4 animate-spin" />
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-widest mb-2">
+              Unificando categorías
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">{unifyProgress || 'Procesando...'}</p>
+            <p className="text-[11px] text-slate-400 mt-3">No cierres esta pestaña hasta que termine.</p>
           </div>
         </div>
       )}
