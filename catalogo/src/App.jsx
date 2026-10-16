@@ -1820,7 +1820,7 @@ function TrustBadges() {
   const trackItems = [...badges, ...badges];
 
   return (
-    <div className="bg-[#0b1120] text-white py-3.5 shadow-md relative z-20 border-b border-slate-800 overflow-hidden pause-on-hover select-none">
+    <div className="bg-[#0b1120] text-white py-3.5 relative z-20 overflow-hidden pause-on-hover select-none">
       <div className="marquee-container animate-marquee-left">
         {[0, 1].map((copyIndex) => (
           <div
@@ -1955,9 +1955,30 @@ function MediaShowcaseSection({ navigateTo }) {
 
   return (
     <section
-      className="py-16 md:py-24 relative z-20 text-white overflow-hidden shadow-inner"
+      className="py-28 md:py-36 relative z-20 text-white overflow-hidden"
       style={{ background: 'linear-gradient(135deg, #0a2252 0%, #144299 50%, #091d47 100%)' }}
     >
+      {/* Divisor diagonal superior (Subida de izquierda a derecha) */}
+      <div className="absolute top-0 left-0 w-full overflow-hidden leading-none pointer-events-none z-20 -mt-[1px]">
+        <svg viewBox="0 0 1440 90" preserveAspectRatio="none" className="w-full h-10 sm:h-14 md:h-20 block">
+          <polygon points="0,0 1440,0 0,90" className="fill-white dark:fill-slate-900 transition-colors duration-300" />
+        </svg>
+      </div>
+
+      {/* Franjas diagonales y triángulos geométricos decorativos (Estilo competición/autopartes) */}
+      <div className="hidden lg:block absolute inset-y-0 right-16 w-28 bg-white/[0.03] -skew-x-12 pointer-events-none"></div>
+      <div className="hidden lg:block absolute inset-y-0 right-52 w-12 bg-white/[0.02] -skew-x-12 pointer-events-none"></div>
+      <div
+        className="hidden sm:block absolute top-14 md:top-20 right-6 md:right-16 w-10 h-10 md:w-14 md:h-14 bg-amber-400 pointer-events-none z-10 shadow-lg"
+        style={{ clipPath: 'polygon(0 0, 100% 0, 100% 100%)' }}
+        aria-hidden="true"
+      ></div>
+      <div
+        className="hidden sm:block absolute bottom-10 md:bottom-16 left-0 w-24 md:w-36 h-12 md:h-16 bg-amber-400 pointer-events-none z-10"
+        style={{ clipPath: 'polygon(0 0, 100% 100%, 0 100%)' }}
+        aria-hidden="true"
+      ></div>
+
       {/* Brillos decorativos de fondo */}
       <div className="absolute -top-24 -left-24 w-96 h-96 rounded-full bg-blue-400/10 blur-3xl pointer-events-none"></div>
       <div className="absolute -bottom-24 -right-24 w-96 h-96 rounded-full bg-cyan-400/10 blur-3xl pointer-events-none"></div>
@@ -1965,8 +1986,8 @@ function MediaShowcaseSection({ navigateTo }) {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         <div className="flex flex-col md:flex-row md:items-end justify-between mb-10 gap-4">
           <div>
-            <span className="inline-block bg-amber-400 text-slate-950 text-[10px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-full mb-3">
-              Destacados D.A.P.A
+            <span className="inline-block border border-amber-400 text-amber-400 text-[10px] font-black uppercase tracking-[0.2em] px-3.5 py-1 -skew-x-12 mb-3">
+              <span className="inline-block skew-x-12">Destacados D.A.P.A</span>
             </span>
             <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold font-exo uppercase tracking-wider text-white">
               Productos y Novedades en Acción
@@ -2070,6 +2091,13 @@ function MediaShowcaseSection({ navigateTo }) {
           </div>
         </div>
       </div>
+
+      {/* Divisor diagonal inferior (Subida hacia Proceso de Compra) */}
+      <div className="absolute bottom-0 left-0 w-full overflow-hidden leading-none pointer-events-none z-20 -mb-[1px]">
+        <svg viewBox="0 0 1440 90" preserveAspectRatio="none" className="w-full h-10 sm:h-14 md:h-20 block">
+          <polygon points="0,90 1440,0 1440,90" className="fill-white dark:fill-slate-900 transition-colors duration-300" />
+        </svg>
+      </div>
     </section>
   );
 }
@@ -2099,10 +2127,19 @@ const handleSearchChange = (e) => {
   const handleSuggestionClick = (prod) => { setSearchTerm(''); setSuggestions([]); onProductSearchSelect(prod); };
 
   return (
-    <section id="catálogo" className="py-16 md:py-24 bg-white dark:bg-slate-900 relative z-20 transition-colors duration-300">
+    <section id="catálogo" className="pt-20 pb-16 md:pt-28 md:pb-24 bg-white dark:bg-slate-900 relative z-20 transition-colors duration-300">
+      {/* Divisor diagonal superior desde la barra de beneficios */}
+      <div className="absolute top-0 left-0 w-full overflow-hidden leading-none pointer-events-none z-10 -mt-[1px]">
+        <svg viewBox="0 0 1440 70" preserveAspectRatio="none" className="w-full h-7 sm:h-10 md:h-14 block">
+          <polygon points="0,0 1440,0 0,70" className="fill-[#0b1120]" />
+          <polygon points="0,62 1440,0 0,70" className="fill-blue-600/80" />
+        </svg>
+      </div>
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center mb-10 md:mb-16 relative z-30">
         <RevealOnScroll>
-          <PremiumTitle dark={true} className="text-2xl sm:text-3xl md:text-4xl font-bold mb-2 md:mb-4 uppercase tracking-widest">Nuestro Catálogo</PremiumTitle>
+          <PremiumTitle dark={true} className="text-2xl sm:text-3xl md:text-4xl font-bold mb-2 uppercase tracking-widest">Nuestro Catálogo</PremiumTitle>
+          <div className="w-12 h-1 bg-amber-400 mx-auto my-3 rounded-full"></div>
           <p className="text-sm md:text-lg text-slate-500 dark:text-slate-400 max-w-2xl mx-auto font-light">Buscá el repuesto para tu vehículo y agregalo al carrito de cotización.</p>
         </RevealOnScroll>
         <RevealOnScroll delay="md:delay-100">
@@ -2663,7 +2700,8 @@ function ProcessSection({ setTutorialOpen }) {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         <RevealOnScroll>
           <div className="text-center mb-12 md:mb-20">
-            <PremiumTitle dark={true} className="text-2xl sm:text-3xl md:text-4xl font-bold mb-2 md:mb-4 uppercase tracking-widest">Proceso de Compra</PremiumTitle>
+            <PremiumTitle dark={true} className="text-2xl sm:text-3xl md:text-4xl font-bold mb-2 uppercase tracking-widest">Proceso de Compra</PremiumTitle>
+            <div className="w-12 h-1 bg-amber-400 mx-auto my-3 rounded-full"></div>
             <p className="text-sm md:text-lg text-slate-500 dark:text-slate-400 font-light mb-6">Cotización inteligente desde la web. Envíos a todo el país.</p>
             <button onClick={() => setTutorialOpen(true)} className="inline-flex items-center gap-2 px-6 py-3 bg-blue-50 dark:bg-slate-800 text-blue-600 dark:text-blue-400 font-bold uppercase tracking-widest text-xs md:text-sm rounded-full border border-blue-200 dark:border-slate-700 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-500 dark:hover:text-white hover:border-transparent transition-all shadow-sm hover:shadow-lg focus:outline-none group">
               <HelpCircle className="w-5 h-5 group-hover:rotate-12 transition-transform" /> Ver Instructivo Paso a Paso
@@ -2845,13 +2883,14 @@ function ContactSection() {
   };
 
   return (
-    <section id="contacto" className="py-16 md:py-24 bg-white dark:bg-slate-900 relative z-10 border-t border-slate-200 dark:border-slate-800 transition-colors duration-300">
+    <section id="contacto" className="py-16 md:py-24 bg-white dark:bg-slate-900 relative z-10 transition-colors duration-300">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-20">
         <RevealOnScroll>
           <div className="text-center mb-12 md:mb-20">
-            <PremiumTitle dark={true} className="text-2xl sm:text-3xl md:text-4xl font-bold mb-2 md:mb-4 uppercase tracking-widest">
+            <PremiumTitle dark={true} className="text-2xl sm:text-3xl md:text-4xl font-bold mb-2 uppercase tracking-widest">
               Contactanos! 
             </PremiumTitle>
+            <div className="w-12 h-1 bg-amber-400 mx-auto my-3 rounded-full"></div>
             <p className="text-sm md:text-lg text-slate-500 dark:text-slate-400 font-light">
               Comunicate por nuestros diferentes medios de comunicación o acercate hasta nuestro local.
             </p>
@@ -2997,8 +3036,19 @@ function ContactSection() {
 
 function Footer({ navigateTo }) {
   return (
-    <footer className="bg-[#0b1120] text-slate-400 py-16 border-t border-slate-800 relative z-10">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 md:grid-cols-3 gap-12 items-start">
+    <footer className="bg-[#0b1120] text-slate-400 pt-24 pb-16 md:pt-32 md:pb-16 relative z-10 overflow-hidden">
+      {/* Divisor diagonal superior desde la sección anterior */}
+      <div className="absolute top-0 left-0 w-full overflow-hidden leading-none pointer-events-none z-20 -mt-[1px]">
+        <svg viewBox="0 0 1440 80" preserveAspectRatio="none" className="w-full h-10 sm:h-14 md:h-20 block">
+          <polygon points="0,0 1440,0 0,72" className="fill-white dark:fill-slate-900 transition-colors duration-300" />
+          <polygon points="0,70 1440,0 1440,8 0,78" className="fill-blue-600/80" />
+        </svg>
+      </div>
+
+      {/* Detalle geométrico decorativo en esquina superior derecha */}
+      <div className="hidden md:block absolute top-8 right-8 w-8 h-8 bg-amber-400/90 pointer-events-none z-20" style={{ clipPath: 'polygon(100% 0, 0 20%, 75% 100%)' }}></div>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 md:grid-cols-3 gap-12 items-start relative z-10">
         <div className="text-center md:text-left flex flex-col items-center md:items-start">
           <span className="font-bold text-3xl tracking-tighter text-white font-michroma block mb-4">D.A.P.A</span>
           <p className="text-sm font-light text-slate-400 mb-6 max-w-xs mx-auto md:mx-0">El catálogo más completo de autopartes en Arrecifes. Envíos garantizados a todo el país.</p>
@@ -3026,7 +3076,7 @@ function Footer({ navigateTo }) {
           </div>
         </div>
       </div>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-16 pt-8 border-t border-slate-800/50 text-center text-xs font-light text-slate-500 flex flex-col md:flex-row justify-between items-center gap-4">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-16 pt-8 border-t border-slate-800/50 text-center text-xs font-light text-slate-500 flex flex-col md:flex-row justify-between items-center gap-4 relative z-10">
         <p>© {new Date().getFullYear()} D.A.P.A Repuestos Molle. Todos los derechos reservados.</p>
         <p>Arrecifes, Buenos Aires, Argentina</p>
         <p>autopartesmolle@gmail.com</p>
@@ -3037,7 +3087,7 @@ function Footer({ navigateTo }) {
 
 function AboutSection() {
   return (
-    <section className="pt-28 pb-16 md:pt-36 md:pb-24 relative z-10 bg-white dark:bg-slate-900 transition-colors duration-300">
+    <section className="pt-28 pb-16 md:pt-36 md:pb-24 relative z-10 bg-slate-50 dark:bg-slate-950 transition-colors duration-300 overflow-hidden">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 md:gap-16 items-center">
           <RevealOnScroll className="order-2 lg:order-1">
@@ -3069,6 +3119,7 @@ function AboutSection() {
             <div className="mb-6 md:mb-8 text-center lg:text-left">
               <span className="text-blue-600 dark:text-blue-400 font-bold tracking-widest uppercase text-xs mb-2 block font-exo transition-colors">Historia y Respaldo</span>
               <PremiumTitle dark={true} className="text-3xl md:text-4xl lg:text-5xl font-bold font-exo uppercase tracking-tight">Quiénes Somos</PremiumTitle>
+              <div className="w-16 h-1.5 bg-amber-400 mx-auto lg:mx-0 mt-3 -skew-x-12 rounded-sm"></div>
             </div>
             <p className="text-base md:text-lg text-slate-600 dark:text-slate-400 mb-4 md:mb-6 leading-relaxed font-light text-center lg:text-left transition-colors">Ubicados en el corazón de Arrecifes, <strong className="text-slate-900 dark:text-white font-semibold">D.A.P.A Repuestos Molle</strong> nació con una premisa clara: brindar soluciones rápidas y efectivas a cada conductor y taller mecánico que nos elige.</p>
             <p className="text-base md:text-lg text-slate-600 dark:text-slate-400 mb-8 md:mb-10 leading-relaxed font-light text-center lg:text-left transition-colors">Nos especializamos en la comercialización de autopartes y accesorios multimarcas, con mas de 50 años de experiencia en el mercado.</p>
@@ -3091,8 +3142,16 @@ function AboutSection() {
 
 function MissionVisionSection() {
   return (
-    <section className="py-16 md:py-24 bg-slate-50 dark:bg-slate-900/50 relative z-10 border-t border-slate-200 dark:border-slate-800 transition-colors duration-300">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section className="pt-24 pb-16 md:pt-32 md:pb-24 bg-white dark:bg-slate-900 relative z-10 transition-colors duration-300 overflow-hidden">
+      {/* Divisor diagonal superior desde AboutSection */}
+      <div className="absolute top-0 left-0 w-full overflow-hidden leading-none pointer-events-none z-20 -mt-[1px]">
+        <svg viewBox="0 0 1440 80" preserveAspectRatio="none" className="w-full h-10 sm:h-14 md:h-20 block">
+          <polygon points="0,0 1440,0 1440,72" className="fill-slate-50 dark:fill-slate-950 transition-colors duration-300" />
+          <polygon points="0,0 1440,70 1440,78 0,6" className="fill-blue-600/70" />
+        </svg>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-10">
           {[
             { icon: Target, desc: "Buscamos proveer repuestos y accesorios automotores de la más alta calidad, asegurando un servicio de asesoramiento técnico preciso y confiable para cada uno de nuestros clientes." },
@@ -3101,12 +3160,12 @@ function MissionVisionSection() {
           ].map((item, i) => (
             <RevealOnScroll key={i} delay={`md:delay-${(i * 200) + 100}`}>
               <TiltCard className="h-full">
-                <div className="relative h-full group text-center md:text-left bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 hover:border-blue-200 dark:hover:border-slate-600 transition-all duration-300">
+                <div className="relative h-full group text-center md:text-left bg-slate-50 dark:bg-slate-800 p-8 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 hover:border-blue-200 dark:hover:border-slate-600 transition-all duration-300">
                   <div className="relative z-10">
-                    <div className="w-14 h-14 bg-slate-50 dark:bg-slate-900 rounded-2xl flex items-center justify-center mb-8 mx-auto md:mx-0 group-hover:bg-blue-50 dark:group-hover:bg-slate-700 transition-colors"><item.icon className="w-7 h-7 text-slate-700 dark:text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors" aria-hidden="true" /></div>
+                    <div className="w-14 h-14 bg-white dark:bg-slate-900 rounded-2xl flex items-center justify-center mb-8 mx-auto md:mx-0 group-hover:bg-blue-50 dark:group-hover:bg-slate-700 transition-colors"><item.icon className="w-7 h-7 text-slate-700 dark:text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors" aria-hidden="true" /></div>
                     <p className="text-sm md:text-base text-slate-600 dark:text-slate-400 leading-relaxed font-light transition-colors">{item.desc}</p>
                   </div>
-                  <div className="absolute bottom-0 right-0 w-12 h-12 bg-gradient-to-br from-transparent to-slate-50 dark:to-slate-900/50 rounded-br-3xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                  <div className="absolute bottom-0 right-0 w-12 h-12 bg-gradient-to-br from-transparent to-slate-100 dark:to-slate-900/50 rounded-br-3xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
                 </div>
               </TiltCard>
             </RevealOnScroll>
@@ -3123,16 +3182,33 @@ function FAQSection() {
   return (
     <section
       id="faq"
-      className="py-16 md:py-24 relative z-10 text-white transition-colors duration-300"
+      className="py-28 md:py-36 relative z-10 text-white transition-colors duration-300 overflow-hidden"
       style={{ background: 'linear-gradient(135deg, #0d2d6c 0%, #1545a3 50%, #0a2252 100%)' }}
     >
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+      {/* Divisor diagonal superior (bajada de izquierda a derecha como en la imagen de referencia) */}
+      <div className="absolute top-0 left-0 w-full overflow-hidden leading-none pointer-events-none z-20 -mt-[1px]">
+        <svg viewBox="0 0 1440 90" preserveAspectRatio="none" className="w-full h-10 sm:h-14 md:h-24 block">
+          <polygon points="0,0 1440,0 1440,90" className="fill-white dark:fill-slate-900 transition-colors duration-300" />
+        </svg>
+      </div>
+
+      {/* Triángulo amarillo en esquina superior izquierda sobre el corte diagonal */}
+      <div className="hidden md:block absolute top-4 left-0 w-24 h-16 bg-amber-400 pointer-events-none z-20 shadow-md" style={{ clipPath: 'polygon(0 0, 100% 35%, 0 100%)' }}></div>
+      {/* Triángulo flotante amarillo en sector derecho */}
+      <div className="hidden md:block absolute top-24 right-12 w-10 h-10 bg-amber-400 pointer-events-none z-20 drop-shadow-md" style={{ clipPath: 'polygon(0 25%, 100% 0, 65% 100%)' }}></div>
+
+      {/* Bandas diagonales decorativas de fondo */}
+      <div className="hidden lg:block absolute inset-y-0 left-8 w-32 bg-white/[0.03] -skew-x-12 pointer-events-none"></div>
+      <div className="hidden lg:block absolute inset-y-0 right-16 w-44 bg-blue-400/[0.06] -skew-x-12 pointer-events-none"></div>
+
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         <RevealOnScroll>
           <div className="text-center mb-10 md:mb-16">
             <HelpCircle className="w-10 h-10 md:w-12 md:h-12 text-amber-400 bg-white/10 rounded-full p-2 mx-auto mb-4 md:mb-6" aria-hidden="true" />
             <PremiumTitle dark={false} className="text-2xl sm:text-3xl md:text-4xl font-bold mb-2 md:mb-4 uppercase tracking-widest">
               Preguntas Frecuentes
             </PremiumTitle>
+            <div className="w-16 h-1.5 bg-amber-400 mx-auto mt-3 -skew-x-12 rounded-sm"></div>
           </div>
         </RevealOnScroll>
         <div className="space-y-4 md:space-y-6">
@@ -3175,6 +3251,16 @@ function FAQSection() {
           ))}
         </div>
       </div>
+
+      {/* Cuña amarilla decorativa en esquina inferior derecha */}
+      <div className="hidden md:block absolute bottom-3 right-0 w-36 h-12 bg-amber-400 pointer-events-none z-20" style={{ clipPath: 'polygon(100% 0, 0 100%, 100% 100%)' }}></div>
+
+      {/* Divisor diagonal inferior (subida hacia ContactSection) */}
+      <div className="absolute bottom-0 left-0 w-full overflow-hidden leading-none pointer-events-none z-20 -mb-[1px]">
+        <svg viewBox="0 0 1440 90" preserveAspectRatio="none" className="w-full h-10 sm:h-14 md:h-24 block">
+          <polygon points="0,0 0,90 1440,90" className="fill-white dark:fill-slate-900 transition-colors duration-300" />
+        </svg>
+      </div>
     </section>
   );
 }
@@ -3206,6 +3292,42 @@ function TiendaPublica() {
     setToastMessage(message);
     toastTimeoutRef.current = setTimeout(() => setToastMessage(null), 3000);
   };
+
+  // Mensajes dinámicos en la pestaña del navegador cuando el usuario cambia de pestaña
+  useEffect(() => {
+    const defaultTitle = 'D.A.P.A. Repuestos | Catálogo Automotor';
+    const awayMessages = [
+      '¡Volvé! Tu repuesto te espera 🔧',
+      '¡No te vayas! 🚗 D.A.P.A. Repuestos',
+      '¿Olvidaste algo en el catálogo? ⚡'
+    ];
+    let intervalId = null;
+    let msgIndex = 0;
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        msgIndex = 0;
+        document.title = awayMessages[msgIndex];
+        intervalId = setInterval(() => {
+          msgIndex = (msgIndex + 1) % awayMessages.length;
+          document.title = awayMessages[msgIndex];
+        }, 2200);
+      } else {
+        if (intervalId) {
+          clearInterval(intervalId);
+          intervalId = null;
+        }
+        document.title = defaultTitle;
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (intervalId) clearInterval(intervalId);
+      document.title = defaultTitle;
+    };
+  }, []);
 
   useEffect(() => {
     const savedUser = localStorage.getItem('dapa_user');
