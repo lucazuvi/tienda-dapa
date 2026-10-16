@@ -1808,12 +1808,37 @@ function CSSHeroTitle() {
 }
 
 function TrustBadges() {
+  const badges = [
+    { icon: Truck, text: 'Envíos a todo el país' },
+    { icon: Clock, text: 'Lunes a Viernes: 8 a 19:30 - Sábados: 8 a 13hrs' },
+    { icon: CreditCard, text: 'Todos los medios de pago' },
+    { icon: MessageSquare, text: 'Soporte rápido por WhatsApp' },
+    { icon: MapPin, text: 'Lamadrid 65, Arrecifes' }
+  ];
+
+  // Repetimos la lista para cubrir pantallas grandes sin dejar huecos
+  const trackItems = [...badges, ...badges];
+
   return (
-    <div className="bg-[#0b1120] text-white py-4 shadow-md relative z-20 border-b border-slate-800">
-      <div className="max-w-7xl mx-auto px-4 flex flex-wrap justify-center md:justify-between items-center gap-4 md:gap-2 text-[10px] sm:text-xs md:text-sm font-bold tracking-wider">
-        <span className="flex items-center gap-2"><Truck className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500" /> Envíos a todo el país</span>
-        <span className="hidden md:flex items-center gap-2"><Clock className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500" /> Soporte rápido por WhatsApp</span>
-        <span className="hidden lg:flex items-center gap-2"><CreditCard className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500" /> Todos los medios de pago</span>
+    <div className="bg-[#0b1120] text-white py-3.5 shadow-md relative z-20 border-b border-slate-800 overflow-hidden pause-on-hover select-none">
+      <div className="marquee-container animate-marquee-left">
+        {[0, 1].map((copyIndex) => (
+          <div
+            key={copyIndex}
+            aria-hidden={copyIndex === 1}
+            className="flex items-center gap-10 sm:gap-16 pr-10 sm:pr-16 whitespace-nowrap text-xs sm:text-sm font-bold uppercase tracking-wider"
+          >
+            {trackItems.map((item, idx) => {
+              const IconComponent = item.icon;
+              return (
+                <span key={idx} className="flex items-center gap-2.5">
+                  <IconComponent className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500 flex-shrink-0" />
+                  <span>{item.text}</span>
+                </span>
+              );
+            })}
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -1849,6 +1874,206 @@ function HeroSection({ navigateTo }) {
   );
 }
 
+/* ==========================================================================
+   VITRINA MULTIMEDIA (VIDEOS E IMÁGENES DE PRODUCTOS DESTACADOS)
+   ========================================================================== */
+const SHOWCASE_MEDIA = [
+  {
+    id: 1,
+    type: 'video', // 'video' o 'image'
+    // Podés poner un archivo tuyo en public/ (ej: '/video-opticas.mp4') o una URL externa
+    src: 'https://assets.mixkit.co/videos/preview/mixkit-mechanic-working-on-a-car-engine-41612-large.mp4',
+    poster: 'https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?auto=format&fit=crop&q=80',
+    badge: 'ILUMINACIÓN Y CHAPERÍA',
+    title: 'Ópticas, Faros y Paragolpes todas las marcas',
+    description: 'Línea completa nacional e importada. Consultá por el modelo exacto de tu vehículo y recibilo en tu taller o domicilio.',
+    ctaText: 'Ver Catálogo',
+    ctaAction: 'catalogo'
+  },
+  {
+    id: 2,
+    type: 'image',
+    src: '/local-dapa.jpg', // Podés reemplazarlo por flyers o fotos de repuestos en public/
+    badge: 'STOCK Y ENCARGUES',
+    title: 'Cubre Alfombras, Espejos, Cristales y Cerrajería',
+    description: 'Trabajamos con más de 10 distribuidores directos para conseguir tu repuesto al mejor precio en Arrecifes y todo el país.',
+    ctaText: 'Consultar por WhatsApp',
+    ctaAction: 'whatsapp'
+  },
+  {
+    id: 3,
+    type: 'image',
+    src: 'https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&q=80',
+    badge: 'ENVÍOS A TODO EL PAÍS',
+    title: 'Despachos diarios por Correo Argentino',
+    description: 'Calculá el costo de envío con tu Código Postal directamente en el carrito y aboná con Mercado Pago o transferencia.',
+    ctaText: 'Cotizar Repuesto',
+    ctaAction: 'contacto'
+  }
+];
+
+function MediaShowcaseSection({ navigateTo }) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isMuted, setIsMuted] = useState(true);
+  const videoRef = useRef(null);
+
+  const currentItem = SHOWCASE_MEDIA[currentIndex];
+
+  const handleNext = useCallback(() => {
+    setCurrentIndex((prev) => (prev + 1) % SHOWCASE_MEDIA.length);
+  }, []);
+
+  const handlePrev = () => {
+    setCurrentIndex((prev) => (prev - 1 + SHOWCASE_MEDIA.length) % SHOWCASE_MEDIA.length);
+  };
+
+  // Si el slide actual es una imagen, pasa automáticamente cada 6 segundos.
+  // Si es un video, avanza cuando termina de reproducirse (onEnded).
+  useEffect(() => {
+    if (currentItem.type === 'image') {
+      const timer = setTimeout(handleNext, 6000);
+      return () => clearTimeout(timer);
+    }
+  }, [currentIndex, currentItem.type, handleNext]);
+
+  useEffect(() => {
+    if (currentItem.type === 'video' && videoRef.current) {
+      videoRef.current.load();
+      videoRef.current.play().catch(() => {});
+    }
+  }, [currentIndex, currentItem.type]);
+
+  const handleCtaClick = () => {
+    if (currentItem.ctaAction === 'whatsapp') {
+      window.open(CONTACT_INFO.whatsappLink, '_blank');
+    } else if (currentItem.ctaAction === 'contacto') {
+      navigateTo('inicio', 'contacto');
+    } else {
+      navigateTo('inicio', 'catálogo');
+    }
+  };
+
+  return (
+    <section
+      className="py-16 md:py-24 relative z-20 text-white overflow-hidden shadow-inner"
+      style={{ background: 'linear-gradient(135deg, #0a2252 0%, #144299 50%, #091d47 100%)' }}
+    >
+      {/* Brillos decorativos de fondo */}
+      <div className="absolute -top-24 -left-24 w-96 h-96 rounded-full bg-blue-400/10 blur-3xl pointer-events-none"></div>
+      <div className="absolute -bottom-24 -right-24 w-96 h-96 rounded-full bg-cyan-400/10 blur-3xl pointer-events-none"></div>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+        <div className="flex flex-col md:flex-row md:items-end justify-between mb-10 gap-4">
+          <div>
+            <span className="inline-block bg-amber-400 text-slate-950 text-[10px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-full mb-3">
+              Destacados D.A.P.A
+            </span>
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold font-exo uppercase tracking-wider text-white">
+              Productos y Novedades en Acción
+            </h2>
+          </div>
+
+          {/* Botones de control del carrusel */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handlePrev}
+              className="p-3 rounded-full bg-white/10 hover:bg-white/25 text-white border border-white/20 transition-all focus:outline-none"
+              aria-label="Anterior"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+            <button
+              onClick={handleNext}
+              className="p-3 rounded-full bg-white/10 hover:bg-white/25 text-white border border-white/20 transition-all focus:outline-none"
+              aria-label="Siguiente"
+            >
+              <ChevronRight className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Contenedor Principal del Slide (Video o Imagen + Info) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center bg-[#071636]/70 border border-blue-400/30 rounded-3xl p-4 sm:p-6 md:p-8 shadow-2xl backdrop-blur-md">
+          
+          {/* Visor Multimedia (7 columnas en PC) */}
+          <div className="lg:col-span-7 relative rounded-2xl overflow-hidden bg-slate-950 aspect-video border border-white/10 shadow-lg">
+            {currentItem.type === 'video' ? (
+              <>
+                <video
+                  ref={videoRef}
+                  src={currentItem.src}
+                  poster={currentItem.poster}
+                  muted={isMuted}
+                  playsInline
+                  autoPlay
+                  onEnded={handleNext}
+                  className="w-full h-full object-cover"
+                />
+                <button
+                  type="button"
+                  onClick={() => setIsMuted(!isMuted)}
+                  className="absolute bottom-4 right-4 bg-slate-900/80 hover:bg-slate-900 text-white text-xs font-bold uppercase tracking-wider px-3.5 py-2 rounded-full border border-white/20 backdrop-blur-sm transition-colors"
+                >
+                  {isMuted ? '🔇 Activar sonido' : '🔊 Silenciar'}
+                </button>
+              </>
+            ) : (
+              <img
+                src={currentItem.src}
+                alt={currentItem.title}
+                className="w-full h-full object-cover animate-in fade-in duration-500"
+              />
+            )}
+
+            <span className="absolute top-4 left-4 bg-blue-600/90 backdrop-blur-sm text-white text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-lg border border-blue-400/40">
+              {currentItem.type === 'video' ? '▶ VIDEO' : '📷 GALERÍA'}
+            </span>
+          </div>
+
+          {/* Información del Producto / Promoción (5 columnas en PC) */}
+          <div className="lg:col-span-5 flex flex-col justify-center space-y-5 p-2">
+            <span className="text-cyan-300 font-exo text-xs font-bold uppercase tracking-[0.2em]">
+              {currentItem.badge}
+            </span>
+            <h3 className="text-2xl sm:text-3xl font-bold font-exo text-white leading-tight">
+              {currentItem.title}
+            </h3>
+            <p className="text-slate-200 text-sm sm:text-base font-light leading-relaxed">
+              {currentItem.description}
+            </p>
+
+            <div className="pt-2 flex flex-wrap gap-3">
+              <button
+                onClick={handleCtaClick}
+                className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-black uppercase tracking-widest text-xs px-7 py-4 rounded-xl transition-all shadow-lg flex items-center gap-2"
+              >
+                {currentItem.ctaText} <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Miniaturas / Selector rápido de diapositivas */}
+            <div className="pt-6 border-t border-white/10 flex items-center gap-3">
+              {SHOWCASE_MEDIA.map((item, idx) => (
+                <button
+                  key={item.id}
+                  onClick={() => setCurrentIndex(idx)}
+                  className={`h-2.5 rounded-full transition-all ${
+                    idx === currentIndex ? 'w-10 bg-amber-400' : 'w-2.5 bg-white/30 hover:bg-white/60'
+                  }`}
+                  aria-label={`Ver destacado ${idx + 1}`}
+                />
+              ))}
+              <span className="ml-auto text-xs text-blue-200 font-mono">
+                {currentIndex + 1} / {SHOWCASE_MEDIA.length}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function CatalogSection({ categories, allProducts, onOpenCategory, onProductSearchSelect }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [suggestions, setSuggestions] = useState([]);
@@ -1874,7 +2099,7 @@ const handleSearchChange = (e) => {
   const handleSuggestionClick = (prod) => { setSearchTerm(''); setSuggestions([]); onProductSearchSelect(prod); };
 
   return (
-    <section id="catálogo" className="py-16 md:py-24 bg-slate-50 dark:bg-slate-900/50 relative z-20 transition-colors duration-300">
+    <section id="catálogo" className="py-16 md:py-24 bg-white dark:bg-slate-900 relative z-20 transition-colors duration-300">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center mb-10 md:mb-16 relative z-30">
         <RevealOnScroll>
           <PremiumTitle dark={true} className="text-2xl sm:text-3xl md:text-4xl font-bold mb-2 md:mb-4 uppercase tracking-widest">Nuestro Catálogo</PremiumTitle>
@@ -1913,7 +2138,7 @@ const handleSearchChange = (e) => {
                   onClick={() => onOpenCategory(cat)} 
                   className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-xl hover:border-blue-300 dark:hover:border-blue-500 hover:-translate-y-2 transition-all duration-300 cursor-pointer group flex flex-col items-center text-center h-full"
                 >
-                  <div className="w-12 h-1 bg-slate-200 dark:bg-slate-600 mb-4 group-hover:bg-blue-500 transition-colors rounded-full"></div>
+                  <div className="w-12 h-1.5 bg-blue-600 mb-4 group-hover:w-20 group-hover:bg-amber-400 transition-all rounded-full"></div>
                   <h4 className="text-slate-900 dark:text-white font-bold text-sm md:text-lg uppercase tracking-widest font-exo mb-2 transition-colors">{cat.name}</h4>
                   <p className="text-slate-500 dark:text-slate-400 text-xs font-light transition-colors line-clamp-2">{cat.description || 'Ver repuestos'}</p>
                 </article>
@@ -2417,7 +2642,7 @@ function ProcessSection({ setTutorialOpen }) {
     { id: 1, title: 'Elegí', desc: 'Agregá los repuestos al carrito.', icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-8 h-8 md:w-10 md:h-10 text-slate-400 group-hover:text-blue-600 transition-colors duration-500"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" className="group-hover:stroke-blue-600"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12" className="group-hover:stroke-blue-600"/><circle cx="12" cy="5" r="1" fill="currentColor" className="opacity-0 group-hover:animate-drop-1 text-blue-500"/><circle cx="10" cy="4" r="1" fill="currentColor" className="opacity-0 group-hover:animate-drop-2 text-blue-500"/><circle cx="14" cy="4" r="1" fill="currentColor" className="opacity-0 group-hover:animate-drop-3 text-blue-500"/></svg> },
     { id: 2, title: 'Cotizá', desc: 'Enviá el carrito por WhatsApp o via web.', icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-8 h-8 md:w-10 md:h-10 text-slate-400 group-hover:text-green-500 transition-colors duration-500"><rect width="14" height="20" x="5" y="2" rx="2" ry="2" className="group-hover:stroke-green-600"/><path d="M12 18h.01M8 6h8" className="group-hover:stroke-green-600"/><path d="M12 10.5c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zm0 6c2.5 0 4.5-2 4.5-4.5S14.5 7.5 12 7.5c-2.3 0-4.1 1.7-4.4 3.9-.1.6.4 1.1 1 .9 1.1-.3 2.1 1.1 1.5 2.1-.2.4.1.9.6.9.3 0 .6.2.7.5.1.3.1.6 0 1-.3.8-.4 1.7-.1 2.5.3.8 1.1 1.2 2 1.2z" fill="none" className="opacity-0 group-hover:animate-fade-in text-green-500"/><path d="M8 10h3M8 12h5" className="opacity-0 group-hover:animate-data-load text-slate-300"/></svg> },
     { id: 3, title: 'Pagás', desc: 'Aboná con tu medio de pago favorito.', icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-8 h-8 md:w-10 md:h-10 text-slate-400 group-hover:text-blue-500 transition-colors duration-500"><path d="M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" className="group-hover:stroke-slate-600 dark:group-hover:stroke-slate-500"/><path d="M3 10h18M7 14h10M7 16h6" className="group-hover:stroke-slate-600 dark:group-hover:stroke-slate-500"/><rect x="6" y="6" width="12" height="3" rx="0.5" className="group-hover:fill-green-900 group-hover:stroke-green-500 transition-colors duration-500"/><rect x="8" y="1" width="8" height="5" rx="1" fill="currentColor" className="opacity-0 group-hover:animate-card-swipe text-blue-500"/></svg> },
-    { id: 4, title: 'Recibís', desc: 'Te lo enviamos al taller o domicilio.', icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-8 h-8 md:w-10 md:h-10 text-slate-400 group-hover:text-green-500 transition-colors duration-500"><path d="M10 17h4M5 17h0M19 17h0" className="group-hover:stroke-green-600"/><path d="M14 17h1l3-3.26a1.9 1.9 0 0 0 .4-.74V9a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h1" className="group-hover:stroke-green-600"/><circle cx="7" cy="17" r="2" className="group-hover:stroke-green-600"/><circle cx="17" cy="17" r="2" className="group-hover:stroke-green-600"/><path d="m9 11 3 3 6-6" className="opacity-0 group-hover:animate-check-draw text-green-500" strokeWidth="2.5"/></svg> }
+    { id: 4, title: 'Recibís', desc: 'Retiras en el local o te lo enviamos por correo.', icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-8 h-8 md:w-10 md:h-10 text-slate-400 group-hover:text-green-500 transition-colors duration-500"><path d="M10 17h4M5 17h0M19 17h0" className="group-hover:stroke-green-600"/><path d="M14 17h1l3-3.26a1.9 1.9 0 0 0 .4-.74V9a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h1" className="group-hover:stroke-green-600"/><circle cx="7" cy="17" r="2" className="group-hover:stroke-green-600"/><circle cx="17" cy="17" r="2" className="group-hover:stroke-green-600"/><path d="m9 11 3 3 6-6" className="opacity-0 group-hover:animate-check-draw text-green-500" strokeWidth="2.5"/></svg> }
   ];
 
   return (
@@ -2846,7 +3071,7 @@ function AboutSection() {
               <PremiumTitle dark={true} className="text-3xl md:text-4xl lg:text-5xl font-bold font-exo uppercase tracking-tight">Quiénes Somos</PremiumTitle>
             </div>
             <p className="text-base md:text-lg text-slate-600 dark:text-slate-400 mb-4 md:mb-6 leading-relaxed font-light text-center lg:text-left transition-colors">Ubicados en el corazón de Arrecifes, <strong className="text-slate-900 dark:text-white font-semibold">D.A.P.A Repuestos Molle</strong> nació con una premisa clara: brindar soluciones rápidas y efectivas a cada conductor y taller mecánico que nos elige.</p>
-            <p className="text-base md:text-lg text-slate-600 dark:text-slate-400 mb-8 md:mb-10 leading-relaxed font-light text-center lg:text-left transition-colors">Nos especializamos en la comercialización de autopartes y accesorios multimarcas. Sabemos que un vehículo detenido es un problema, por eso trabajamos con stock permanente y realizamos envíos ágiles a todo el país.</p>
+            <p className="text-base md:text-lg text-slate-600 dark:text-slate-400 mb-8 md:mb-10 leading-relaxed font-light text-center lg:text-left transition-colors">Nos especializamos en la comercialización de autopartes y accesorios multimarcas, con mas de 50 años de experiencia en el mercado.</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 md:gap-8">
               <div className="flex items-start gap-4 hover:-translate-y-1 transition-transform cursor-default justify-center lg:justify-start group">
                 <div className="mt-1 bg-white dark:bg-slate-800 p-2 rounded-lg group-hover:bg-blue-50 dark:group-hover:bg-slate-700 border border-slate-100 dark:border-slate-700 transition-colors"><ShieldCheck className="w-5 h-5 md:w-6 md:h-6 text-blue-600 dark:text-blue-400" aria-hidden="true" /></div>
@@ -2896,24 +3121,54 @@ function FAQSection() {
   const [openFaq, setOpenFaq] = useState(null);
 
   return (
-    <section id="faq" className="py-16 md:py-24 bg-white dark:bg-slate-900 relative z-10 border-t border-slate-100 dark:border-slate-800 transition-colors duration-300">
+    <section
+      id="faq"
+      className="py-16 md:py-24 relative z-10 text-white transition-colors duration-300"
+      style={{ background: 'linear-gradient(135deg, #0d2d6c 0%, #1545a3 50%, #0a2252 100%)' }}
+    >
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
         <RevealOnScroll>
           <div className="text-center mb-10 md:mb-16">
-            <HelpCircle className="w-10 h-10 md:w-12 md:h-12 text-blue-100 dark:text-blue-900 bg-blue-50 dark:bg-blue-900/30 rounded-full p-2 mx-auto mb-4 md:mb-6 transition-colors" aria-hidden="true" />
-            <PremiumTitle dark={true} className="text-2xl sm:text-3xl md:text-4xl font-bold mb-2 md:mb-4 uppercase tracking-widest">Preguntas Frecuentes</PremiumTitle>
+            <HelpCircle className="w-10 h-10 md:w-12 md:h-12 text-amber-400 bg-white/10 rounded-full p-2 mx-auto mb-4 md:mb-6" aria-hidden="true" />
+            <PremiumTitle dark={false} className="text-2xl sm:text-3xl md:text-4xl font-bold mb-2 md:mb-4 uppercase tracking-widest">
+              Preguntas Frecuentes
+            </PremiumTitle>
           </div>
         </RevealOnScroll>
         <div className="space-y-4 md:space-y-6">
           {FAQ_ITEMS.map((faq, i) => (
             <RevealOnScroll key={i} delay={`delay-${(i % 3) * 100}`}>
-              <div className={`border rounded-2xl overflow-hidden transition-all duration-300 cursor-pointer ${openFaq === i ? 'border-blue-200 dark:border-blue-800 shadow-md bg-blue-50/30 dark:bg-slate-800' : 'border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-slate-600 bg-white dark:bg-slate-800'}`}>
-                <button className="w-full p-5 md:p-6 flex justify-between items-center text-left transition-colors focus:outline-none" onClick={() => setOpenFaq(openFaq === i ? null : i)} aria-expanded={openFaq === i}>
-                  <h4 className={`text-sm md:text-base lg:text-lg font-bold uppercase tracking-wide font-exo pr-4 transition-colors ${openFaq === i ? 'text-blue-700 dark:text-blue-400' : 'text-slate-800 dark:text-white'}`}>{faq.q}</h4>
-                  <div className={`p-2 rounded-full transition-colors ${openFaq === i ? 'bg-blue-100 dark:bg-blue-900/50' : 'bg-slate-50 dark:bg-slate-900'}`}><ChevronDown className={`w-4 h-4 md:w-5 md:h-5 text-slate-500 dark:text-slate-400 transition-transform duration-300 flex-shrink-0 ${openFaq === i ? 'rotate-180 text-blue-600 dark:text-blue-400' : ''}`} aria-hidden="true" /></div>
+              <div className={`border rounded-2xl overflow-hidden transition-all duration-300 cursor-pointer ${
+                openFaq === i
+                  ? 'border-amber-400 shadow-xl bg-white text-slate-900'
+                  : 'border-white/20 hover:border-white/50 bg-white/10 backdrop-blur-sm text-white'
+              }`}>
+                <button
+                  className="w-full p-5 md:p-6 flex justify-between items-center text-left transition-colors focus:outline-none"
+                  onClick={() => setOpenFaq(openFaq === i ? null : i)}
+                  aria-expanded={openFaq === i}
+                >
+                  <h4 className={`text-sm md:text-base lg:text-lg font-bold uppercase tracking-wide font-exo pr-4 ${
+                    openFaq === i ? 'text-blue-700' : 'text-white'
+                  }`}>
+                    {faq.q}
+                  </h4>
+                  <div className={`p-2 rounded-full transition-colors ${openFaq === i ? 'bg-blue-100' : 'bg-white/10'}`}>
+                    <ChevronDown className={`w-4 h-4 md:w-5 md:h-5 transition-transform duration-300 flex-shrink-0 ${
+                      openFaq === i ? 'rotate-180 text-blue-600' : 'text-white'
+                    }`} aria-hidden="true" />
+                  </div>
                 </button>
-                <div className={`transition-all duration-500 ease-in-out overflow-hidden`} style={{ maxHeight: openFaq === i ? '250px' : '0', opacity: openFaq === i ? 1 : 0 }} aria-hidden={openFaq !== i}>
-                  <p className="px-5 md:px-6 pb-5 md:pb-6 text-xs md:text-base text-slate-600 dark:text-slate-400 font-light leading-relaxed">{faq.a}</p>
+                <div
+                  className="transition-all duration-500 ease-in-out overflow-hidden"
+                  style={{ maxHeight: openFaq === i ? '250px' : '0', opacity: openFaq === i ? 1 : 0 }}
+                  aria-hidden={openFaq !== i}
+                >
+                  <p className={`px-5 md:px-6 pb-5 md:pb-6 text-xs md:text-base font-light leading-relaxed ${
+                    openFaq === i ? 'text-slate-600' : 'text-slate-200'
+                  }`}>
+                    {faq.a}
+                  </p>
                 </div>
               </div>
             </RevealOnScroll>
@@ -2961,9 +3216,6 @@ function TiendaPublica() {
     if (savedCart) setCart(JSON.parse(savedCart));
 
     if (savedTheme === 'dark') {
-      setIsDarkMode(true);
-      document.documentElement.classList.add('dark');
-    } else if (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches) {
       setIsDarkMode(true);
       document.documentElement.classList.add('dark');
     }
@@ -3211,10 +3463,11 @@ const handleAddToCart = (product, qty = 1) => {
       />
       
       <main>
-        {activePage === 'inicio' ? (
+       {activePage === 'inicio' ? (
           <>
             <HeroSection navigateTo={navigateTo} />
             <CatalogSection categories={dbCategories} allProducts={dbProducts} onOpenCategory={handleOpenCategory} onProductSearchSelect={handleProductSearchSelect} />
+            <MediaShowcaseSection navigateTo={navigateTo} />
             <ProcessSection setTutorialOpen={setTutorialOpen} />
             <FAQSection />
             <ContactSection />
