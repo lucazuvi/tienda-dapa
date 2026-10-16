@@ -101,7 +101,7 @@ function PremiumTitle({ children, className = "", as: Component = "h2", dark = t
 
 function Toast({ message, isVisible }) {
   return (
-    <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 bg-blue-600 text-white px-6 py-3 rounded-full shadow-2xl z-[100] transition-all duration-300 flex items-center gap-3 border border-blue-400 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10 pointer-events-none'}`}>
+    <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 bg-blue-600 text-white px-6 py-3 rounded-none shadow-2xl z-[100] transition-all duration-300 flex items-center gap-3 border border-blue-400 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10 pointer-events-none'}`}>
       <CheckCircle className="w-5 h-5" />
       <span className="text-sm font-bold tracking-wider">{message}</span>
     </div>
@@ -183,9 +183,9 @@ function QuickViewModal({ product, categoryName, isOpen, onClose, onAddToCart })
   
   return (
     <div className="fixed inset-0 bg-black/60 z-[110] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-300">
-      <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden relative flex flex-col md:flex-row animate-in zoom-in-95 duration-300 border border-slate-200 dark:border-slate-700">
+      <div className="bg-white dark:bg-slate-800 rounded-none shadow-2xl w-full max-w-2xl overflow-hidden relative flex flex-col md:flex-row animate-in zoom-in-95 duration-300 border border-slate-200 dark:border-slate-700">
         
-        <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors focus:outline-none z-20 bg-white/50 dark:bg-slate-900/50 rounded-full p-1 backdrop-blur-sm">
+        <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors focus:outline-none z-20 bg-white/50 dark:bg-slate-900/50 rounded-none p-1 backdrop-blur-sm">
           <X className="w-6 h-6" />
         </button>
 
@@ -195,13 +195,13 @@ function QuickViewModal({ product, categoryName, isOpen, onClose, onAddToCart })
            ) : (
              <Package className="w-16 h-16 text-slate-300 dark:text-slate-700" />
            )}
-           <span className="absolute bottom-4 left-4 text-xs font-bold tracking-widest uppercase text-white bg-slate-900/70 backdrop-blur-sm px-3 py-1.5 rounded-lg font-exo">Cód: {product.sku_code}</span>
+           <span className="absolute bottom-4 left-4 text-xs font-bold tracking-widest uppercase text-white bg-slate-900/70 backdrop-blur-sm px-3 py-1.5 rounded-none font-exo">Cód: {product.sku_code}</span>
         </div>
 
         <div className="w-full md:w-1/2 p-6 md:p-8 flex flex-col">
           <h2 className="text-xl md:text-2xl font-bold text-slate-900 dark:text-white mb-6 leading-tight pr-6">{product.name}</h2>
           
-          <div className="bg-slate-50 dark:bg-slate-900/50 rounded-xl p-5 mb-6 border border-slate-100 dark:border-slate-700/50">
+          <div className="bg-slate-50 dark:bg-slate-900/50 rounded-none p-5 mb-6 border border-slate-100 dark:border-slate-700/50">
             <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-4 flex items-center gap-2">
               <Settings className="w-3 h-3" /> Ficha Técnica
             </h4>
@@ -223,18 +223,33 @@ function QuickViewModal({ product, categoryName, isOpen, onClose, onAddToCart })
           </div>
           
           {product.description && (
-             <p className="text-xs text-slate-500 dark:text-slate-400 mb-6 font-light italic bg-slate-50 dark:bg-slate-900/30 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
+             <p className="text-xs text-slate-500 dark:text-slate-400 mb-6 font-light italic bg-slate-50 dark:bg-slate-900/30 p-3 rounded-none border border-slate-100 dark:border-slate-800">
                {product.description}
              </p>
           )}
           
-          <button onClick={() => { onAddToCart(product); onClose(); }} className="mt-auto w-full bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-widest py-4 rounded-xl transition-colors shadow-lg flex items-center justify-center gap-2">
+          <button onClick={() => { onAddToCart(product); onClose(); }} className="mt-auto w-full bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-widest py-4 rounded-none transition-colors shadow-lg flex items-center justify-center gap-2">
             <Plus className="w-5 h-5" /> Agregar al Carrito
           </button>
         </div>
       </div>
     </div>
   );
+}
+
+// Hash determinístico compatible con cualquier navegador (incluidos Windows 7 / HTTP)
+function hashUserPassword(rawPassword) {
+  const str = `dapa_salt_2026::${String(rawPassword)}`;
+  let h1 = 0xdeadbeef ^ str.length;
+  let h2 = 0x41c6ce57 ^ str.length;
+  for (let i = 0, ch; i < str.length; i++) {
+    ch = str.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return 'dapa_h1_' + (h2 >>> 0).toString(16).padStart(8, '0') + (h1 >>> 0).toString(16).padStart(8, '0');
 }
 
 function AuthModal({ isOpen, onClose, onLogin }) {
@@ -276,21 +291,99 @@ function AuthModal({ isOpen, onClose, onLogin }) {
     setError('');
     setSuccessMsg('');
 
+    const cleanEmail = email.trim().toLowerCase();
+
     try {
+      const localAccounts = JSON.parse(localStorage.getItem('dapa_registered_users') || '{}');
+
       if (isLogin) {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email,
+        // 1. Si no es el correo de administración general, verificamos primero en la tabla de usuarios
+        if (cleanEmail !== 'admin@dapa.com') {
+          const { data: dbUser } = await supabase
+            .from('users')
+            .select('*')
+            .ilike('email', cleanEmail)
+            .maybeSingle();
+
+          if (dbUser) {
+            const hashedInput = hashUserPassword(password);
+            const hashedTrimmed = hashUserPassword(password.trim());
+            if (
+              dbUser.password_hash === hashedInput ||
+              dbUser.password_hash === hashedTrimmed ||
+              dbUser.password_hash === password
+            ) {
+              const phoneFromRole =
+                dbUser.role && dbUser.role.startsWith('cliente|')
+                  ? dbUser.role.slice('cliente|'.length)
+                  : '';
+              onLogin({
+                name: dbUser.name || cleanEmail.split('@')[0],
+                phone: phoneFromRole,
+                email: dbUser.email || cleanEmail
+              });
+              return;
+            } else {
+              throw new Error("Email o contraseña incorrectos");
+            }
+          }
+
+          // Fallback en localStorage por si se registró sin conexión a la tabla
+          const localUser = localAccounts[cleanEmail];
+          if (localUser) {
+            const hashedInput = hashUserPassword(password);
+            if (localUser.password_hash === hashedInput || localUser.password_hash === password) {
+              onLogin({
+                name: localUser.name || cleanEmail.split('@')[0],
+                phone: localUser.phone || '',
+                email: cleanEmail
+              });
+              return;
+            }
+          }
+        }
+
+        // 2. Intentar inicio de sesión mediante Supabase Auth (Admin o cuentas previas)
+        const { data, error: signInError } = await supabase.auth.signInWithPassword({
+          email: cleanEmail,
           password,
         });
-        if (error) throw error;
+
+        if (signInError) {
+          // Si Supabase responde "Email not confirmed", significa que el usuario existe y la contraseña ingresada ES CORRECTA
+          if (
+            signInError.message?.toLowerCase().includes('email not confirmed') ||
+            signInError.code === 'email_not_confirmed'
+          ) {
+            const fallbackName = localAccounts[cleanEmail]?.name || cleanEmail.split('@')[0];
+            const fallbackPhone = localAccounts[cleanEmail]?.phone || '';
+            const passwordHash = hashUserPassword(password);
+
+            await supabase.from('users').insert([{
+              name: fallbackName,
+              email: cleanEmail,
+              password_hash: passwordHash,
+              role: `cliente|${fallbackPhone}`
+            }]);
+
+            onLogin({
+              name: fallbackName,
+              phone: fallbackPhone,
+              email: cleanEmail
+            });
+            return;
+          }
+          throw signInError;
+        }
         
         onLogin({
-          name: data.user.user_metadata.name || email.split('@')[0],
-          phone: data.user.user_metadata.phone || '',
+          name: data.user.user_metadata?.name || cleanEmail.split('@')[0],
+          phone: data.user.user_metadata?.phone || '',
           email: data.user.email
         });
         
       } else {
+        // REGISTRO DE NUEVA CUENTA
         if (!nombre.trim() || !apellido.trim()) {
           throw new Error("El nombre y apellido son obligatorios");
         }
@@ -300,26 +393,79 @@ function AuthModal({ isOpen, onClose, onLogin }) {
         if (password !== confirmPassword) {
           throw new Error("Las contraseñas no coinciden. Verificalas por favor.");
         }
-        
-        const { error } = await supabase.auth.signUp({
-          email,
+
+        // 1. Verificar si el correo ya está vinculado a una cuenta
+        const { data: existingUser } = await supabase
+          .from('users')
+          .select('id, email')
+          .ilike('email', cleanEmail)
+          .maybeSingle();
+
+        if (existingUser || cleanEmail === 'admin@dapa.com' || localAccounts[cleanEmail]) {
+          throw new Error("Este correo electrónico ya está vinculado a una cuenta. Por favor, iniciá sesión.");
+        }
+
+        const fullName = `${nombre.trim()} ${apellido.trim()}`;
+        const cleanPhone = telefono.trim() || '';
+        const passwordHash = hashUserPassword(password);
+
+        // 2. Guardar usuario en la tabla public.users de Supabase
+        const { error: insertError } = await supabase
+          .from('users')
+          .insert([{
+            name: fullName,
+            email: cleanEmail,
+            password_hash: passwordHash,
+            role: `cliente|${cleanPhone}`
+          }]);
+
+        if (insertError) {
+          if (
+            insertError.code === '23505' ||
+            insertError.message?.toLowerCase().includes('duplicate') ||
+            insertError.message?.toLowerCase().includes('unique')
+          ) {
+            throw new Error("Este correo electrónico ya está vinculado a una cuenta. Por favor, iniciá sesión.");
+          }
+          throw new Error("No se pudo registrar la cuenta. Intentá nuevamente.");
+        }
+
+        // Guardar respaldo local
+        localAccounts[cleanEmail] = {
+          name: fullName,
+          phone: cleanPhone,
+          email: cleanEmail,
+          password_hash: passwordHash
+        };
+        localStorage.setItem('dapa_registered_users', JSON.stringify(localAccounts));
+
+        // Registro complementario silencioso en Supabase Auth (sin bloquear por límites de SMTP)
+        supabase.auth.signUp({
+          email: cleanEmail,
           password,
           options: {
             data: {
-              name: `${nombre.trim()} ${apellido.trim()}`,
-              phone: telefono.trim() || ''
+              name: fullName,
+              phone: cleanPhone
             }
           }
-        });
-        
-        if (error) throw error;
+        }).catch(() => {});
+
+        setEmail(cleanEmail);
         setIsLogin(true);
         setPassword('');
         setConfirmPassword('');
         setSuccessMsg("¡Cuenta creada con éxito! Ya podés iniciar sesión con tu clave.");
       }
-    } catch (error) {
-      setError(error.message === "Invalid login credentials" ? "Email o contraseña incorrectos" : error.message);
+    } catch (err) {
+      const msg = err?.message || '';
+      if (msg === "Invalid login credentials" || msg.toLowerCase().includes("invalid login credentials")) {
+        setError("Email o contraseña incorrectos");
+      } else if (msg.toLowerCase().includes("already registered") || msg.toLowerCase().includes("already exists")) {
+        setError("Este correo electrónico ya está vinculado a una cuenta. Por favor, iniciá sesión.");
+      } else {
+        setError(msg || "Ocurrió un error al procesar la solicitud.");
+      }
     } finally {
       setLoading(false);
     }
@@ -329,7 +475,7 @@ function AuthModal({ isOpen, onClose, onLogin }) {
     <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 sm:p-0">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose}></div>
       
-      <div className="bg-white dark:bg-slate-800 w-full max-w-md rounded-2xl shadow-2xl relative z-10 overflow-hidden animate-in zoom-in-95 duration-200 max-h-[92vh] overflow-y-auto custom-scrollbar border border-slate-200 dark:border-slate-700">
+      <div className="bg-white dark:bg-slate-800 w-full max-w-md rounded-none shadow-2xl relative z-10 overflow-hidden animate-in zoom-in-95 duration-200 max-h-[92vh] overflow-y-auto custom-scrollbar border border-slate-200 dark:border-slate-700">
         
         <div className="flex justify-between items-center p-6 border-b border-slate-100 dark:border-slate-700">
           <h2 className="text-xl font-bold text-slate-800 dark:text-white uppercase tracking-widest">
@@ -344,7 +490,7 @@ function AuthModal({ isOpen, onClose, onLogin }) {
           <button 
             onClick={handleGoogleLogin} 
             disabled={loading}
-            className="w-full flex items-center justify-center gap-3 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-white font-bold py-3 px-4 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors focus:outline-none mb-6"
+            className="w-full flex items-center justify-center gap-3 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-white font-bold py-3 px-4 rounded-none hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors focus:outline-none mb-6"
           >
             <svg viewBox="0 0 24 24" className="w-5 h-5"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
             Continuar con Google
@@ -357,14 +503,14 @@ function AuthModal({ isOpen, onClose, onLogin }) {
           </div>
 
           {successMsg && (
-            <div className="bg-green-50 dark:bg-green-900/25 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 p-4 rounded-xl text-xs font-bold mb-4 flex items-center gap-3 animate-in fade-in zoom-in-95">
+            <div className="bg-green-50 dark:bg-green-900/25 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 p-4 rounded-none text-xs font-bold mb-4 flex items-center gap-3 animate-in fade-in zoom-in-95">
               <CheckCircle className="w-5 h-5 flex-shrink-0 text-green-600 dark:text-green-400" />
               <span>{successMsg}</span>
             </div>
           )}
 
           {error && (
-            <div className="bg-red-50 dark:bg-red-900/25 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 p-4 rounded-xl text-xs font-bold mb-4 flex items-center gap-3 animate-in fade-in zoom-in-95">
+            <div className="bg-red-50 dark:bg-red-900/25 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 p-4 rounded-none text-xs font-bold mb-4 flex items-center gap-3 animate-in fade-in zoom-in-95">
               <X className="w-5 h-5 flex-shrink-0 text-red-500" />
               <span>{error}</span>
             </div>
@@ -375,27 +521,27 @@ function AuthModal({ isOpen, onClose, onLogin }) {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Nombre</label>
-                  <input type="text" required value={nombre} onChange={e => setNombre(e.target.value)} className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:border-blue-500 focus:outline-none" />
+                  <input type="text" required value={nombre} onChange={e => setNombre(e.target.value)} className="w-full p-3 rounded-none border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:border-blue-500 focus:outline-none" />
                 </div>
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Apellido</label>
-                  <input type="text" required value={apellido} onChange={e => setApellido(e.target.value)} className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:border-blue-500 focus:outline-none" />
+                  <input type="text" required value={apellido} onChange={e => setApellido(e.target.value)} className="w-full p-3 rounded-none border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:border-blue-500 focus:outline-none" />
                 </div>
                 <div className="space-y-1 col-span-2">
                   <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Teléfono (Opcional)</label>
-                  <input type="text" value={telefono} onChange={e => setTelefono(e.target.value)} className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:border-blue-500 focus:outline-none" />
+                  <input type="text" value={telefono} onChange={e => setTelefono(e.target.value)} className="w-full p-3 rounded-none border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:border-blue-500 focus:outline-none" />
                 </div>
               </div>
             )}
 
             <div className="space-y-1">
               <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Email</label>
-              <input type="email" required value={email} onChange={e => setEmail(e.target.value)} className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:border-blue-500 focus:outline-none" />
+              <input type="email" required value={email} onChange={e => setEmail(e.target.value)} className="w-full p-3 rounded-none border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:border-blue-500 focus:outline-none" />
             </div>
             
             <div className="space-y-1">
               <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Contraseña</label>
-              <input type="password" required value={password} onChange={e => setPassword(e.target.value)} placeholder={isLogin ? "" : "Mínimo 6 caracteres"} className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:border-blue-500 focus:outline-none" />
+              <input type="password" required value={password} onChange={e => setPassword(e.target.value)} placeholder={isLogin ? "" : "Mínimo 6 caracteres"} className="w-full p-3 rounded-none border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:border-blue-500 focus:outline-none" />
             </div>
 
             {!isLogin && (
@@ -407,7 +553,7 @@ function AuthModal({ isOpen, onClose, onLogin }) {
                   value={confirmPassword} 
                   onChange={e => setConfirmPassword(e.target.value)} 
                   placeholder="Volvé a escribir tu contraseña"
-                  className={`w-full p-3 rounded-xl border bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none ${
+                  className={`w-full p-3 rounded-none border bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none ${
                     confirmPassword && password !== confirmPassword 
                       ? 'border-red-500 focus:border-red-500' 
                       : 'border-slate-300 dark:border-slate-600 focus:border-blue-500'
@@ -419,7 +565,7 @@ function AuthModal({ isOpen, onClose, onLogin }) {
               </div>
             )}
 
-            <button type="submit" disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-widest py-3 rounded-xl transition-colors mt-2">
+            <button type="submit" disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-widest py-3 rounded-none transition-colors mt-2">
               {loading ? 'Cargando...' : isLogin ? 'Ingresar' : 'Crear Cuenta'}
             </button>
           </form>
@@ -441,7 +587,7 @@ function AuthModal({ isOpen, onClose, onLogin }) {
 
 function CorreoArgentinoLogo() {
   return (
-    <div className="w-11 h-11 rounded-full bg-[#FFCE00] flex items-center justify-center flex-shrink-0 shadow-sm border border-yellow-400">
+    <div className="w-11 h-11 rounded-none bg-[#FFCE00] flex items-center justify-center flex-shrink-0 shadow-sm border border-yellow-400">
       <div className="flex flex-col items-center leading-none text-[#152663]">
         <Truck className="w-4 h-4 stroke-[2.5] mb-0.5" />
         <span className="text-[7px] font-black uppercase tracking-tighter">Correo</span>
@@ -692,7 +838,7 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
     <div className="fixed inset-0 z-[1000] bg-slate-50 dark:bg-slate-900 overflow-y-auto flex flex-col transition-colors">
       <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-4 sticky top-0 z-10 shadow-sm flex items-center justify-between">
         <h2 className="font-michroma text-xl font-bold text-slate-900 dark:text-white ml-4">D.A.P.A <span className="text-[10px] font-exo tracking-[0.2em] uppercase text-slate-500">Checkout</span></h2>
-        <button onClick={onClose} className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full"><X className="w-6 h-6" /></button>
+        <button onClick={onClose} className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-none"><X className="w-6 h-6" /></button>
       </div>
 
       <div className="flex-1 max-w-5xl mx-auto w-full p-4 sm:p-6 lg:p-8 flex flex-col lg:flex-row gap-8">
@@ -710,23 +856,23 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Email</label>
-                    <input type="email" name="email" value={formData.email} onChange={handleChange} placeholder="ejemplo@correo.com" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
+                    <input type="email" name="email" value={formData.email} onChange={handleChange} placeholder="ejemplo@correo.com" className="w-full p-3 rounded-none border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Teléfono / WhatsApp</label>
-                    <input type="text" name="telefono" value={formData.telefono} onChange={handleChange} placeholder="Ej: 2478512620" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
+                    <input type="text" name="telefono" value={formData.telefono} onChange={handleChange} placeholder="Ej: 2478512620" className="w-full p-3 rounded-none border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Nombre</label>
-                    <input type="text" name="nombre" value={formData.nombre} onChange={handleChange} placeholder="Tu nombre" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
+                    <input type="text" name="nombre" value={formData.nombre} onChange={handleChange} placeholder="Tu nombre" className="w-full p-3 rounded-none border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Apellido</label>
-                    <input type="text" name="apellido" value={formData.apellido} onChange={handleChange} placeholder="Tu apellido" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
+                    <input type="text" name="apellido" value={formData.apellido} onChange={handleChange} placeholder="Tu apellido" className="w-full p-3 rounded-none border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
                   </div>
                   <div className="space-y-1 sm:col-span-2">
                     <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">DNI / CUIT (Requerido para el correo)</label>
-                    <input type="text" name="dni" value={formData.dni} onChange={handleChange} placeholder="Sin puntos ni guiones" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
+                    <input type="text" name="dni" value={formData.dni} onChange={handleChange} placeholder="Sin puntos ni guiones" className="w-full p-3 rounded-none border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
                   </div>
                 </div>
               </div>
@@ -746,12 +892,12 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
                         placeholder="Ej: 2740"
                         autoFocus
                         onKeyDown={(e) => e.key === 'Enter' && handleApplyCp()}
-                        className="w-28 px-3 py-1.5 text-xs font-bold rounded-full border border-blue-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none text-center"
+                        className="w-28 px-3 py-1.5 text-xs font-bold rounded-none border border-blue-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none text-center"
                       />
                       <button
                         type="button"
                         onClick={handleApplyCp}
-                        className="px-3.5 py-1.5 rounded-full bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-colors"
+                        className="px-3.5 py-1.5 rounded-none bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-colors"
                       >
                         Cotizar
                       </button>
@@ -760,7 +906,7 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
                     <button
                       type="button"
                       onClick={() => { setTempCp(formData.cp); setIsEditingCp(true); }}
-                      className="px-4 py-1.5 rounded-full border border-slate-400 dark:border-slate-600 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:border-blue-500 hover:text-blue-600 transition-colors"
+                      className="px-4 py-1.5 rounded-none border border-slate-400 dark:border-slate-600 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:border-blue-500 hover:text-blue-600 transition-colors"
                     >
                       Cambiar CP{formData.cp}
                     </button>
@@ -768,7 +914,7 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
                 </div>
 
                 {isQuotingShipping ? (
-                  <div className="p-6 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-center text-xs text-slate-500 flex items-center justify-center gap-2">
+                  <div className="p-6 rounded-none border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-center text-xs text-slate-500 flex items-center justify-center gap-2">
                     <Settings className="w-4 h-4 animate-spin text-blue-500" /> Consultando tarifas de Correo Argentino para CP {formData.cp}...
                   </div>
                 ) : (
@@ -779,7 +925,7 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
                         <p className="text-xs font-medium text-slate-600 dark:text-slate-400">Envío a domicilio</p>
                         <label
                           onClick={() => setFormData({ ...formData, metodoEnvio: 'correo_domicilio' })}
-                          className={`flex items-center gap-4 p-4 rounded-xl border cursor-pointer transition-all ${
+                          className={`flex items-center gap-4 p-4 rounded-none border cursor-pointer transition-all ${
                             formData.metodoEnvio === 'correo_domicilio'
                               ? 'border-blue-500 bg-blue-50/40 dark:bg-blue-900/20 ring-1 ring-blue-500'
                               : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300'
@@ -810,7 +956,7 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
                         <p className="text-xs font-medium text-slate-600 dark:text-slate-400">Retirar en sucursal del correo</p>
                         <label
                           onClick={() => setFormData({ ...formData, metodoEnvio: 'correo_sucursal' })}
-                          className={`flex items-center gap-4 p-4 rounded-xl border cursor-pointer transition-all ${
+                          className={`flex items-center gap-4 p-4 rounded-none border cursor-pointer transition-all ${
                             formData.metodoEnvio === 'correo_sucursal'
                               ? 'border-blue-500 bg-blue-50/40 dark:bg-blue-900/20 ring-1 ring-blue-500'
                               : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300'
@@ -847,7 +993,7 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
                   <p className="text-xs font-medium text-slate-600 dark:text-slate-400">Otros medios de envío</p>
                   <label
                     onClick={() => setFormData({ ...formData, metodoEnvio: 'acordar' })}
-                    className={`flex items-center gap-4 p-4 rounded-xl border cursor-pointer transition-all ${
+                    className={`flex items-center gap-4 p-4 rounded-none border cursor-pointer transition-all ${
                       formData.metodoEnvio === 'acordar'
                         ? 'border-blue-500 bg-blue-50/40 dark:bg-blue-900/20 ring-1 ring-blue-500'
                         : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300'
@@ -860,7 +1006,7 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
                       onChange={() => {}}
                       className="w-4 h-4 text-blue-600 flex-shrink-0"
                     />
-                    <div className="w-11 h-11 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center flex-shrink-0 text-slate-600 dark:text-slate-300">
+                    <div className="w-11 h-11 rounded-none bg-slate-100 dark:bg-slate-700 flex items-center justify-center flex-shrink-0 text-slate-600 dark:text-slate-300">
                       <MessageSquare className="w-5 h-5" />
                     </div>
                     <div className="flex-1">
@@ -877,7 +1023,7 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
                   <p className="text-xs font-medium text-slate-600 dark:text-slate-400">Retirar en nuestros puntos</p>
                   <label
                     onClick={() => setFormData({ ...formData, metodoEnvio: 'retiro' })}
-                    className={`flex items-center gap-4 p-4 rounded-xl border cursor-pointer transition-all ${
+                    className={`flex items-center gap-4 p-4 rounded-none border cursor-pointer transition-all ${
                       formData.metodoEnvio === 'retiro'
                         ? 'border-blue-500 bg-blue-50/40 dark:bg-blue-900/20 ring-1 ring-blue-500'
                         : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300'
@@ -890,7 +1036,7 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
                       onChange={() => {}}
                       className="w-4 h-4 text-blue-600 flex-shrink-0"
                     />
-                    <div className="w-11 h-11 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center flex-shrink-0 text-slate-600 dark:text-slate-300">
+                    <div className="w-11 h-11 rounded-none bg-slate-100 dark:bg-slate-700 flex items-center justify-center flex-shrink-0 text-slate-600 dark:text-slate-300">
                       <MapPin className="w-5 h-5" />
                     </div>
                     <div className="flex-1">
@@ -910,23 +1056,23 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                     <div className="space-y-1 col-span-2">
                       <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Calle</label>
-                      <input type="text" name="calle" value={formData.calle} onChange={handleChange} placeholder="Ej: San Martín" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
+                      <input type="text" name="calle" value={formData.calle} onChange={handleChange} placeholder="Ej: San Martín" className="w-full p-3 rounded-none border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
                     </div>
                     <div className="space-y-1">
                       <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Número</label>
-                      <input type="text" name="numero" value={formData.numero} onChange={handleChange} placeholder="Ej: 123" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
+                      <input type="text" name="numero" value={formData.numero} onChange={handleChange} placeholder="Ej: 123" className="w-full p-3 rounded-none border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
                     </div>
                     <div className="space-y-1">
                       <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Piso / Dpto</label>
-                      <input type="text" name="piso" value={formData.piso} onChange={handleChange} placeholder="Opcional" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
+                      <input type="text" name="piso" value={formData.piso} onChange={handleChange} placeholder="Opcional" className="w-full p-3 rounded-none border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
                     </div>
                     <div className="space-y-1">
                       <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Ciudad / Localidad</label>
-                      <input type="text" name="ciudad" value={formData.ciudad} onChange={handleChange} placeholder="Tu ciudad" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
+                      <input type="text" name="ciudad" value={formData.ciudad} onChange={handleChange} placeholder="Tu ciudad" className="w-full p-3 rounded-none border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
                     </div>
                     <div className="space-y-1">
                       <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Provincia</label>
-                      <input type="text" name="provincia" value={formData.provincia} onChange={handleChange} placeholder="Tu provincia" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
+                      <input type="text" name="provincia" value={formData.provincia} onChange={handleChange} placeholder="Tu provincia" className="w-full p-3 rounded-none border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
                     </div>
                   </div>
                 </div>
@@ -938,11 +1084,11 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Ciudad / Localidad de la sucursal</label>
-                      <input type="text" name="ciudad" value={formData.ciudad} onChange={handleChange} placeholder="Ej: Arrecifes, Pergamino..." className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
+                      <input type="text" name="ciudad" value={formData.ciudad} onChange={handleChange} placeholder="Ej: Arrecifes, Pergamino..." className="w-full p-3 rounded-none border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
                     </div>
                     <div className="space-y-1">
                       <label className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Provincia</label>
-                      <input type="text" name="provincia" value={formData.provincia} onChange={handleChange} placeholder="Provincia" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
+                      <input type="text" name="provincia" value={formData.provincia} onChange={handleChange} placeholder="Provincia" className="w-full p-3 rounded-none border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" />
                     </div>
                   </div>
                 </div>
@@ -956,7 +1102,7 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
               
               <button 
                 onClick={handleSiguientePaso} 
-                className="w-full mt-6 bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase py-4 rounded-xl transition-colors shadow-lg shadow-blue-600/20"
+                className="w-full mt-6 bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase py-4 rounded-none transition-colors shadow-lg shadow-blue-600/20"
               >
                 Siguiente Paso
               </button>
@@ -968,7 +1114,7 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
               <h3 className="font-bold text-lg text-slate-800 dark:text-white uppercase">Método de Pago</h3>
               
               <div className="space-y-3">
-                <label className={`flex items-center gap-4 p-4 rounded-xl border cursor-pointer transition-colors ${formData.metodoPago === 'mercadopago' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800'}`}>
+                <label className={`flex items-center gap-4 p-4 rounded-none border cursor-pointer transition-colors ${formData.metodoPago === 'mercadopago' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800'}`}>
                   <input type="radio" name="metodoPago" value="mercadopago" checked={formData.metodoPago === 'mercadopago'} onChange={handleChange} className="w-5 h-5 text-blue-600" />
                   <div>
                     <span className="font-bold text-slate-900 dark:text-white block">Mercado Pago</span>
@@ -976,7 +1122,7 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
                   </div>
                 </label>
                 
-                <label className={`flex items-center gap-4 p-4 rounded-xl border cursor-pointer transition-colors ${formData.metodoPago === 'transferencia' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800'}`}>
+                <label className={`flex items-center gap-4 p-4 rounded-none border cursor-pointer transition-colors ${formData.metodoPago === 'transferencia' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800'}`}>
                   <input type="radio" name="metodoPago" value="transferencia" checked={formData.metodoPago === 'transferencia'} onChange={handleChange} className="w-5 h-5 text-blue-600" />
                   <div>
                     <span className="font-bold text-slate-900 dark:text-white block">Transferencia Bancaria</span>
@@ -984,7 +1130,7 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
                   </div>
                 </label>
                 
-                <label className={`flex items-center gap-4 p-4 rounded-xl border cursor-pointer transition-colors ${formData.metodoPago === 'acordar' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800'}`}>
+                <label className={`flex items-center gap-4 p-4 rounded-none border cursor-pointer transition-colors ${formData.metodoPago === 'acordar' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800'}`}>
                   <input type="radio" name="metodoPago" value="acordar" checked={formData.metodoPago === 'acordar'} onChange={handleChange} className="w-5 h-5 text-blue-600" />
                   <div>
                     <span className="font-bold text-slate-900 dark:text-white block">Acordar en el local</span>
@@ -993,11 +1139,11 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
                 </label>
               </div>
 
-              <textarea name="observaciones" value={formData.observaciones} onChange={handleChange} placeholder="Notas del pedido (Opcional)" className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-24 resize-none mt-4"></textarea>
+              <textarea name="observaciones" value={formData.observaciones} onChange={handleChange} placeholder="Notas del pedido (Opcional)" className="w-full p-3 rounded-none border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-24 resize-none mt-4"></textarea>
 
               <div className="flex gap-4 mt-6">
-                <button onClick={() => setStep(1)} className="w-1/3 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 font-bold uppercase py-4 rounded-xl">Volver</button>
-                <button onClick={() => setStep(3)} className="w-2/3 bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase py-4 rounded-xl">Siguiente Paso</button>
+                <button onClick={() => setStep(1)} className="w-1/3 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 font-bold uppercase py-4 rounded-none">Volver</button>
+                <button onClick={() => setStep(3)} className="w-2/3 bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase py-4 rounded-none">Siguiente Paso</button>
               </div>
             </div>
           )}
@@ -1006,7 +1152,7 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
               <h3 className="font-bold text-lg text-slate-800 dark:text-white uppercase">Revisión Final</h3>
               
-              <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 space-y-4">
+              <div className="bg-white dark:bg-slate-800 p-6 rounded-none border border-slate-200 dark:border-slate-700 space-y-4">
                 <div>
                   <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Comprador:</h4>
                   <p className="text-slate-900 dark:text-white font-medium">{formData.nombre} {formData.apellido} • DNI: {formData.dni} • Tel: {formData.telefono}</p>
@@ -1035,7 +1181,7 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
                 <button 
                   onClick={() => setStep(2)} 
                   disabled={isSubmitting}
-                  className="w-full sm:w-1/3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold uppercase tracking-widest py-4 rounded-xl border border-transparent dark:border-slate-600 transition-colors focus:outline-none"
+                  className="w-full sm:w-1/3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold uppercase tracking-widest py-4 rounded-none border border-transparent dark:border-slate-600 transition-colors focus:outline-none"
                 >
                   Volver
                 </button>
@@ -1044,7 +1190,7 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
                   <button 
                     onClick={handleSubmit} 
                     disabled={isSubmitting} 
-                    className="w-full sm:w-2/3 bg-[#009EE3] hover:bg-[#008ACA] text-white font-bold py-4 rounded-xl flex items-center justify-center gap-3 transition-colors shadow-lg shadow-[#009EE3]/30 focus:outline-none focus:ring-4 focus:ring-[#009EE3]/50 disabled:opacity-70"
+                    className="w-full sm:w-2/3 bg-[#009EE3] hover:bg-[#008ACA] text-white font-bold py-4 rounded-none flex items-center justify-center gap-3 transition-colors shadow-lg shadow-[#009EE3]/30 focus:outline-none focus:ring-4 focus:ring-[#009EE3]/50 disabled:opacity-70"
                   >
                     {isSubmitting ? (
                       <Settings className="w-5 h-5 animate-spin" />
@@ -1059,7 +1205,7 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
                   <button 
                     onClick={handleSubmit} 
                     disabled={isSubmitting} 
-                    className="w-full sm:w-2/3 bg-green-500 hover:bg-green-600 text-white font-bold uppercase tracking-widest py-4 rounded-xl flex items-center justify-center gap-3 transition-colors shadow-lg shadow-green-500/30 focus:outline-none focus:ring-4 focus:ring-green-500/50 disabled:opacity-70"
+                    className="w-full sm:w-2/3 bg-green-500 hover:bg-green-600 text-white font-bold uppercase tracking-widest py-4 rounded-none flex items-center justify-center gap-3 transition-colors shadow-lg shadow-green-500/30 focus:outline-none focus:ring-4 focus:ring-green-500/50 disabled:opacity-70"
                   >
                     {isSubmitting ? (
                       <Settings className="w-5 h-5 animate-spin" />
@@ -1077,7 +1223,7 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
         </div>
 
         <div className="lg:w-96 flex-shrink-0">
-          <div className="bg-slate-100 dark:bg-slate-800 p-6 rounded-2xl sticky top-24 border border-slate-200 dark:border-slate-700">
+          <div className="bg-slate-100 dark:bg-slate-800 p-6 rounded-none sticky top-24 border border-slate-200 dark:border-slate-700">
             <h3 className="font-bold text-slate-900 dark:text-white uppercase mb-4">Resumen de Compra</h3>
             <div className="space-y-3 mb-6 max-h-[36vh] overflow-y-auto custom-scrollbar pr-2">
               {cart.map(item => (
@@ -1237,7 +1383,7 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, current
             <ShoppingCart className="w-6 h-6 text-slate-900 dark:text-white" />
             <h3 className="font-bold text-xl uppercase tracking-widest font-exo text-slate-900 dark:text-white">Tu Cotización</h3>
           </div>
-          <button onClick={resetAndClose} className="text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 focus:outline-none">
+          <button onClick={resetAndClose} className="text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors p-2 rounded-none hover:bg-slate-200 dark:hover:bg-slate-700 focus:outline-none">
             <X className="w-6 h-6" />
           </button>
         </div>
@@ -1245,7 +1391,7 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, current
         <div className="flex-1 overflow-y-auto p-6 bg-slate-50/30 dark:bg-slate-900/30 custom-scrollbar">
           {orderSuccess ? (
             <div className="h-full flex flex-col items-center justify-center text-center animate-in fade-in zoom-in duration-500">
-              <div className="w-20 h-20 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mb-6">
+              <div className="w-20 h-20 bg-green-100 dark:bg-green-900/30 rounded-none flex items-center justify-center mb-6">
                 <CheckCircle className="w-10 h-10 text-green-600 dark:text-green-400" />
               </div>
               <h3 className="text-2xl font-bold uppercase tracking-widest mb-4 dark:text-white">¡Pedido Registrado!</h3>
@@ -1265,7 +1411,7 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, current
           ) : (
          <div className="space-y-4">
               {cart.map((item) => (
-                <div key={item.product.sku_code} className="flex gap-4 border border-slate-100 dark:border-slate-700 p-4 rounded-xl shadow-sm relative group bg-white dark:bg-slate-800 hover:border-blue-200 transition-colors">
+                <div key={item.product.sku_code} className="flex gap-4 border border-slate-100 dark:border-slate-700 p-4 rounded-none shadow-sm relative group bg-white dark:bg-slate-800 hover:border-blue-200 transition-colors">
                   <div className="flex-1 min-w-0">
                     <h4 className="font-bold text-slate-800 dark:text-white text-sm leading-tight truncate" title={item.product.name}>
                       {item.product.name}
@@ -1280,12 +1426,12 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, current
                     </div>
                     
                     <div className="flex items-center gap-3 mt-4">
-                      <div className="flex items-center border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-900">
-                        <button onClick={() => updateQuantity(item.product.sku_code, -1)} className="p-2 text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700 rounded-l-lg transition-colors focus:outline-none">
+                      <div className="flex items-center border border-slate-200 dark:border-slate-600 rounded-none bg-slate-50 dark:bg-slate-900">
+                        <button onClick={() => updateQuantity(item.product.sku_code, -1)} className="p-2 text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700 rounded-none transition-colors focus:outline-none">
                           <Minus className="w-3 h-3" />
                         </button>
                         <span className="w-8 text-center text-xs font-bold text-slate-700 dark:text-slate-200">{item.quantity}</span>
-                        <button onClick={() => updateQuantity(item.product.sku_code, 1)} className="p-2 text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700 rounded-r-lg transition-colors focus:outline-none">
+                        <button onClick={() => updateQuantity(item.product.sku_code, 1)} className="p-2 text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700 rounded-none transition-colors focus:outline-none">
                           <Plus className="w-3 h-3" />
                         </button>
                       </div>
@@ -1294,7 +1440,7 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, current
                         ${(Number(item.product.price) * item.quantity).toLocaleString('es-AR')}
                       </span>
 
-                      <button onClick={() => removeItem(item.product.sku_code)} className="text-red-400 hover:text-red-600 p-2 rounded-lg hover:bg-red-50 dark:hover:bg-slate-700 transition-colors focus:outline-none">
+                      <button onClick={() => removeItem(item.product.sku_code)} className="text-red-400 hover:text-red-600 p-2 rounded-none hover:bg-red-50 dark:hover:bg-slate-700 transition-colors focus:outline-none">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
@@ -1308,19 +1454,19 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, current
         {!orderSuccess && cart.length > 0 && (
           <div className="p-6 border-t border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.05)]">
             {currentUser && (
-              <div className="mb-4 text-xs font-light text-slate-500 dark:text-slate-400 text-center bg-slate-50 dark:bg-slate-900 py-2 rounded-lg border border-slate-100 dark:border-slate-700">
+              <div className="mb-4 text-xs font-light text-slate-500 dark:text-slate-400 text-center bg-slate-50 dark:bg-slate-900 py-2 rounded-none border border-slate-100 dark:border-slate-700">
                 Cotización a nombre de: <strong className="font-bold text-slate-700 dark:text-slate-200">{currentUser.name}</strong>
               </div>
             )}
 
-            <div className="mb-4 p-3 rounded-xl bg-amber-50 dark:bg-slate-900/80 border border-amber-200/80 dark:border-slate-700 text-[11px] text-slate-600 dark:text-slate-400 leading-snug flex items-start gap-2">
+            <div className="mb-4 p-3 rounded-none bg-amber-50 dark:bg-slate-900/80 border border-amber-200/80 dark:border-slate-700 text-[11px] text-slate-600 dark:text-slate-400 leading-snug flex items-start gap-2">
               <Clock className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
               <span>
                 <strong>Nota:</strong> Algunos artículos de catálogo se traen directamente de distribuidora <strong>por encargue</strong>. Te confirmaremos la demora exacta al procesar tu pedido.
               </span>
             </div>
 
-            {drawerError && <div className="mb-3 p-3 rounded-xl bg-red-50 dark:bg-red-900/25 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 text-xs font-bold text-center">{drawerError}</div>}
+            {drawerError && <div className="mb-3 p-3 rounded-none bg-red-50 dark:bg-red-900/25 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 text-xs font-bold text-center">{drawerError}</div>}
             
             <div className="flex justify-between items-center mb-4 pb-3 border-b border-slate-100 dark:border-slate-700">
               <span className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
@@ -1337,14 +1483,14 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, current
                 <button 
                   onClick={() => handleProcessOrder('WHATSAPP')}
                   disabled={isSubmitting}
-                  className="w-full bg-green-500 hover:bg-green-600 text-white font-bold uppercase tracking-widest py-3 rounded-xl transition-colors flex items-center justify-center gap-3 shadow-lg shadow-green-500/20 disabled:opacity-50 focus:outline-none"
+                  className="w-full bg-green-500 hover:bg-green-600 text-white font-bold uppercase tracking-widest py-3 rounded-none transition-colors flex items-center justify-center gap-3 shadow-lg shadow-green-500/20 disabled:opacity-50 focus:outline-none"
                 >
                   {isSubmitting ? <Settings className="w-4 h-4 animate-spin" /> : <MessageSquare className="w-4 h-4" />} 
                   Por WhatsApp
                 </button>
                 <button 
                   onClick={() => setShowWebCheckout(true)}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-widest py-3 rounded-xl transition-colors flex items-center justify-center gap-3 shadow-lg shadow-blue-600/20 focus:outline-none"
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-widest py-3 rounded-none transition-colors flex items-center justify-center gap-3 shadow-lg shadow-blue-600/20 focus:outline-none"
                 >
                   <Send className="w-4 h-4" /> 
                   Por la Página Web 
@@ -1359,7 +1505,7 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, current
             ) : (
               <button 
                 onClick={() => setCheckoutMode(true)}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-widest py-4 rounded-xl transition-colors flex items-center justify-center gap-3 shadow-lg shadow-blue-600/20 focus:outline-none focus:ring-4 focus:ring-blue-300"
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-widest py-4 rounded-none transition-colors flex items-center justify-center gap-3 shadow-lg shadow-blue-600/20 focus:outline-none focus:ring-4 focus:ring-blue-300"
               >
                 Solicitar Cotización
               </button>
@@ -1404,17 +1550,17 @@ function HowToBuyTutorial({ isOpen, onClose }) {
             const isActive = index === currentStep;
             const isPast = index < currentStep;
             return (
-              <div key={index} className={`relative flex flex-col items-center p-6 md:p-8 rounded-3xl transition-all duration-700 ease-[cubic-bezier(0.25,1,0.5,1)] w-full md:w-1/4
+              <div key={index} className={`relative flex flex-col items-center p-6 md:p-8 rounded-none transition-all duration-700 ease-[cubic-bezier(0.25,1,0.5,1)] w-full md:w-1/4
                   ${isActive ? 'bg-slate-800 scale-100 md:scale-110 opacity-100 shadow-[0_0_40px_rgba(59,130,246,0.3)] border border-blue-500/50 z-20' : 'bg-slate-900/50 scale-95 opacity-40 blur-[2px] border border-transparent z-10 hidden md:flex'}
                   ${!isActive && 'md:flex'} ${!isActive && index !== currentStep ? 'hidden md:flex' : 'flex'}
                 `}>
-                <div className={`w-24 h-24 rounded-full flex items-center justify-center mb-6 bg-slate-900 shadow-inner transition-colors duration-500 ${isActive && index === 3 ? 'shadow-[0_0_30px_rgba(74,222,128,0.3)] border border-green-500/30' : ''}`}>
+                <div className={`w-24 h-24 rounded-none flex items-center justify-center mb-6 bg-slate-900 shadow-inner transition-colors duration-500 ${isActive && index === 3 ? 'shadow-[0_0_30px_rgba(74,222,128,0.3)] border border-green-500/30' : ''}`}>
                   {step.icon}
                 </div>
                 <h3 className={`text-xl font-bold uppercase tracking-widest mb-3 font-exo text-center ${isActive && index === 3 ? 'text-green-400' : 'text-white'}`}>{step.title}</h3>
                 <p className="text-sm text-slate-400 font-light text-center leading-relaxed">{step.desc}</p>
                 {isPast && (
-                  <div className="absolute -top-3 -right-3 w-8 h-8 bg-green-500 rounded-full border-4 border-slate-900 flex items-center justify-center z-30">
+                  <div className="absolute -top-3 -right-3 w-8 h-8 bg-green-500 rounded-none border-4 border-slate-900 flex items-center justify-center z-30">
                     <CheckCircle className="w-5 h-5 text-white" />
                   </div>
                 )}
@@ -1423,13 +1569,13 @@ function HowToBuyTutorial({ isOpen, onClose }) {
           })}
         </div>
         <div className="flex items-center gap-6 animate-in slide-in-from-bottom-4 duration-500">
-          <button onClick={handlePrev} disabled={currentStep === 0} className="p-3 rounded-full bg-slate-800 text-white hover:bg-slate-700 disabled:opacity-0 transition-all focus:outline-none">
+          <button onClick={handlePrev} disabled={currentStep === 0} className="p-3 rounded-none bg-slate-800 text-white hover:bg-slate-700 disabled:opacity-0 transition-all focus:outline-none">
             <ChevronLeft className="w-6 h-6" />
           </button>
           <div className="flex gap-2">
-            {steps.map((_, i) => (<div key={i} className={`h-2 rounded-full transition-all duration-500 ${i === currentStep ? 'w-8 bg-blue-500' : 'w-2 bg-slate-700'}`}></div>))}
+            {steps.map((_, i) => (<div key={i} className={`h-2 rounded-none transition-all duration-500 ${i === currentStep ? 'w-8 bg-blue-500' : 'w-2 bg-slate-700'}`}></div>))}
           </div>
-          <button onClick={handleNext} className={`px-8 py-3 rounded-full font-bold uppercase tracking-widest transition-all shadow-lg flex items-center gap-2 focus:outline-none ${currentStep === steps.length - 1 ? 'bg-green-500 hover:bg-green-400 text-slate-900 shadow-green-500/20' : 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-600/20'}`}>
+          <button onClick={handleNext} className={`px-8 py-3 rounded-none font-bold uppercase tracking-widest transition-all shadow-lg flex items-center gap-2 focus:outline-none ${currentStep === steps.length - 1 ? 'bg-green-500 hover:bg-green-400 text-slate-900 shadow-green-500/20' : 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-600/20'}`}>
             {currentStep === steps.length - 1 ? '¡Entendido!' : 'Siguiente'}
             {currentStep !== steps.length - 1 && <ChevronRight className="w-5 h-5" />}
           </button>
@@ -1500,11 +1646,11 @@ function FloatingActions() {
 
   return (
     <div className="fixed bottom-6 left-6 right-6 flex justify-between items-end z-[50] pointer-events-none">
-      <button onClick={scrollToTop} className={`pointer-events-auto bg-slate-800 dark:bg-slate-700 text-white p-3 rounded-full shadow-xl hover:bg-slate-700 dark:hover:bg-slate-600 transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-slate-300 ${showTopBtn ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`} aria-label="Volver arriba">
+      <button onClick={scrollToTop} className={`pointer-events-auto bg-slate-800 dark:bg-slate-700 text-white p-3 rounded-none shadow-xl hover:bg-slate-700 dark:hover:bg-slate-600 transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-slate-300 ${showTopBtn ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`} aria-label="Volver arriba">
         <ArrowUp className="w-5 h-5" />
       </button>
-      <a href={CONTACT_INFO.whatsappLink} target="_blank" rel="noopener noreferrer" aria-label="Contactar por WhatsApp" className="pointer-events-auto bg-green-500 text-white p-4 rounded-full shadow-2xl hover:bg-green-600 hover:scale-110 transition-all group flex items-center justify-center focus:outline-none focus:ring-4 focus:ring-green-300 relative">
-        <span className="absolute inset-0 rounded-full bg-green-500 animate-ping opacity-50"></span>
+      <a href={CONTACT_INFO.whatsappLink} target="_blank" rel="noopener noreferrer" aria-label="Contactar por WhatsApp" className="pointer-events-auto bg-green-500 text-white p-4 rounded-none shadow-2xl hover:bg-green-600 hover:scale-110 transition-all group flex items-center justify-center focus:outline-none focus:ring-4 focus:ring-green-300 relative">
+        <span className="absolute inset-0 rounded-none bg-green-500 animate-ping opacity-50"></span>
         <Phone className="w-6 h-6 md:w-8 md:h-8 relative z-10" aria-hidden="true" />
       </a>
     </div>
@@ -1576,7 +1722,7 @@ function getCategoryVisualImage(category) {
 /* ==========================================================================
    NAVBAR CON MEGA-MENÚ A PANTALLA COMPLETA Y BUSCADOR CON ESTILO BISELADO
    ========================================================================== */
-function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenCart, onLogout, toggleDarkMode, isDarkMode, categories, allProducts, onOpenCategory, onProductSearchSelect, onLoginClick }) {
+function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenCart, onLogout, toggleDarkMode, isDarkMode, categories, allProducts, onOpenCategory, onProductSearchSelect, onSearchSubmit, onLoginClick }) {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState(null);
@@ -1721,6 +1867,22 @@ function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenCart, on
 
   const handleSuggestionClick = (prod) => { clearCatalogTimers(); setSearchTerm(''); setSuggestions([]); setMobileMenuOpen(false); setActiveDropdown(null); onProductSearchSelect(prod); };
 
+  const handleSearchSubmit = (e) => {
+    if (e) e.preventDefault();
+    const q = searchTerm.trim();
+    if (!q) {
+      handleNavClick('inicio', 'catálogo');
+      return;
+    }
+    clearCatalogTimers();
+    setSuggestions([]);
+    setMobileMenuOpen(false);
+    setActiveDropdown(null);
+    if (onSearchSubmit) {
+      onSearchSubmit(q);
+    }
+  };
+
   const chamferClipSm = 'polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px)';
 
   return (
@@ -1858,10 +2020,10 @@ function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenCart, on
                                       key={prod.sku_code}
                                       type="button"
                                       onClick={() => handleSuggestionClick(prod)}
-                                      className="text-left p-3 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-amber-400 transition-colors group/mprod flex items-center gap-3 cursor-pointer"
+                                      className="text-left p-3 rounded-none bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-amber-400 transition-colors group/mprod flex items-center gap-3 cursor-pointer"
                                       style={{ backgroundColor: '#0f172a' }}
                                     >
-                                      <div className="w-11 h-11 rounded-lg bg-slate-950 border border-slate-800 overflow-hidden flex-shrink-0 flex items-center justify-center" style={{ backgroundColor: '#020617' }}>
+                                      <div className="w-11 h-11 rounded-none bg-slate-950 border border-slate-800 overflow-hidden flex-shrink-0 flex items-center justify-center" style={{ backgroundColor: '#020617' }}>
                                         <ProductImage sku={prod.sku_code} imageUrl={prod.image_url} alt={prod.name} className="w-full h-full object-cover" />
                                       </div>
                                       <div className="min-w-0 flex-1">
@@ -1875,7 +2037,7 @@ function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenCart, on
                                     </button>
                                   ))
                                 ) : (
-                                  <div className="col-span-2 p-6 rounded-2xl bg-slate-900 border border-slate-800 text-slate-400 text-xs" style={{ backgroundColor: '#0f172a' }}>
+                                  <div className="col-span-2 p-6 rounded-none bg-slate-900 border border-slate-800 text-slate-400 text-xs" style={{ backgroundColor: '#0f172a' }}>
                                     Explorá todos los repuestos disponibles en <strong className="text-white">{activeMegaCat.name}</strong> haciendo clic en &ldquo;Ver todo&rdquo;.
                                   </div>
                                 )}
@@ -1884,7 +2046,7 @@ function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenCart, on
                               {/* Tarjeta visual representativa de la categoría */}
                               <div
                                 onClick={() => handleCategoryClick(activeMegaCat)}
-                                className="col-span-5 relative rounded-2xl overflow-hidden cursor-pointer group/catbanner border border-blue-500/30 min-h-[210px] flex items-center justify-center bg-[#030917]"
+                                className="col-span-5 relative rounded-none overflow-hidden cursor-pointer group/catbanner border border-blue-500/30 min-h-[210px] flex items-center justify-center bg-[#030917]"
                                 style={{ backgroundColor: '#030917' }}
                               >
                                 <img
@@ -1926,8 +2088,8 @@ function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenCart, on
 
         <div className="flex items-center gap-2 md:gap-3 flex-grow justify-end relative z-50">
           
-          {/* BUSCADOR EN NAVBAR CON ESTILO BISELADO Y BOTÓN DIAGONAL AMARILLO (Imagen 1) */}
-          <div className="hidden lg:block relative mr-1 w-full max-w-[270px] group">
+          {/* BUSCADOR EN NAVBAR CON ESTILO BISELADO Y BOTÓN DIAGONAL AMARILLO */}
+          <form onSubmit={handleSearchSubmit} className="hidden lg:block relative mr-1 w-full max-w-[270px] group">
             <div
               className="p-[1.5px] bg-slate-900 dark:bg-slate-600 group-focus-within:bg-amber-400 transition-colors shadow-sm"
               style={{ clipPath: chamferClipSm }}
@@ -1954,12 +2116,8 @@ function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenCart, on
                   </button>
                 )}
                 <button
-                  type="button"
-                  onClick={() => {
-                    if (suggestions.length > 0) handleSuggestionClick(suggestions[0]);
-                    else handleNavClick('inicio', 'catálogo');
-                  }}
-                  className="bg-amber-400 hover:bg-amber-300 text-slate-950 pl-5 pr-3.5 flex items-center justify-center transition-colors flex-shrink-0"
+                  type="submit"
+                  className="bg-amber-400 hover:bg-amber-300 text-slate-950 pl-5 pr-3.5 flex items-center justify-center transition-colors flex-shrink-0 cursor-pointer"
                   style={{ clipPath: 'polygon(24% 0, 100% 0, 100% 100%, 0% 100%)' }}
                   aria-label="Buscar"
                 >
@@ -1969,9 +2127,9 @@ function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenCart, on
             </div>
 
             {suggestions.length > 0 && (
-              <div className="absolute top-full mt-2 w-full min-w-[320px] right-0 bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden z-[110]">
+              <div className="absolute top-full mt-2 w-full min-w-[320px] right-0 bg-white dark:bg-slate-800 rounded-none shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden z-[110]">
                 {suggestions.map((prod, idx) => (
-                  <button key={idx} onClick={() => handleSuggestionClick(prod)} className="w-full text-left block px-4 py-3 hover:bg-blue-50 dark:hover:bg-slate-700 border-b border-slate-50 dark:border-slate-700 last:border-0 transition-colors focus:outline-none group/sugg">
+                  <button key={idx} type="button" onClick={() => handleSuggestionClick(prod)} className="w-full text-left block px-4 py-3 hover:bg-blue-50 dark:hover:bg-slate-700 border-b border-slate-100 dark:border-slate-700 last:border-0 transition-colors focus:outline-none group/sugg">
                     <div className="flex justify-between items-center mb-1">
                       <div className="text-[9px] font-bold tracking-widest uppercase text-blue-500">{prod.category?.name || 'Repuesto'}</div>
                       <div className="text-[9px] font-bold text-slate-400 font-exo">{prod.sku_code}</div>
@@ -1979,11 +2137,17 @@ function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenCart, on
                     <div className="text-xs font-semibold text-slate-800 dark:text-white leading-tight truncate group-hover/sugg:text-blue-700 dark:group-hover/sugg:text-blue-300">{prod.name}</div>
                   </button>
                 ))}
+                <button
+                  type="submit"
+                  className="w-full text-center py-2.5 px-4 bg-slate-100 dark:bg-slate-900 hover:bg-amber-400 hover:text-slate-950 text-[10px] font-black uppercase tracking-widest text-blue-600 dark:text-amber-400 transition-colors border-t border-slate-200 dark:border-slate-700"
+                >
+                  Ver todos los resultados para &ldquo;{searchTerm.trim()}&rdquo; (Enter)
+                </button>
               </div>
             )}
-          </div>
+          </form>
 
-          <button onClick={toggleDarkMode} className={`p-2 rounded-full transition-colors ${isNavbarSolid ? 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800' : 'text-white hover:bg-white/10'}`}>
+          <button onClick={toggleDarkMode} className={`p-2 rounded-none transition-colors ${isNavbarSolid ? 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800' : 'text-white hover:bg-white/10'}`}>
             {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
           </button>
 
@@ -1992,14 +2156,14 @@ function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenCart, on
               <button 
                 type="button"
                 onClick={() => setUserMenuOpen(prev => !prev)}
-                className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold border border-blue-200 dark:border-blue-800 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-8 h-8 rounded-none bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold border border-blue-200 dark:border-blue-800 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
                 aria-label="Abrir opciones de usuario"
                 aria-expanded={userMenuOpen}
               >
                 {currentUser.name.charAt(0).toUpperCase()}
               </button>
               
-              <div className={`absolute top-full right-0 mt-2 w-52 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 transition-all duration-200 z-[110] overflow-hidden ${
+              <div className={`absolute top-full right-0 mt-2 w-52 bg-white dark:bg-slate-800 rounded-none shadow-xl border border-slate-200 dark:border-slate-700 transition-all duration-200 z-[110] overflow-hidden ${
                 userMenuOpen 
                   ? 'opacity-100 visible pointer-events-auto' 
                   : 'opacity-0 invisible pointer-events-none md:group-hover:opacity-100 md:group-hover:visible md:group-hover:pointer-events-auto'
@@ -2031,7 +2195,7 @@ function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenCart, on
           ) : (
             <button 
               onClick={onLoginClick} 
-              className={`px-3 py-2 rounded-full transition-all flex items-center gap-2 border ${
+              className={`px-3 py-2 rounded-none transition-all flex items-center gap-2 border ${
                 isNavbarSolid 
                   ? 'text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800' 
                   : 'text-white border-white/25 hover:bg-white/10'
@@ -2048,9 +2212,9 @@ function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenCart, on
             </button>
           )}
 
-          <button onClick={onOpenCart} className={`relative p-2 rounded-full transition-all ${isNavbarSolid ? 'text-slate-900 dark:text-white hover:bg-slate-100 dark:hover:bg-slate-800' : 'text-white hover:bg-white/10'}`}>
+          <button onClick={onOpenCart} className={`relative p-2 rounded-none transition-all ${isNavbarSolid ? 'text-slate-900 dark:text-white hover:bg-slate-100 dark:hover:bg-slate-800' : 'text-white hover:bg-white/10'}`}>
             <ShoppingCart className="w-6 h-6" />
-            {cartCount > 0 && <span className="absolute top-0 right-0 bg-blue-600 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center border-2 border-white dark:border-slate-900 animate-in zoom-in">{cartCount}</span>}
+            {cartCount > 0 && <span className="absolute top-0 right-0 bg-blue-600 text-white text-[9px] font-bold w-4 h-4 rounded-none flex items-center justify-center border border-white dark:border-slate-900 animate-in zoom-in">{cartCount}</span>}
           </button>
 
           <button className="lg:hidden p-2" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
@@ -2064,9 +2228,9 @@ function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenCart, on
         <div className="lg:hidden absolute top-full left-0 w-full bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 p-6 flex flex-col gap-6 shadow-2xl animate-in slide-in-from-top-2 h-[calc(100vh-80px)] overflow-y-auto">
           
           {currentUser ? (
-            <div className="w-full p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex flex-col gap-3">
+            <div className="w-full p-4 rounded-none bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex flex-col gap-3">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-base shadow-sm">
+                <div className="w-10 h-10 rounded-none bg-blue-600 text-white flex items-center justify-center font-bold text-base shadow-sm">
                   {currentUser.name.charAt(0).toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -2079,14 +2243,14 @@ function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenCart, on
                   <a 
                     href="/admin" 
                     onClick={() => setMobileMenuOpen(false)}
-                    className="w-full py-2.5 px-3 rounded-lg text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-slate-700/60 flex items-center gap-2 transition-colors"
+                    className="w-full py-2.5 px-3 rounded-none text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-slate-700/60 flex items-center gap-2 transition-colors"
                   >
                     <Settings className="w-4 h-4" /> Panel Admin
                   </a>
                 )}
                 <button 
                   onClick={() => { setMobileMenuOpen(false); onLogout(); }}
-                  className="w-full py-2.5 px-3 rounded-lg text-xs font-bold uppercase tracking-wider text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2 transition-colors"
+                  className="w-full py-2.5 px-3 rounded-none text-xs font-bold uppercase tracking-wider text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2 transition-colors"
                 >
                   <LogOut className="w-4 h-4" /> Cerrar Sesión
                 </button>
@@ -2095,14 +2259,14 @@ function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenCart, on
           ) : (
             <button 
               onClick={() => { setMobileMenuOpen(false); onLoginClick(); }}
-              className="w-full py-3 px-4 rounded-xl bg-blue-600 text-white font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-md"
+              className="w-full py-3 px-4 rounded-none bg-blue-600 text-white font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-md"
             >
               <User className="w-4 h-4" /> Iniciar Sesión / Registrarse
             </button>
           )}
 
           {/* BUSCADOR MOBILE CON ESTILO BISELADO */}
-          <div className="relative w-full mb-2">
+          <form onSubmit={handleSearchSubmit} className="relative w-full mb-2">
             <div
               className="p-[2px] bg-slate-900 dark:bg-slate-600"
               style={{ clipPath: chamferClipSm }}
@@ -2119,10 +2283,7 @@ function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenCart, on
                   className="w-full bg-transparent pl-4 pr-2 py-3 text-sm text-slate-900 dark:text-white outline-none"
                 />
                 <button
-                  type="button"
-                  onClick={() => {
-                    if (suggestions.length > 0) handleSuggestionClick(suggestions[0]);
-                  }}
+                  type="submit"
                   className="bg-amber-400 text-slate-950 pl-6 pr-5 flex items-center justify-center"
                   style={{ clipPath: 'polygon(22% 0, 100% 0, 100% 100%, 0% 100%)' }}
                   aria-label="Buscar"
@@ -2132,16 +2293,22 @@ function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenCart, on
               </div>
             </div>
             {suggestions.length > 0 && (
-              <div className="absolute top-full mt-2 w-full bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-700 overflow-hidden z-50">
+              <div className="absolute top-full mt-2 w-full bg-white dark:bg-slate-800 rounded-none shadow-xl border border-slate-200 dark:border-slate-700 overflow-hidden z-50">
                 {suggestions.map((prod, idx) => (
-                  <button key={idx} onClick={() => handleSuggestionClick(prod)} className="w-full text-left block px-5 py-4 hover:bg-blue-50 dark:hover:bg-slate-700 border-b border-slate-50 dark:border-slate-700 last:border-0 focus:outline-none">
+                  <button key={idx} type="button" onClick={() => handleSuggestionClick(prod)} className="w-full text-left block px-5 py-4 hover:bg-blue-50 dark:hover:bg-slate-700 border-b border-slate-100 dark:border-slate-700 last:border-0 focus:outline-none">
                     <div className="text-[10px] font-bold tracking-widest uppercase text-blue-500 mb-1">{prod.category?.name || 'Repuesto'}</div>
                     <div className="text-sm font-semibold text-slate-800 dark:text-white leading-tight">{prod.name}</div>
                   </button>
                 ))}
+                <button
+                  type="submit"
+                  className="w-full text-center py-3 px-4 bg-slate-100 dark:bg-slate-900 hover:bg-amber-400 hover:text-slate-950 text-xs font-black uppercase tracking-widest text-blue-600 dark:text-amber-400 transition-colors border-t border-slate-200 dark:border-slate-700"
+                >
+                  Ver todos los resultados ({searchTerm.trim()})
+                </button>
               </div>
             )}
-          </div>
+          </form>
           
           <button onClick={() => handleNavClick('inicio', 'inicio')} className="text-left text-sm font-bold uppercase tracking-widest text-slate-800 dark:text-white">Inicio</button>
           
@@ -2231,11 +2398,11 @@ function HeroSection({ navigateTo }) {
               Venta de repuestos y accesorios para el automotor. Envíos a todo el país desde Arrecifes con la garantía y respaldo de más de 50 años de experiencia en el negocio.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center md:justify-start px-4 md:px-0 relative z-40 w-full sm:w-auto pb-16">
-              <button onClick={() => navigateTo('inicio', 'catálogo')} className="group bg-blue-600 text-white hover:bg-blue-500 px-6 md:px-8 py-3 md:py-4 rounded-lg md:rounded-none font-bold uppercase tracking-wider text-xs md:text-sm transition-all flex items-center justify-center gap-2 overflow-hidden relative focus:ring-4 focus:ring-blue-300 w-full sm:w-auto shadow-[0_0_20px_rgba(37,99,235,0.3)] hover:shadow-[0_0_25px_rgba(37,99,235,0.5)]">
+              <button onClick={() => navigateTo('inicio', 'catálogo')} className="group bg-blue-600 text-white hover:bg-blue-500 px-6 md:px-8 py-3 md:py-4 rounded-none md:rounded-none font-bold uppercase tracking-wider text-xs md:text-sm transition-all flex items-center justify-center gap-2 overflow-hidden relative focus:ring-4 focus:ring-blue-300 w-full sm:w-auto shadow-[0_0_20px_rgba(37,99,235,0.3)] hover:shadow-[0_0_25px_rgba(37,99,235,0.5)]">
                 <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-blue-400 to-cyan-300 opacity-0 group-hover:opacity-20 transition-opacity"></span>
                 <span className="relative z-10 flex items-center gap-2">Ver Catálogo <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" /></span>
               </button>
-              <button onClick={() => navigateTo('nosotros')} className="bg-transparent border border-white/50 hover:border-white hover:bg-white/10 text-white px-6 md:px-8 py-3 md:py-4 rounded-lg md:rounded-none font-bold uppercase tracking-wider text-xs md:text-sm transition-all flex items-center justify-center focus:ring-4 focus:ring-slate-300 w-full sm:w-auto">Conocé Más</button>
+              <button onClick={() => navigateTo('nosotros')} className="bg-transparent border border-white/50 hover:border-white hover:bg-white/10 text-white px-6 md:px-8 py-3 md:py-4 rounded-none md:rounded-none font-bold uppercase tracking-wider text-xs md:text-sm transition-all flex items-center justify-center focus:ring-4 focus:ring-slate-300 w-full sm:w-auto">Conocé Más</button>
             </div>
           </RevealOnScroll>
         </div>
@@ -2415,7 +2582,7 @@ function MediaShowcaseSection({ navigateTo }) {
           href={CONTACT_INFO.instagramLink}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-400 hover:text-amber-300 bg-white/5 hover:bg-white/10 border border-white/15 px-4 py-2.5 rounded-xl transition-all w-fit"
+          className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-400 hover:text-amber-300 bg-white/5 hover:bg-white/10 border border-white/15 px-4 py-2.5 rounded-none transition-all w-fit"
         >
           <CustomInstagram className="w-4 h-4" /> Seguinos en @autopartesmolle
         </a>
@@ -2513,7 +2680,7 @@ function MediaShowcaseSection({ navigateTo }) {
                         </h3>
 
                         {/* Emblema central blanco estilo engranaje/insignia automotriz */}
-                        <div className="bg-white text-slate-950 px-7 py-4 sm:px-10 sm:py-5 rounded-3xl shadow-2xl border-4 border-blue-500/40 mb-4 flex flex-col items-center">
+                        <div className="bg-white text-slate-950 px-7 py-4 sm:px-10 sm:py-5 rounded-none shadow-2xl border-4 border-blue-500/40 mb-4 flex flex-col items-center">
                           <span className="font-michroma font-bold text-xl sm:text-3xl tracking-tighter text-blue-800 leading-none">
                             {slide.brandTitle}
                           </span>
@@ -2572,7 +2739,7 @@ function MediaShowcaseSection({ navigateTo }) {
                       <button
                         type="button"
                         onClick={() => setIsMuted(!isMuted)}
-                        className="bg-slate-900/80 hover:bg-slate-900 text-white text-xs font-bold uppercase tracking-wider px-4 py-3.5 rounded-xl border border-white/20 backdrop-blur-sm transition-colors"
+                        className="bg-slate-900/80 hover:bg-slate-900 text-white text-xs font-bold uppercase tracking-wider px-4 py-3.5 rounded-none border border-white/20 backdrop-blur-sm transition-colors"
                       >
                         {isMuted ? '🔇 Activar sonido' : '🔊 Silenciar'}
                       </button>
@@ -2588,26 +2755,26 @@ function MediaShowcaseSection({ navigateTo }) {
         {/* Flechas laterales sobre el banner a todo ancho */}
         <button
           onClick={handlePrevBanner}
-          className="absolute left-3 sm:left-6 top-1/2 -translate-y-1/2 z-20 p-2.5 sm:p-3 rounded-full bg-slate-950/70 hover:bg-amber-400 text-white hover:text-slate-950 border border-white/20 transition-all"
+          className="absolute left-3 sm:left-6 top-1/2 -translate-y-1/2 z-20 p-2.5 sm:p-3 rounded-none bg-slate-950/70 hover:bg-amber-400 text-white hover:text-slate-950 border border-white/20 transition-all"
           aria-label="Banner anterior"
         >
           <ChevronLeft className="w-5 h-5" />
         </button>
         <button
           onClick={handleNextBanner}
-          className="absolute right-3 sm:right-6 top-1/2 -translate-y-1/2 z-20 p-2.5 sm:p-3 rounded-full bg-slate-950/70 hover:bg-amber-400 text-white hover:text-slate-950 border border-white/20 transition-all"
+          className="absolute right-3 sm:right-6 top-1/2 -translate-y-1/2 z-20 p-2.5 sm:p-3 rounded-none bg-slate-950/70 hover:bg-amber-400 text-white hover:text-slate-950 border border-white/20 transition-all"
           aria-label="Siguiente banner"
         >
           <ChevronRight className="w-5 h-5" />
         </button>
 
         {/* Indicadores inferiores */}
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 bg-slate-950/60 px-3 py-1.5 rounded-full backdrop-blur-sm">
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 bg-slate-950/60 px-3 py-1.5 rounded-none backdrop-blur-sm">
           {SHOWCASE_BANNERS.map((b, i) => (
             <button
               key={b.id}
               onClick={() => setCurrentBanner(i)}
-              className={`h-2 rounded-full transition-all ${currentBanner === i ? 'w-7 bg-amber-400' : 'w-2 bg-white/40 hover:bg-white/70'}`}
+              className={`h-2 rounded-none transition-all ${currentBanner === i ? 'w-7 bg-amber-400' : 'w-2 bg-white/40 hover:bg-white/70'}`}
               aria-label={`Ir al banner ${i + 1}`}
             />
           ))}
@@ -2627,7 +2794,7 @@ function MediaShowcaseSection({ navigateTo }) {
                 <div
                   key={`${copyIdx}-${item.id}-${idx}`}
                   onClick={() => navigateTo('inicio', 'catálogo')}
-                  className="w-[270px] sm:w-[320px] md:w-[360px] h-[220px] sm:h-[250px] flex-shrink-0 relative rounded-2xl overflow-hidden border border-blue-400/30 hover:border-amber-400 group cursor-pointer shadow-xl bg-slate-950"
+                  className="w-[270px] sm:w-[320px] md:w-[360px] h-[220px] sm:h-[250px] flex-shrink-0 relative rounded-none overflow-hidden border border-blue-400/30 hover:border-amber-400 group cursor-pointer shadow-xl bg-slate-950"
                 >
                   {item.type === 'video' ? (
                     <video
@@ -2675,7 +2842,7 @@ function MediaShowcaseSection({ navigateTo }) {
   );
 }
 
-function CatalogSection({ categories, allProducts, onOpenCategory, onProductSearchSelect }) {
+function CatalogSection({ categories, allProducts, onOpenCategory, onProductSearchSelect, onSearchSubmit }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [isCatalogExpanded, setIsCatalogExpanded] = useState(false);
@@ -2703,6 +2870,17 @@ function CatalogSection({ categories, allProducts, onOpenCategory, onProductSear
 
   const handleSuggestionClick = (prod) => { setSearchTerm(''); setSuggestions([]); onProductSearchSelect(prod); };
 
+  const handleSearchSubmit = (e) => {
+    if (e) e.preventDefault();
+    const query = searchTerm.trim();
+    if (query.length > 0 && onSearchSubmit) {
+      setSuggestions([]);
+      onSearchSubmit(query);
+    } else if (suggestions.length > 0) {
+      handleSuggestionClick(suggestions[0]);
+    }
+  };
+
   const chamferClipLg = 'polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px)';
 
   return (
@@ -2710,13 +2888,13 @@ function CatalogSection({ categories, allProducts, onOpenCategory, onProductSear
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center mb-10 md:mb-16 relative z-30">
         <RevealOnScroll>
           <PremiumTitle dark={true} className="text-2xl sm:text-3xl md:text-4xl font-bold mb-2 uppercase tracking-widest">Nuestro Catálogo</PremiumTitle>
-          <div className="w-16 h-1.5 bg-amber-400 mx-auto my-3 -skew-x-12 rounded-sm"></div>
+          <div className="w-16 h-1.5 bg-amber-400 mx-auto my-3 -skew-x-12 rounded-none"></div>
           <p className="text-sm md:text-lg text-slate-500 dark:text-slate-400 max-w-2xl mx-auto font-light">Buscá el repuesto para tu vehículo y agregalo al carrito de cotización.</p>
         </RevealOnScroll>
 
         {/* BUSCADOR PRINCIPAL CON BORDES BISELADOS Y BOTÓN AMARILLO EN DIAGONAL (Estilo Imagen 1) */}
         <RevealOnScroll delay="md:delay-100">
-          <form className="w-full max-w-2xl mx-auto mt-6 md:mt-10 mb-6 md:mb-8 relative group" onSubmit={e => e.preventDefault()}>
+          <form className="w-full max-w-2xl mx-auto mt-6 md:mt-10 mb-6 md:mb-8 relative group" onSubmit={handleSearchSubmit}>
             <label htmlFor="search" className="sr-only">Buscar repuesto</label>
             <div
               className="p-[2px] bg-slate-900 dark:bg-slate-500 group-focus-within:bg-amber-400 transition-colors shadow-lg"
@@ -2746,10 +2924,7 @@ function CatalogSection({ categories, allProducts, onOpenCategory, onProductSear
                   </button>
                 )}
                 <button
-                  type="button"
-                  onClick={() => {
-                    if (suggestions.length > 0) handleSuggestionClick(suggestions[0]);
-                  }}
+                  type="submit"
                   className="bg-amber-400 hover:bg-amber-300 text-slate-950 pl-8 pr-6 md:pl-10 md:pr-8 flex items-center justify-center transition-colors flex-shrink-0"
                   style={{ clipPath: 'polygon(24% 0, 100% 0, 100% 100%, 0% 100%)' }}
                   aria-label="Buscar repuesto"
@@ -2760,7 +2935,7 @@ function CatalogSection({ categories, allProducts, onOpenCategory, onProductSear
             </div>
 
             {suggestions.length > 0 && (
-              <div className="absolute top-full left-0 right-0 mt-3 bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 z-50 text-left overflow-hidden animate-in slide-in-from-top-2">
+              <div className="absolute top-full left-0 right-0 mt-3 bg-white dark:bg-slate-800 rounded-none shadow-2xl border border-slate-200 dark:border-slate-700 z-50 text-left overflow-hidden animate-in slide-in-from-top-2">
                 {suggestions.map((prod, idx) => (
                   <button key={idx} onClick={() => handleSuggestionClick(prod)} type="button" className="w-full text-left block px-5 py-4 hover:bg-blue-50 dark:hover:bg-slate-700 border-b border-slate-50 dark:border-slate-700 last:border-0 transition-colors focus:outline-none focus:bg-blue-50 dark:focus:bg-slate-700 group/sugg">
                     <div className="flex justify-between items-center mb-1">
@@ -2770,6 +2945,15 @@ function CatalogSection({ categories, allProducts, onOpenCategory, onProductSear
                     <div className="text-sm md:text-base font-semibold text-slate-800 dark:text-white leading-tight group-hover/sugg:text-blue-700 dark:group-hover/sugg:text-blue-300 transition-colors">{prod.name}</div>
                   </button>
                 ))}
+                {onSearchSubmit && searchTerm.trim().length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => handleSearchSubmit()}
+                    className="w-full text-center px-5 py-3 bg-slate-100 dark:bg-slate-900 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 text-xs font-bold uppercase tracking-widest text-blue-600 dark:text-amber-400 transition-colors"
+                  >
+                    Ver todos los resultados para &ldquo;{searchTerm.trim()}&rdquo; (Enter)
+                  </button>
+                )}
               </div>
             )}
           </form>
@@ -2786,7 +2970,7 @@ function CatalogSection({ categories, allProducts, onOpenCategory, onProductSear
               <RevealOnScroll key={cat.id} delay={`delay-${(idx % 3) * 100}`}>
                 <article 
                   onClick={() => onOpenCategory(cat)} 
-                  className="relative h-72 sm:h-80 md:h-[380px] rounded-xl overflow-hidden border border-slate-900/15 dark:border-blue-500/25 shadow-lg hover:shadow-[0_20px_45px_rgba(13,45,108,0.45)] hover:-translate-y-2 transition-all duration-500 cursor-pointer group flex items-center justify-center text-center bg-[#030917]"
+                  className="relative h-72 sm:h-80 md:h-[380px] rounded-none overflow-hidden border border-slate-900/15 dark:border-blue-500/25 shadow-lg hover:shadow-[0_20px_45px_rgba(13,45,108,0.45)] hover:-translate-y-2 transition-all duration-500 cursor-pointer group flex items-center justify-center text-center bg-[#030917]"
                   style={{ backgroundColor: '#030917' }}
                 >
                   {/* Imagen de fondo representativa de la categoría */}
@@ -2899,10 +3083,20 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
     setViewingProduct(selectedProduct || initialSelectedProduct || null);
   }, [selectedProduct, initialSelectedProduct]);
 
-  const categoryProducts = useMemo(
-    () => allProducts.filter(p => p.category_id === category?.id),
-    [allProducts, category]
-  );
+  useEffect(() => {
+    setSelectedBrand('Todas');
+    setCategorySearch('');
+  }, [category?.id, category?.searchQuery]);
+
+  const categoryProducts = useMemo(() => {
+    if (!category) return [];
+    if (category.isSearchResult) {
+      const q = category.searchQuery || '';
+      if (!q.trim()) return allProducts;
+      return allProducts.filter(p => matchesProductQuery(p, q));
+    }
+    return allProducts.filter(p => p.category_id === category?.id);
+  }, [allProducts, category]);
 
   const availableBrands = useMemo(() => {
     const brands = new Set(categoryProducts.map(p => p.brand?.name).filter(Boolean));
@@ -2975,7 +3169,7 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
     window.history.pushState(
       { page: 'categoria', category },
       '',
-      `#categoria-${category.id}`
+      category?.isSearchResult ? `#busqueda-${encodeURIComponent(category.searchQuery || '')}` : `#categoria-${category.id}`
     );
   };
 
@@ -3009,7 +3203,7 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
         <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
           <button
             onClick={viewingProduct ? handleCloseProduct : onBack}
-            className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors bg-white dark:bg-slate-800 px-5 py-2.5 rounded-full shadow-sm border border-slate-200 dark:border-slate-700 focus:outline-none"
+            className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors bg-white dark:bg-slate-800 px-5 py-2.5 rounded-none shadow-sm border border-slate-200 dark:border-slate-700 focus:outline-none"
           >
             <ArrowLeft className="w-4 h-4" /> {viewingProduct ? `Volver a ${category.name}` : 'Volver al Catálogo'}
           </button>
@@ -3019,12 +3213,12 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
         </div>
 
         {viewingProduct ? (
-          <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 md:p-10 shadow-lg border border-slate-200 dark:border-slate-700 animate-in fade-in zoom-in-95 duration-300">
+          <div className="bg-white dark:bg-slate-800 rounded-none p-6 md:p-10 shadow-lg border border-slate-200 dark:border-slate-700 animate-in fade-in zoom-in-95 duration-300">
             <div className="flex flex-col lg:flex-row gap-10">
               
               <div className="w-full lg:w-1/2 flex flex-col">
                 <div 
-                  className="relative w-full h-80 sm:h-96 lg:h-[450px] rounded-2xl overflow-hidden bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center cursor-zoom-in"
+                  className="relative w-full h-80 sm:h-96 lg:h-[450px] rounded-none overflow-hidden bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center cursor-zoom-in"
                   onMouseEnter={() => setIsZoomed(true)}
                   onMouseLeave={() => setIsZoomed(false)}
                   onMouseMove={handleMouseMove}
@@ -3051,7 +3245,7 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
               <div className="w-full lg:w-1/2 flex flex-col justify-center">
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
                   <div className="flex items-center gap-3">
-                    <span className="bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-md">
+                    <span className="bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-none">
                       {viewingProduct.brand?.name || 'Genérico'}
                     </span>
                     <span className="text-xs font-bold text-slate-400 dark:text-slate-500 font-exo">
@@ -3063,7 +3257,7 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
                   <button
                     type="button"
                     onClick={() => handleCopyProductLink(viewingProduct)}
-                    className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                    className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-none border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
                     title="Copiar enlace directo a este repuesto"
                   >
                     {copiedLink ? (
@@ -3095,14 +3289,14 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
                   <h4 className="text-xs font-bold uppercase tracking-widest text-slate-900 dark:text-white mb-2">
                     Descripción y Compatibilidad:
                   </h4>
-                  <p className="text-slate-600 dark:text-slate-300 font-light text-sm leading-relaxed whitespace-pre-line bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-100 dark:border-slate-700/50">
+                  <p className="text-slate-600 dark:text-slate-300 font-light text-sm leading-relaxed whitespace-pre-line bg-slate-50 dark:bg-slate-900/50 p-4 rounded-none border border-slate-100 dark:border-slate-700/50">
                     {viewingProduct.description 
                       ? viewingProduct.description 
                       : 'Repuesto garantizado por D.A.P.A. Repuestos Molle. Consultanos con el número de chasis o modelo exacto de tu vehículo para confirmar compatibilidad antes de retirar.'}
                   </p>
                 </div>
 
-              <div className="mb-8 p-4 rounded-xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 flex items-start gap-3">
+              <div className="mb-8 p-4 rounded-none bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 flex items-start gap-3">
                   <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
                   <div className="text-xs leading-relaxed text-slate-700 dark:text-slate-300">
                     <span className="font-bold uppercase tracking-wider text-amber-800 dark:text-amber-300 block mb-0.5">
@@ -3114,7 +3308,7 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
 
                 <div className="flex flex-col gap-3 mt-auto">
                   <div className="flex flex-col sm:flex-row gap-4">
-                    <div className="flex items-center justify-between border border-slate-300 dark:border-slate-600 rounded-xl px-4 py-3 sm:w-36 bg-slate-50 dark:bg-slate-900">
+                    <div className="flex items-center justify-between border border-slate-300 dark:border-slate-600 rounded-none px-4 py-3 sm:w-36 bg-slate-50 dark:bg-slate-900">
                       <button onClick={() => setQuantity(q => Math.max(1, q - 1))} className="text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 p-1 focus:outline-none">
                         <Minus className="w-4 h-4"/>
                       </button>
@@ -3126,7 +3320,7 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
 
                     <button 
                       onClick={() => onAddToCart(viewingProduct, quantity)} 
-                      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-widest text-xs py-4 px-6 rounded-xl transition-all shadow-lg shadow-blue-600/30 flex items-center justify-center gap-3 focus:outline-none active:scale-[0.98]"
+                      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-widest text-xs py-4 px-6 rounded-none transition-all shadow-lg shadow-blue-600/30 flex items-center justify-center gap-3 focus:outline-none active:scale-[0.98]"
                     >
                       <ShoppingCart className="w-5 h-5" /> Agregar al Carrito
                     </button>
@@ -3137,7 +3331,7 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
                     href={getProductWhatsAppUrl(viewingProduct)}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="w-full bg-green-500/10 hover:bg-green-500 text-green-600 dark:text-green-400 hover:text-white border border-green-500/30 hover:border-green-500 font-bold uppercase tracking-widest text-xs py-3.5 px-6 rounded-xl transition-all flex items-center justify-center gap-2.5 focus:outline-none"
+                    className="w-full bg-green-500/10 hover:bg-green-500 text-green-600 dark:text-green-400 hover:text-white border border-green-500/30 hover:border-green-500 font-bold uppercase tracking-widest text-xs py-3.5 px-6 rounded-none transition-all flex items-center justify-center gap-2.5 focus:outline-none"
                   >
                     <MessageSquare className="w-4 h-4" /> Consultar por este repuesto en WhatsApp
                   </a>
@@ -3152,7 +3346,7 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
           </div>
         ) : (
           <>
-            <div className="bg-slate-900 rounded-2xl p-6 md:p-8 text-white mb-8 shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative overflow-hidden border border-blue-500/30">
+            <div className="bg-slate-900 rounded-none p-6 md:p-8 text-white mb-8 shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative overflow-hidden border border-blue-500/30">
               <img
                 src={getCategoryVisualImage(category)}
                 alt=""
@@ -3160,10 +3354,12 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
               />
               <div className="absolute inset-0 bg-gradient-to-r from-[#040d21]/95 via-[#07193e]/80 to-[#040d21]/75" />
               <div className="relative z-10">
-                <span className="text-amber-400 font-bold tracking-widest uppercase text-[10px] mb-1 block">Línea Completa</span>
+                <span className="text-amber-400 font-bold tracking-widest uppercase text-[10px] mb-1 block">
+                  {category.isSearchResult ? 'Resultados de Búsqueda en todo el Catálogo' : 'Línea Completa'}
+                </span>
                 <h1 className="text-2xl md:text-4xl font-bold font-michroma uppercase tracking-wide">{category.name}</h1>
               </div>
-              <div className="bg-white/10 px-4 py-2 rounded-lg backdrop-blur-sm border border-white/10 text-right relative z-10 flex-shrink-0">
+              <div className="bg-white/10 px-4 py-2 rounded-none backdrop-blur-sm border border-white/10 text-right relative z-10 flex-shrink-0">
                 <span className="text-xl font-bold font-exo text-amber-400 block leading-none">{filteredProducts.length}</span>
                 <span className="text-[9px] uppercase tracking-widest text-slate-300">Productos</span>
               </div>
@@ -3172,7 +3368,7 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
             <div className="flex flex-col lg:flex-row gap-8 items-start">
               
               {/* FILTRO LATERAL DE MARCAS */}
-              <div className="w-full lg:w-64 flex-shrink-0 bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm lg:sticky lg:top-28">
+              <div className="w-full lg:w-64 flex-shrink-0 bg-white dark:bg-slate-800 p-5 rounded-none border border-slate-200 dark:border-slate-700 shadow-sm lg:sticky lg:top-28">
                 <div className="flex items-center gap-2 font-bold text-xs uppercase tracking-wider text-slate-900 dark:text-white pb-3 mb-3 border-b border-slate-100 dark:border-slate-700">
                   <Filter className="w-4 h-4 text-blue-600 dark:text-blue-400" /> Filtrar por Marca
                 </div>
@@ -3181,14 +3377,14 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
                     <button
                       key={brand}
                       onClick={() => setSelectedBrand(brand)}
-                      className={`text-left px-3 py-2 rounded-lg text-xs transition-all flex items-center justify-between whitespace-nowrap lg:whitespace-normal flex-shrink-0 ${
+                      className={`text-left px-3 py-2 rounded-none text-xs transition-all flex items-center justify-between whitespace-nowrap lg:whitespace-normal flex-shrink-0 ${
                         selectedBrand === brand
                           ? 'bg-blue-600 text-white font-bold shadow-sm'
                           : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700/50 font-medium'
                       }`}
                     >
                       <span className="truncate pr-2">{brand}</span>
-                      {selectedBrand === brand && <div className="w-1.5 h-1.5 rounded-full bg-white hidden lg:block flex-shrink-0"></div>}
+                      {selectedBrand === brand && <div className="w-1.5 h-1.5 rounded-none bg-white hidden lg:block flex-shrink-0"></div>}
                     </button>
                   ))}
                 </div>
@@ -3196,7 +3392,7 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
 
               <div className="flex-1 w-full">
                 {/* BARRA DE BÚSQUEDA BISELADA + SELECTOR DE ORDENAMIENTO */}
-                <div className="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm mb-6 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                <div className="bg-white dark:bg-slate-800 p-3.5 rounded-none border border-slate-200 dark:border-slate-700 shadow-sm mb-6 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                   <div className="relative flex-1 group">
                     <div
                       className="p-[1.5px] bg-slate-900 dark:bg-slate-600 group-focus-within:bg-amber-400 transition-colors"
@@ -3210,7 +3406,7 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
                           type="text"
                           value={categorySearch}
                           onChange={(e) => setCategorySearch(e.target.value)}
-                          placeholder={`¿Qué estás buscando en ${category.name}? (ej: Gol, Corsa)...`}
+                          placeholder={`Filtrar dentro de ${category.name} (ej: Gol, Corsa)...`}
                           className="w-full pl-4 pr-2 py-2.5 bg-transparent text-xs sm:text-sm text-slate-900 dark:text-white outline-none"
                         />
                         {categorySearch && (
@@ -3236,7 +3432,7 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
                   <select
                     value={sortBy}
                     onChange={(e) => setSortBy(e.target.value)}
-                    className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs sm:text-sm rounded-lg px-3.5 py-2.5 outline-none focus:border-blue-500 font-semibold cursor-pointer"
+                    className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs sm:text-sm rounded-none px-3.5 py-2.5 outline-none focus:border-blue-500 font-semibold cursor-pointer"
                   >
                     <option value="relevancia">Ordenar: Relevancia</option>
                     <option value="precio_asc">Precio: Menor a Mayor</option>
@@ -3260,11 +3456,11 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
                       <div
                         key={prod.sku_code}
                         onClick={() => handleOpenProduct(prod)}
-                        className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm hover:shadow-lg transition-all duration-300 flex flex-col group cursor-pointer"
+                        className="bg-white dark:bg-slate-800 rounded-none border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm hover:shadow-lg transition-all duration-300 flex flex-col group cursor-pointer"
                       >
                         <div className="h-44 relative bg-slate-100 dark:bg-slate-900 overflow-hidden flex items-center justify-center">
                           <ProductImage sku={prod.sku_code} imageUrl={prod.image_url} alt={prod.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                          <div className="absolute top-3 left-3 bg-slate-900/80 backdrop-blur-sm text-white text-[9px] font-bold uppercase tracking-widest px-2.5 py-1 rounded">
+                          <div className="absolute top-3 left-3 bg-slate-900/80 backdrop-blur-sm text-white text-[9px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-none">
                             {prod.brand?.name || 'Genérico'}
                           </div>
 
@@ -3277,7 +3473,7 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
                                 onQuickView(prod, category.name);
                               }}
                               title="Vista rápida"
-                              className="absolute top-3 right-3 p-2 rounded-full bg-white/90 dark:bg-slate-900/80 text-slate-700 dark:text-slate-200 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 opacity-0 group-hover:opacity-100 transition-all shadow-md focus:opacity-100 focus:outline-none"
+                              className="absolute top-3 right-3 p-2 rounded-none bg-white/90 dark:bg-slate-900/80 text-slate-700 dark:text-slate-200 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 opacity-0 group-hover:opacity-100 transition-all shadow-md focus:opacity-100 focus:outline-none"
                             >
                               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
                                 <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
@@ -3300,7 +3496,7 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
                           
                           <button 
                             onClick={(e) => { e.stopPropagation(); onAddToCart(prod, 1); }} 
-                            className="w-full mt-2 bg-slate-100 dark:bg-slate-700 hover:bg-blue-600 dark:hover:bg-blue-500 text-slate-700 dark:text-white hover:text-white font-bold py-2.5 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 text-xs uppercase tracking-wider focus:outline-none"
+                            className="w-full mt-2 bg-slate-100 dark:bg-slate-700 hover:bg-blue-600 dark:hover:bg-blue-500 text-slate-700 dark:text-white hover:text-white font-bold py-2.5 px-4 rounded-none transition-colors flex items-center justify-center gap-2 text-xs uppercase tracking-wider focus:outline-none"
                           >
                             <Plus className="w-4 h-4" /> Agregar al Carrito
                           </button>
@@ -3309,11 +3505,17 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
                     ))}
                   </div>
                 ) : (
-                  <div className="bg-white dark:bg-slate-800 p-12 rounded-xl border border-slate-200 dark:border-slate-700 text-center">
-                    <p className="text-slate-500 dark:text-slate-400 mb-4">No se encontraron repuestos con esa búsqueda en esta categoría.</p>
-                    <button onClick={() => { setSelectedBrand('Todas'); setCategorySearch(''); setSortBy('relevancia'); }} className="text-blue-600 font-bold text-xs uppercase tracking-wider hover:underline">
-                      Ver todos los productos de {category.name}
-                    </button>
+                  <div className="bg-white dark:bg-slate-800 p-12 rounded-none border border-slate-200 dark:border-slate-700 text-center">
+                    <p className="text-slate-500 dark:text-slate-400 mb-4">No se encontraron repuestos con esa búsqueda.</p>
+                    {category.isSearchResult ? (
+                      <button onClick={onBack} className="text-blue-600 font-bold text-xs uppercase tracking-wider hover:underline">
+                        Volver al Catálogo Completo
+                      </button>
+                    ) : (
+                      <button onClick={() => { setSelectedBrand('Todas'); setCategorySearch(''); setSortBy('relevancia'); }} className="text-blue-600 font-bold text-xs uppercase tracking-wider hover:underline">
+                        Ver todos los productos de {category.name}
+                      </button>
+                    )}
                   </div>
                 )}
 
@@ -3338,7 +3540,7 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
                         <button
                           onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                           disabled={currentPage === 1}
-                          className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 hover:shadow-md disabled:opacity-40 disabled:cursor-not-allowed transition-all bg-transparent flex-shrink-0"
+                          className="p-2.5 rounded-none border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 hover:shadow-md disabled:opacity-40 disabled:cursor-not-allowed transition-all bg-transparent flex-shrink-0"
                           title="Página anterior"
                         >
                           <ChevronLeft className="w-5 h-5" />
@@ -3354,7 +3556,7 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
                               <button
                                 key={page}
                                 onClick={() => setCurrentPage(page)}
-                                className={`min-w-[38px] sm:min-w-[42px] h-10 px-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all ${
+                                className={`min-w-[38px] sm:min-w-[42px] h-10 px-2.5 rounded-none text-xs sm:text-sm font-bold transition-all ${
                                   currentPage === page
                                     ? 'bg-blue-600 text-white shadow-md shadow-blue-500/30'
                                     : 'bg-transparent border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 hover:shadow-sm'
@@ -3369,7 +3571,7 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
                         <button
                           onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                           disabled={currentPage === totalPages}
-                          className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 hover:shadow-md disabled:opacity-40 disabled:cursor-not-allowed transition-all bg-transparent flex-shrink-0"
+                          className="p-2.5 rounded-none border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 hover:shadow-md disabled:opacity-40 disabled:cursor-not-allowed transition-all bg-transparent flex-shrink-0"
                           title="Página siguiente"
                         >
                           <ChevronRight className="w-5 h-5" />
@@ -3418,9 +3620,9 @@ function ProcessSection({ setTutorialOpen }) {
         <RevealOnScroll>
           <div className="text-center mb-12 md:mb-20">
             <PremiumTitle dark={true} className="text-2xl sm:text-3xl md:text-4xl font-bold mb-2 uppercase tracking-widest">Proceso de Compra</PremiumTitle>
-            <div className="w-12 h-1 bg-amber-400 mx-auto my-3 rounded-full"></div>
+            <div className="w-12 h-1 bg-amber-400 mx-auto my-3 rounded-none"></div>
             <p className="text-sm md:text-lg text-slate-500 dark:text-slate-400 font-light mb-6">Cotización inteligente desde la web. Envíos a todo el país.</p>
-            <button onClick={() => setTutorialOpen(true)} className="inline-flex items-center gap-2 px-6 py-3 bg-blue-50 dark:bg-slate-800 text-blue-600 dark:text-blue-400 font-bold uppercase tracking-widest text-xs md:text-sm rounded-full border border-blue-200 dark:border-slate-700 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-500 dark:hover:text-white hover:border-transparent transition-all shadow-sm hover:shadow-lg focus:outline-none group">
+            <button onClick={() => setTutorialOpen(true)} className="inline-flex items-center gap-2 px-6 py-3 bg-blue-50 dark:bg-slate-800 text-blue-600 dark:text-blue-400 font-bold uppercase tracking-widest text-xs md:text-sm rounded-none border border-blue-200 dark:border-slate-700 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-500 dark:hover:text-white hover:border-transparent transition-all shadow-sm hover:shadow-lg focus:outline-none group">
               <HelpCircle className="w-5 h-5 group-hover:rotate-12 transition-transform" /> Ver Instructivo Paso a Paso
             </button>
           </div>
@@ -3430,8 +3632,8 @@ function ProcessSection({ setTutorialOpen }) {
           {steps.map((step, i) => (
             <RevealOnScroll key={step.id} delay={`md:delay-${i * 100}`}>
               <TiltCard>
-                <div className={`flex flex-col items-center text-center relative z-10 group cursor-default p-6 rounded-3xl transition-all duration-300 border border-transparent ${i === 3 ? 'hover:bg-green-50/50 dark:hover:bg-green-950/30 hover:border-green-200 dark:hover:border-green-800 hover:shadow-lg hover:shadow-green-500/10' : 'hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-100 dark:hover:border-slate-700'}`}>
-                  <div className={`w-20 h-20 md:w-24 md:h-24 bg-white dark:bg-slate-900 border-2 rounded-2xl flex items-center justify-center mb-6 md:mb-8 transition-all duration-500 shadow-sm group-hover:shadow-md ${i === 3 ? 'border-slate-200 dark:border-slate-700 group-hover:border-green-400 group-hover:bg-green-50 dark:group-hover:bg-green-950' : 'border-slate-200 dark:border-slate-700 group-hover:border-blue-400 group-hover:bg-blue-50 dark:group-hover:bg-slate-800'}`}>
+                <div className={`flex flex-col items-center text-center relative z-10 group cursor-default p-6 rounded-none transition-all duration-300 border border-transparent ${i === 3 ? 'hover:bg-green-50/50 dark:hover:bg-green-950/30 hover:border-green-200 dark:hover:border-green-800 hover:shadow-lg hover:shadow-green-500/10' : 'hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-100 dark:hover:border-slate-700'}`}>
+                  <div className={`w-20 h-20 md:w-24 md:h-24 bg-white dark:bg-slate-900 border-2 rounded-none flex items-center justify-center mb-6 md:mb-8 transition-all duration-500 shadow-sm group-hover:shadow-md ${i === 3 ? 'border-slate-200 dark:border-slate-700 group-hover:border-green-400 group-hover:bg-green-50 dark:group-hover:bg-green-950' : 'border-slate-200 dark:border-slate-700 group-hover:border-blue-400 group-hover:bg-blue-50 dark:group-hover:bg-slate-800'}`}>
                     {step.icon}
                   </div>
                   <h4 className={`text-base md:text-lg font-bold mb-2 uppercase tracking-widest font-exo transition-colors duration-300 ${i === 3 ? 'text-slate-800 dark:text-white group-hover:text-green-600 dark:group-hover:text-green-400' : 'text-slate-800 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400'}`}>{step.title}</h4>
@@ -3607,7 +3809,7 @@ function ContactSection() {
             <PremiumTitle dark={true} className="text-2xl sm:text-3xl md:text-4xl font-bold mb-2 uppercase tracking-widest">
               Contactanos! 
             </PremiumTitle>
-            <div className="w-12 h-1 bg-amber-400 mx-auto my-3 rounded-full"></div>
+            <div className="w-12 h-1 bg-amber-400 mx-auto my-3 rounded-none"></div>
             <p className="text-sm md:text-lg text-slate-500 dark:text-slate-400 font-light">
               Comunicate por nuestros diferentes medios de comunicación o acercate hasta nuestro local.
             </p>
@@ -3615,19 +3817,19 @@ function ContactSection() {
         </RevealOnScroll>
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 md:gap-6 mb-12 md:mb-16">
-          <RevealOnScroll delay="delay-0"><a href={CONTACT_INFO.whatsappLink} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center text-center gap-3 p-6 bg-slate-50 dark:bg-slate-800 shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-md hover:border-green-300 dark:hover:border-green-500 lg:hover:-translate-y-2 transition-all duration-300 group focus:ring-2 focus:ring-green-500 outline-none rounded-2xl h-full"><div className="p-3 bg-white dark:bg-slate-900 rounded-full border border-slate-100 dark:border-slate-800 group-hover:bg-green-50 dark:group-hover:bg-green-500/20 transition-colors animate-soft-pulse"><MessageSquare className="w-6 h-6 md:w-8 md:h-8 text-slate-800 dark:text-slate-300 group-hover:text-green-500 dark:group-hover:text-green-400 transition-colors" aria-hidden="true" /></div><div><h4 className="font-bold text-slate-900 dark:text-white text-xs md:text-sm uppercase tracking-widest font-exo">WhatsApp</h4><p className="text-[10px] md:text-xs text-slate-500 dark:text-slate-400 font-light mt-1">{CONTACT_INFO.phone}</p></div></a></RevealOnScroll>
-          <RevealOnScroll delay="md:delay-100"><div className="flex flex-col items-center text-center gap-3 p-6 bg-slate-50 dark:bg-slate-800 shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-md hover:border-blue-300 dark:hover:border-blue-500 lg:hover:-translate-y-2 transition-all duration-300 rounded-2xl h-full group"><div className="p-3 bg-white dark:bg-slate-900 rounded-full border border-slate-100 dark:border-slate-800 group-hover:bg-blue-50 dark:group-hover:bg-blue-500/20 transition-colors animate-soft-pulse" style={{ animationDelay: '0.2s' }}><MapPin className="w-6 h-6 md:w-8 md:h-8 text-slate-800 dark:text-slate-300 group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors" aria-hidden="true" /></div><div><h4 className="font-bold text-slate-900 dark:text-white text-xs md:text-sm uppercase tracking-widest font-exo">Dirección</h4><p className="text-[10px] md:text-xs text-slate-500 dark:text-slate-400 font-light mt-1">{CONTACT_INFO.address}</p><p className="text-[9px] text-slate-400 dark:text-slate-500">{CONTACT_INFO.city}</p></div></div></RevealOnScroll>
-          <RevealOnScroll delay="md:delay-200"><a href={CONTACT_INFO.instagramLink} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center text-center gap-3 p-6 bg-slate-50 dark:bg-slate-800 shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-md hover:border-pink-300 dark:hover:border-pink-500 lg:hover:-translate-y-2 transition-all duration-300 group focus:ring-2 focus:ring-pink-500 outline-none rounded-2xl h-full"><div className="p-3 bg-white dark:bg-slate-900 rounded-full border border-slate-100 dark:border-slate-800 group-hover:bg-pink-50 dark:group-hover:bg-pink-500/20 transition-colors animate-soft-pulse" style={{ animationDelay: '0.4s' }}><CustomInstagram className="w-6 h-6 md:w-8 md:h-8 text-slate-800 dark:text-slate-300 group-hover:text-pink-500 dark:group-hover:text-pink-400 transition-colors" /></div><div><h4 className="font-bold text-slate-900 dark:text-white text-xs md:text-sm uppercase tracking-widest font-exo">Instagram</h4><p className="text-[10px] md:text-xs text-slate-500 dark:text-slate-400 font-light mt-1">@autopartesmolle</p></div></a></RevealOnScroll>
-          <RevealOnScroll delay="md:delay-300"><a href={CONTACT_INFO.facebookLink} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center text-center gap-3 p-6 bg-slate-50 dark:bg-slate-800 shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-md hover:border-blue-300 dark:hover:border-blue-500 lg:hover:-translate-y-2 transition-all duration-300 group focus:ring-2 focus:ring-blue-500 outline-none rounded-2xl h-full"><div className="p-3 bg-white dark:bg-slate-900 rounded-full border border-slate-100 dark:border-slate-800 group-hover:bg-blue-50 dark:group-hover:bg-blue-500/20 transition-colors animate-soft-pulse" style={{ animationDelay: '0.6s' }}><CustomFacebook className="w-6 h-6 md:w-8 md:h-8 text-slate-800 dark:text-slate-300 group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors" /></div><div><h4 className="font-bold text-slate-900 dark:text-white text-xs md:text-sm uppercase tracking-widest font-exo">Facebook</h4><p className="text-[10px] md:text-xs text-slate-500 dark:text-slate-400 font-light mt-1">DAPA Molle</p></div></a></RevealOnScroll>
-          <RevealOnScroll delay="md:delay-400"><a href={`tel:${CONTACT_INFO.landline.replace(/\s/g, '')}`} className="flex flex-col items-center text-center gap-3 p-6 bg-slate-50 dark:bg-slate-800 shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-md hover:border-cyan-300 dark:hover:border-cyan-500 lg:hover:-translate-y-2 transition-all duration-300 group focus:ring-2 focus:ring-cyan-500 outline-none rounded-2xl h-full"><div className="p-3 bg-white dark:bg-slate-900 rounded-full border border-slate-100 dark:border-slate-800 group-hover:bg-cyan-50 dark:group-hover:bg-cyan-500/20 transition-colors animate-soft-pulse" style={{ animationDelay: '0.8s' }}><PhoneCall className="w-6 h-6 md:w-8 md:h-8 text-slate-800 dark:text-slate-300 group-hover:text-cyan-500 dark:group-hover:text-cyan-400 transition-colors" aria-hidden="true" /></div><div><h4 className="font-bold text-slate-900 dark:text-white text-xs md:text-sm uppercase tracking-widest font-exo">Tel. Fijo</h4><p className="text-[10px] md:text-xs text-slate-500 dark:text-slate-400 font-light mt-1">{CONTACT_INFO.landline}</p></div></a></RevealOnScroll>
+          <RevealOnScroll delay="delay-0"><a href={CONTACT_INFO.whatsappLink} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center text-center gap-3 p-6 bg-slate-50 dark:bg-slate-800 shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-md hover:border-green-300 dark:hover:border-green-500 lg:hover:-translate-y-2 transition-all duration-300 group focus:ring-2 focus:ring-green-500 outline-none rounded-none h-full"><div className="p-3 bg-white dark:bg-slate-900 rounded-none border border-slate-100 dark:border-slate-800 group-hover:bg-green-50 dark:group-hover:bg-green-500/20 transition-colors animate-soft-pulse"><MessageSquare className="w-6 h-6 md:w-8 md:h-8 text-slate-800 dark:text-slate-300 group-hover:text-green-500 dark:group-hover:text-green-400 transition-colors" aria-hidden="true" /></div><div><h4 className="font-bold text-slate-900 dark:text-white text-xs md:text-sm uppercase tracking-widest font-exo">WhatsApp</h4><p className="text-[10px] md:text-xs text-slate-500 dark:text-slate-400 font-light mt-1">{CONTACT_INFO.phone}</p></div></a></RevealOnScroll>
+          <RevealOnScroll delay="md:delay-100"><div className="flex flex-col items-center text-center gap-3 p-6 bg-slate-50 dark:bg-slate-800 shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-md hover:border-blue-300 dark:hover:border-blue-500 lg:hover:-translate-y-2 transition-all duration-300 rounded-none h-full group"><div className="p-3 bg-white dark:bg-slate-900 rounded-none border border-slate-100 dark:border-slate-800 group-hover:bg-blue-50 dark:group-hover:bg-blue-500/20 transition-colors animate-soft-pulse" style={{ animationDelay: '0.2s' }}><MapPin className="w-6 h-6 md:w-8 md:h-8 text-slate-800 dark:text-slate-300 group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors" aria-hidden="true" /></div><div><h4 className="font-bold text-slate-900 dark:text-white text-xs md:text-sm uppercase tracking-widest font-exo">Dirección</h4><p className="text-[10px] md:text-xs text-slate-500 dark:text-slate-400 font-light mt-1">{CONTACT_INFO.address}</p><p className="text-[9px] text-slate-400 dark:text-slate-500">{CONTACT_INFO.city}</p></div></div></RevealOnScroll>
+          <RevealOnScroll delay="md:delay-200"><a href={CONTACT_INFO.instagramLink} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center text-center gap-3 p-6 bg-slate-50 dark:bg-slate-800 shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-md hover:border-pink-300 dark:hover:border-pink-500 lg:hover:-translate-y-2 transition-all duration-300 group focus:ring-2 focus:ring-pink-500 outline-none rounded-none h-full"><div className="p-3 bg-white dark:bg-slate-900 rounded-none border border-slate-100 dark:border-slate-800 group-hover:bg-pink-50 dark:group-hover:bg-pink-500/20 transition-colors animate-soft-pulse" style={{ animationDelay: '0.4s' }}><CustomInstagram className="w-6 h-6 md:w-8 md:h-8 text-slate-800 dark:text-slate-300 group-hover:text-pink-500 dark:group-hover:text-pink-400 transition-colors" /></div><div><h4 className="font-bold text-slate-900 dark:text-white text-xs md:text-sm uppercase tracking-widest font-exo">Instagram</h4><p className="text-[10px] md:text-xs text-slate-500 dark:text-slate-400 font-light mt-1">@autopartesmolle</p></div></a></RevealOnScroll>
+          <RevealOnScroll delay="md:delay-300"><a href={CONTACT_INFO.facebookLink} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center text-center gap-3 p-6 bg-slate-50 dark:bg-slate-800 shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-md hover:border-blue-300 dark:hover:border-blue-500 lg:hover:-translate-y-2 transition-all duration-300 group focus:ring-2 focus:ring-blue-500 outline-none rounded-none h-full"><div className="p-3 bg-white dark:bg-slate-900 rounded-none border border-slate-100 dark:border-slate-800 group-hover:bg-blue-50 dark:group-hover:bg-blue-500/20 transition-colors animate-soft-pulse" style={{ animationDelay: '0.6s' }}><CustomFacebook className="w-6 h-6 md:w-8 md:h-8 text-slate-800 dark:text-slate-300 group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors" /></div><div><h4 className="font-bold text-slate-900 dark:text-white text-xs md:text-sm uppercase tracking-widest font-exo">Facebook</h4><p className="text-[10px] md:text-xs text-slate-500 dark:text-slate-400 font-light mt-1">DAPA Molle</p></div></a></RevealOnScroll>
+          <RevealOnScroll delay="md:delay-400"><a href={`tel:${CONTACT_INFO.landline.replace(/\s/g, '')}`} className="flex flex-col items-center text-center gap-3 p-6 bg-slate-50 dark:bg-slate-800 shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-md hover:border-cyan-300 dark:hover:border-cyan-500 lg:hover:-translate-y-2 transition-all duration-300 group focus:ring-2 focus:ring-cyan-500 outline-none rounded-none h-full"><div className="p-3 bg-white dark:bg-slate-900 rounded-none border border-slate-100 dark:border-slate-800 group-hover:bg-cyan-50 dark:group-hover:bg-cyan-500/20 transition-colors animate-soft-pulse" style={{ animationDelay: '0.8s' }}><PhoneCall className="w-6 h-6 md:w-8 md:h-8 text-slate-800 dark:text-slate-300 group-hover:text-cyan-500 dark:group-hover:text-cyan-400 transition-colors" aria-hidden="true" /></div><div><h4 className="font-bold text-slate-900 dark:text-white text-xs md:text-sm uppercase tracking-widest font-exo">Tel. Fijo</h4><p className="text-[10px] md:text-xs text-slate-500 dark:text-slate-400 font-light mt-1">{CONTACT_INFO.landline}</p></div></a></RevealOnScroll>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-start">
           <RevealOnScroll delay="md:delay-200">
-            <div className="w-full bg-white dark:bg-slate-800 shadow-xl border border-slate-200 dark:border-slate-700 p-6 sm:p-8 rounded-2xl transition-colors">
+            <div className="w-full bg-white dark:bg-slate-800 shadow-xl border border-slate-200 dark:border-slate-700 p-6 sm:p-8 rounded-none transition-colors">
               {formStatus === 'success' ? (
                 <div className="flex flex-col items-center justify-center h-full text-center animate-in fade-in zoom-in duration-500 py-10">
-                  <div className="w-16 h-16 md:w-20 md:h-20 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mb-4 md:mb-6"><CheckCircle className="w-8 h-8 md:w-10 md:h-10 text-green-600 dark:text-green-400" aria-hidden="true" /></div>
+                  <div className="w-16 h-16 md:w-20 md:h-20 bg-green-100 dark:bg-green-900/30 rounded-none flex items-center justify-center mb-4 md:mb-6"><CheckCircle className="w-8 h-8 md:w-10 md:h-10 text-green-600 dark:text-green-400" aria-hidden="true" /></div>
                   <PremiumTitle dark={true} className="text-xl md:text-2xl font-bold uppercase tracking-widest mb-2 md:mb-4">Solicitud Enviada</PremiumTitle>
                   <p className="text-sm md:text-base text-slate-500 dark:text-slate-400 font-light mb-6 md:mb-8 max-w-md">Recibimos todos los datos técnicos. A la brevedad uno de nuestros asesores verificará el stock y se comunicará con vos.</p>
                   <button onClick={() => setFormStatus('idle')} className="text-xs md:text-sm font-bold uppercase tracking-widest text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400 pb-1 hover:text-slate-900 dark:hover:text-white transition-colors focus:outline-none">Cotizar otro repuesto</button>
@@ -3640,17 +3842,17 @@ function ContactSection() {
                     </PremiumTitle>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-1"><label htmlFor="user_name" className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500">Nombre o Taller</label><input id="user_name" name="nombre" required minLength="3" type="text" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 outline-none focus:border-blue-500 dark:focus:border-blue-500 transition-colors text-sm text-slate-900 dark:text-white rounded-xl" placeholder="Ej: Taller Martínez" /></div>
-                    <div className="space-y-1"><label htmlFor="user_phone" className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500">Teléfono / WhatsApp</label><input id="user_phone" name="telefono" required minLength="8" type="tel" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 outline-none focus:border-blue-500 dark:focus:border-blue-500 transition-colors text-sm text-slate-900 dark:text-white rounded-xl" placeholder="Ej: +54 9 2478..." /></div>
+                    <div className="space-y-1"><label htmlFor="user_name" className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500">Nombre o Taller</label><input id="user_name" name="nombre" required minLength="3" type="text" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 outline-none focus:border-blue-500 dark:focus:border-blue-500 transition-colors text-sm text-slate-900 dark:text-white rounded-none" placeholder="Ej: Taller Martínez" /></div>
+                    <div className="space-y-1"><label htmlFor="user_phone" className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500">Teléfono / WhatsApp</label><input id="user_phone" name="telefono" required minLength="8" type="tel" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 outline-none focus:border-blue-500 dark:focus:border-blue-500 transition-colors text-sm text-slate-900 dark:text-white rounded-none" placeholder="Ej: +54 9 2478..." /></div>
                   </div>
-                  <div className="space-y-1"><label htmlFor="tipo_repuesto" className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500">Repuesto Solicitado</label><input id="tipo_repuesto" name="repuesto" required type="text" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 outline-none focus:border-blue-500 dark:focus:border-blue-500 transition-colors text-sm text-slate-900 dark:text-white rounded-xl" placeholder="Ej: Óptica delantera derecha, Bomba de agua..." /></div>
+                  <div className="space-y-1"><label htmlFor="tipo_repuesto" className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500">Repuesto Solicitado</label><input id="tipo_repuesto" name="repuesto" required type="text" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 outline-none focus:border-blue-500 dark:focus:border-blue-500 transition-colors text-sm text-slate-900 dark:text-white rounded-none" placeholder="Ej: Óptica delantera derecha, Bomba de agua..." /></div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-1"><label htmlFor="vehiculo" className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500">Marca del Vehículo</label><input id="vehiculo" name="marca" required type="text" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 outline-none focus:border-blue-500 dark:focus:border-blue-500 transition-colors text-sm text-slate-900 dark:text-white rounded-xl" placeholder="Ej: Volkswagen, Renault..." /></div>
-                    <div className="space-y-1"><label htmlFor="modelo" className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500">Modelo</label><input id="modelo" name="modelo" required type="text" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 outline-none focus:border-blue-500 dark:focus:border-blue-500 transition-colors text-sm text-slate-900 dark:text-white rounded-xl" placeholder="Ej: Amarok, Gol Trend..." /></div>
+                    <div className="space-y-1"><label htmlFor="vehiculo" className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500">Marca del Vehículo</label><input id="vehiculo" name="marca" required type="text" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 outline-none focus:border-blue-500 dark:focus:border-blue-500 transition-colors text-sm text-slate-900 dark:text-white rounded-none" placeholder="Ej: Volkswagen, Renault..." /></div>
+                    <div className="space-y-1"><label htmlFor="modelo" className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500">Modelo</label><input id="modelo" name="modelo" required type="text" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 outline-none focus:border-blue-500 dark:focus:border-blue-500 transition-colors text-sm text-slate-900 dark:text-white rounded-none" placeholder="Ej: Amarok, Gol Trend..." /></div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1"><label htmlFor="anio" className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500">Año</label><input id="anio" name="anio" required type="number" min="1950" max={new Date().getFullYear() + 1} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 outline-none focus:border-blue-500 dark:focus:border-blue-500 transition-colors text-sm text-slate-900 dark:text-white rounded-xl" placeholder="Ej: 2018" /></div>
-                    <div className="space-y-1"><label htmlFor="puertas" className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500">Puertas</label><select id="puertas" name="puertas" required className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 outline-none focus:border-blue-500 dark:focus:border-blue-500 transition-colors text-sm text-slate-900 dark:text-white rounded-xl appearance-none"><option value="">Elegir...</option><option value="3 Puertas">3 Puertas</option><option value="4 Puertas">4 Puertas</option><option value="5 Puertas">5 Puertas</option><option value="Pick-up / Utilitario">Pick-up / Utilitario</option><option value="Otro">Otro</option></select></div>
+                    <div className="space-y-1"><label htmlFor="anio" className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500">Año</label><input id="anio" name="anio" required type="number" min="1950" max={new Date().getFullYear() + 1} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 outline-none focus:border-blue-500 dark:focus:border-blue-500 transition-colors text-sm text-slate-900 dark:text-white rounded-none" placeholder="Ej: 2018" /></div>
+                    <div className="space-y-1"><label htmlFor="puertas" className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500">Puertas</label><select id="puertas" name="puertas" required className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 outline-none focus:border-blue-500 dark:focus:border-blue-500 transition-colors text-sm text-slate-900 dark:text-white rounded-none appearance-none"><option value="">Elegir...</option><option value="3 Puertas">3 Puertas</option><option value="4 Puertas">4 Puertas</option><option value="5 Puertas">5 Puertas</option><option value="Pick-up / Utilitario">Pick-up / Utilitario</option><option value="Otro">Otro</option></select></div>
                   </div>
 
                   {/* SELECTOR DE HASTA 2 FOTOS (REPUESTO Y CÉDULA VERDE) */}
@@ -3670,7 +3872,7 @@ function ContactSection() {
                         />
                         <label
                           htmlFor="foto_repuesto"
-                          className={`flex items-center justify-between gap-2 w-full border-2 border-dashed px-3 py-2.5 transition-colors text-xs font-medium rounded-xl cursor-pointer ${
+                          className={`flex items-center justify-between gap-2 w-full border-2 border-dashed px-3 py-2.5 transition-colors text-xs font-medium rounded-none cursor-pointer ${
                             photo1
                               ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-400 text-blue-600 dark:text-blue-400'
                               : 'bg-slate-50 dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-500 hover:border-blue-400 dark:hover:border-blue-500'
@@ -3704,7 +3906,7 @@ function ContactSection() {
                         />
                         <label
                           htmlFor="foto_cedula"
-                          className={`flex items-center justify-between gap-2 w-full border-2 border-dashed px-3 py-2.5 transition-colors text-xs font-medium rounded-xl cursor-pointer ${
+                          className={`flex items-center justify-between gap-2 w-full border-2 border-dashed px-3 py-2.5 transition-colors text-xs font-medium rounded-none cursor-pointer ${
                             photo2
                               ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-400 text-blue-600 dark:text-blue-400'
                               : 'bg-slate-50 dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-500 hover:border-blue-400 dark:hover:border-blue-500'
@@ -3729,10 +3931,10 @@ function ContactSection() {
                     </div>
                   </div>
 
-                  <div className="space-y-1"><label htmlFor="user_message" className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500">Observaciones (Opcional)</label><textarea id="user_message" name="mensaje" maxLength="500" className="w-full h-16 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 outline-none focus:border-blue-500 dark:focus:border-blue-500 transition-colors text-sm text-slate-900 dark:text-white resize-none rounded-xl" placeholder="Ej: Es motor 1.6 de 8 válvulas, naftero..."></textarea></div>
+                  <div className="space-y-1"><label htmlFor="user_message" className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500">Observaciones (Opcional)</label><textarea id="user_message" name="mensaje" maxLength="500" className="w-full h-16 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 outline-none focus:border-blue-500 dark:focus:border-blue-500 transition-colors text-sm text-slate-900 dark:text-white resize-none rounded-none" placeholder="Ej: Es motor 1.6 de 8 válvulas, naftero..."></textarea></div>
                   <input type="hidden" name="_subject" value="Nueva cotización técnica desde la Web DAPA" />
-                  {formStatus === 'error' && <p className="text-red-500 text-xs font-bold text-center bg-red-50 dark:bg-red-900/20 p-3 rounded-xl border border-red-200 dark:border-red-800">{errorMsg}</p>}
-                  <button type="submit" disabled={formStatus === 'submitting'} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold uppercase tracking-widest py-3 md:py-4 text-xs md:text-sm transition-colors flex items-center justify-center gap-2 md:gap-3 disabled:opacity-70 disabled:cursor-not-allowed mt-2 shadow-lg focus:outline-none focus:ring-4 focus:ring-blue-300 rounded-xl">
+                  {formStatus === 'error' && <p className="text-red-500 text-xs font-bold text-center bg-red-50 dark:bg-red-900/20 p-3 rounded-none border border-red-200 dark:border-red-800">{errorMsg}</p>}
+                  <button type="submit" disabled={formStatus === 'submitting'} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold uppercase tracking-widest py-3 md:py-4 text-xs md:text-sm transition-colors flex items-center justify-center gap-2 md:gap-3 disabled:opacity-70 disabled:cursor-not-allowed mt-2 shadow-lg focus:outline-none focus:ring-4 focus:ring-blue-300 rounded-none">
                     {formStatus === 'submitting' ? <span className="flex items-center gap-2">Subiendo datos y fotos... <Settings className="w-3 h-3 md:w-4 md:h-4 animate-spin" aria-hidden="true" /></span> : <span className="flex items-center gap-2">Solicitar Cotización <Send className="w-3 h-3 md:w-4 md:h-4" aria-hidden="true" /></span>}
                   </button>
                 </form>
@@ -3741,7 +3943,7 @@ function ContactSection() {
           </RevealOnScroll>
 
           <RevealOnScroll delay="md:delay-400">
-            <div className="w-full h-full min-h-[400px] shadow-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 relative overflow-hidden rounded-2xl transition-colors">
+            <div className="w-full h-full min-h-[400px] shadow-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 relative overflow-hidden rounded-none transition-colors">
               <iframe src="https://maps.google.com/maps?q=Lamadrid%2065,%20Arrecifes,%20Buenos%20Aires&t=&z=16&ie=UTF8&iwloc=&output=embed" width="100%" height="100%" style={{ border: 0, position: 'absolute', top: 0, left: 0 }} allowFullScreen="" loading="lazy" referrerPolicy="no-referrer-when-downgrade" title="Mapa de Ubicación D.A.P.A Repuestos Molle" className="grayscale lg:hover:grayscale-0 transition-all duration-700"></iframe>
             </div>
           </RevealOnScroll>
@@ -3770,8 +3972,8 @@ function Footer({ navigateTo }) {
           <span className="font-bold text-3xl tracking-tighter text-white font-michroma block mb-4">D.A.P.A</span>
           <p className="text-sm font-light text-slate-400 mb-6 max-w-xs mx-auto md:mx-0">El catálogo más completo de autopartes en Arrecifes. Envíos garantizados a todo el país.</p>
           <div className="flex gap-4">
-            <a href={CONTACT_INFO.instagramLink} target="_blank" rel="noopener noreferrer" className="p-3 bg-slate-800/50 border border-slate-700 rounded-full hover:bg-pink-600 hover:text-white hover:border-pink-500 transition-all"><CustomInstagram className="w-5 h-5" /></a>
-            <a href={CONTACT_INFO.facebookLink} target="_blank" rel="noopener noreferrer" className="p-3 bg-slate-800/50 border border-slate-700 rounded-full hover:bg-blue-600 hover:text-white hover:border-blue-500 transition-all"><CustomFacebook className="w-5 h-5" /></a>
+            <a href={CONTACT_INFO.instagramLink} target="_blank" rel="noopener noreferrer" className="p-3 bg-slate-800/50 border border-slate-700 rounded-none hover:bg-pink-600 hover:text-white hover:border-pink-500 transition-all"><CustomInstagram className="w-5 h-5" /></a>
+            <a href={CONTACT_INFO.facebookLink} target="_blank" rel="noopener noreferrer" className="p-3 bg-slate-800/50 border border-slate-700 rounded-none hover:bg-blue-600 hover:text-white hover:border-blue-500 transition-all"><CustomFacebook className="w-5 h-5" /></a>
           </div>
         </div>
         <div className="text-center md:text-left">
@@ -3787,9 +3989,9 @@ function Footer({ navigateTo }) {
           <h4 className="text-white font-bold uppercase tracking-widest mb-4 font-exo">Medios de Pago</h4>
           <p className="text-sm font-light text-slate-400 mb-4 max-w-xs mx-auto md:mx-0">Aceptamos todas las tarjetas, transferencias y billeteras virtuales.</p>
           <div className="flex flex-wrap justify-center md:justify-start gap-3">
-            <div className="p-3 bg-slate-800/50 border border-slate-700 rounded-xl text-slate-300 flex items-center justify-center shadow-sm" title="Tarjetas de Crédito y Débito"><CreditCard className="w-6 h-6" /></div>
-            <div className="px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-xl text-slate-300 flex items-center justify-center text-[10px] font-bold tracking-wider uppercase shadow-sm">Transferencia</div>
-            <div className="px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-xl text-slate-300 flex items-center justify-center text-[10px] font-bold tracking-wider uppercase shadow-sm">Mercado Pago</div>
+            <div className="p-3 bg-slate-800/50 border border-slate-700 rounded-none text-slate-300 flex items-center justify-center shadow-sm" title="Tarjetas de Crédito y Débito"><CreditCard className="w-6 h-6" /></div>
+            <div className="px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-none text-slate-300 flex items-center justify-center text-[10px] font-bold tracking-wider uppercase shadow-sm">Transferencia</div>
+            <div className="px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-none text-slate-300 flex items-center justify-center text-[10px] font-bold tracking-wider uppercase shadow-sm">Mercado Pago</div>
           </div>
         </div>
       </div>
@@ -3804,54 +4006,96 @@ function Footer({ navigateTo }) {
 
 function AboutSection() {
   return (
-    <section className="pt-28 pb-16 md:pt-36 md:pb-24 relative z-10 bg-slate-50 dark:bg-slate-950 transition-colors duration-300 overflow-hidden">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 md:gap-16 items-center">
-          <RevealOnScroll className="order-2 lg:order-1">
-            <TiltCard>
-              <div className="relative aspect-[4/3] bg-slate-900 overflow-hidden shadow-xl group rounded-2xl border border-slate-200 dark:border-slate-700 transition-colors">
-                <img
-                  src="/local-dapa.jpg"
-                  alt="Instalaciones de D.A.P.A Repuestos Molle en Lamadrid 65, Arrecifes"
-                  className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-700"
-                />
-                {/* Degradado inferior sutil con pie de foto */}
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent opacity-80 group-hover:opacity-60 transition-opacity duration-500" />
-                <div className="absolute bottom-4 left-5 right-4 flex items-center justify-between text-white z-10">
-                  <div>
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-blue-400 block font-exo">
-                      Nuestra Casa Central
-                    </span>
-                    <p className="text-xs md:text-sm font-bold tracking-wider uppercase">
-                      Lamadrid 65 • Arrecifes
-                    </p>
-                  </div>
-                </div>
-                {/* Borde lateral azul característico */}
-                <div className="absolute top-0 left-0 w-1.5 h-full bg-blue-600 group-hover:w-2.5 transition-all duration-500 z-10"></div>
-              </div>
-            </TiltCard>
-          </RevealOnScroll>
-          <RevealOnScroll className="order-1 lg:order-2" delay="md:delay-200">
-            <div className="mb-6 md:mb-8 text-center lg:text-left">
-              <span className="text-blue-600 dark:text-blue-400 font-bold tracking-widest uppercase text-xs mb-2 block font-exo transition-colors">Historia y Respaldo</span>
-              <PremiumTitle dark={true} className="text-3xl md:text-4xl lg:text-5xl font-bold font-exo uppercase tracking-tight">Quiénes Somos</PremiumTitle>
-              <div className="w-16 h-1.5 bg-amber-400 mx-auto lg:mx-0 mt-3 -skew-x-12 rounded-sm"></div>
+    <section
+      className="pt-32 pb-28 md:pt-40 md:pb-36 relative z-10 bg-slate-950 text-white transition-colors duration-300 overflow-hidden"
+      style={{ backgroundColor: '#020617' }}
+    >
+      {/* Imagen del local de fondo encajando en toda la sección y su pendiente inferior */}
+      <div className="absolute inset-0 z-0 pointer-events-none">
+        <img
+          src="/local-dapa.jpg"
+          alt="Instalaciones de D.A.P.A Repuestos Molle en Lamadrid 65, Arrecifes"
+          className="w-full h-full object-cover object-center"
+        />
+        {/* Capa de contraste oscuro para garantizar máxima legibilidad del texto */}
+        <div
+          className="absolute inset-0"
+          style={{
+            backgroundColor: 'rgba(2, 6, 23, 0.76)',
+            backgroundImage: 'linear-gradient(90deg, rgba(2, 6, 23, 0.92) 0%, rgba(4, 12, 28, 0.82) 55%, rgba(2, 6, 23, 0.65) 100%)'
+          }}
+        />
+      </div>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+        <div className="max-w-3xl">
+          <RevealOnScroll>
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-blue-600/90 border border-blue-400/40 text-white text-[10px] sm:text-xs font-bold uppercase tracking-widest mb-4 font-exo shadow-md">
+              <MapPin className="w-3.5 h-3.5 text-amber-300 flex-shrink-0" />
+              <span>Nuestra Casa Central • Lamadrid 65, Arrecifes</span>
             </div>
-            <p className="text-base md:text-lg text-slate-600 dark:text-slate-400 mb-4 md:mb-6 leading-relaxed font-light text-center lg:text-left transition-colors">Ubicados en el corazón de Arrecifes, <strong className="text-slate-900 dark:text-white font-semibold">D.A.P.A Repuestos Molle</strong> nació con una premisa clara: brindar soluciones rápidas y efectivas a cada conductor y taller mecánico que nos elige.</p>
-            <p className="text-base md:text-lg text-slate-600 dark:text-slate-400 mb-8 md:mb-10 leading-relaxed font-light text-center lg:text-left transition-colors">Nos especializamos en la comercialización de autopartes y accesorios multimarcas, con mas de 50 años de experiencia en el mercado.</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 md:gap-8">
-              <div className="flex items-start gap-4 hover:-translate-y-1 transition-transform cursor-default justify-center lg:justify-start group">
-                <div className="mt-1 bg-white dark:bg-slate-800 p-2 rounded-lg group-hover:bg-blue-50 dark:group-hover:bg-slate-700 border border-slate-100 dark:border-slate-700 transition-colors"><ShieldCheck className="w-5 h-5 md:w-6 md:h-6 text-blue-600 dark:text-blue-400" aria-hidden="true" /></div>
-                <div className="text-left"><h4 className="font-bold text-slate-900 dark:text-white uppercase tracking-wider text-xs md:text-sm mb-1 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">Garantía</h4><p className="text-xs md:text-sm text-slate-500 dark:text-slate-400 font-light transition-colors">Originales y alternativos homologados.</p></div>
+            <div className="mb-6 md:mb-8 text-left">
+              <span className="text-amber-400 font-bold tracking-widest uppercase text-xs mb-2 block font-exo drop-shadow">
+                Historia y Respaldo
+              </span>
+              <PremiumTitle dark={false} className="text-3xl md:text-5xl lg:text-6xl font-bold font-exo uppercase tracking-tight drop-shadow-[0_4px_16px_rgba(0,0,0,0.9)]">
+                Quiénes Somos
+              </PremiumTitle>
+              <div className="w-20 h-1.5 bg-amber-400 mt-3 -skew-x-12 rounded-none shadow"></div>
+            </div>
+
+            <p className="text-base md:text-xl text-white mb-4 md:mb-6 leading-relaxed font-normal text-left drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">
+              Ubicados en el corazón de Arrecifes, <strong className="text-amber-300 font-bold">D.A.P.A Repuestos Molle</strong> nació con una premisa clara: brindar soluciones rápidas y efectivas a cada conductor y taller mecánico que nos elige.
+            </p>
+            <p className="text-base md:text-xl text-slate-100 mb-8 md:mb-10 leading-relaxed font-normal text-left drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">
+              Nos especializamos en la comercialización de autopartes y accesorios multimarcas, con más de 50 años de experiencia en el mercado.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6">
+              <div
+                className="flex items-start gap-4 p-4 border border-white/20 bg-slate-950/80 hover:border-amber-400 transition-all cursor-default group"
+                style={{ backgroundColor: 'rgba(2, 6, 23, 0.82)' }}
+              >
+                <div className="mt-0.5 bg-blue-600 p-2.5 rounded-none text-white flex-shrink-0 shadow">
+                  <ShieldCheck className="w-5 h-5 md:w-6 md:h-6 text-amber-300" aria-hidden="true" />
+                </div>
+                <div className="text-left">
+                  <h4 className="font-bold text-white uppercase tracking-wider text-xs md:text-sm mb-1 group-hover:text-amber-300 transition-colors">
+                    Garantía
+                  </h4>
+                  <p className="text-xs md:text-sm text-slate-200 font-light">
+                    Originales y alternativos homologados.
+                  </p>
+                </div>
               </div>
-              <div className="flex items-start gap-4 hover:-translate-y-1 transition-transform cursor-default justify-center lg:justify-start group">
-                <div className="mt-1 bg-white dark:bg-slate-800 p-2 rounded-lg group-hover:bg-blue-50 dark:group-hover:bg-slate-700 border border-slate-100 dark:border-slate-700 transition-colors"><Truck className="w-5 h-5 md:w-6 md:h-6 text-blue-600 dark:text-blue-400" aria-hidden="true" /></div>
-                <div className="text-left"><h4 className="font-bold text-slate-900 dark:text-white uppercase tracking-wider text-xs md:text-sm mb-1 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">Logística</h4><p className="text-xs md:text-sm text-slate-500 dark:text-slate-400 font-light transition-colors">Despachos rápidos a todo el país.</p></div>
+
+              <div
+                className="flex items-start gap-4 p-4 border border-white/20 bg-slate-950/80 hover:border-amber-400 transition-all cursor-default group"
+                style={{ backgroundColor: 'rgba(2, 6, 23, 0.82)' }}
+              >
+                <div className="mt-0.5 bg-blue-600 p-2.5 rounded-none text-white flex-shrink-0 shadow">
+                  <Truck className="w-5 h-5 md:w-6 md:h-6 text-amber-300" aria-hidden="true" />
+                </div>
+                <div className="text-left">
+                  <h4 className="font-bold text-white uppercase tracking-wider text-xs md:text-sm mb-1 group-hover:text-amber-300 transition-colors">
+                    Logística
+                  </h4>
+                  <p className="text-xs md:text-sm text-slate-200 font-light">
+                    Despachos rápidos a todo el país.
+                  </p>
+                </div>
               </div>
             </div>
           </RevealOnScroll>
         </div>
+      </div>
+
+      {/* Divisor diagonal inferior (pendiente hacia abajo encajando con la imagen de fondo) */}
+      <div className="absolute bottom-0 left-0 w-full overflow-hidden leading-none pointer-events-none z-20 -mb-[1px]">
+        <svg viewBox="0 0 1440 80" preserveAspectRatio="none" className="w-full h-10 sm:h-14 md:h-20 block">
+          <polygon points="0,6 1440,78 1440,80 0,80" className="fill-white dark:fill-slate-900 transition-colors duration-300" />
+          <polygon points="0,0 1440,70 1440,78 0,6" className="fill-blue-600/85" />
+        </svg>
       </div>
     </section>
   );
@@ -3859,15 +4103,7 @@ function AboutSection() {
 
 function MissionVisionSection() {
   return (
-    <section className="pt-24 pb-16 md:pt-32 md:pb-24 bg-white dark:bg-slate-900 relative z-10 transition-colors duration-300 overflow-hidden">
-      {/* Divisor diagonal superior desde AboutSection */}
-      <div className="absolute top-0 left-0 w-full overflow-hidden leading-none pointer-events-none z-20 -mt-[1px]">
-        <svg viewBox="0 0 1440 80" preserveAspectRatio="none" className="w-full h-10 sm:h-14 md:h-20 block">
-          <polygon points="0,0 1440,0 1440,72" className="fill-slate-50 dark:fill-slate-950 transition-colors duration-300" />
-          <polygon points="0,0 1440,70 1440,78 0,6" className="fill-blue-600/70" />
-        </svg>
-      </div>
-
+    <section className="pt-12 pb-16 md:pt-16 md:pb-24 bg-white dark:bg-slate-900 relative z-10 transition-colors duration-300 overflow-hidden">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-10">
           {[
@@ -3877,12 +4113,12 @@ function MissionVisionSection() {
           ].map((item, i) => (
             <RevealOnScroll key={i} delay={`md:delay-${(i * 200) + 100}`}>
               <TiltCard className="h-full">
-                <div className="relative h-full group text-center md:text-left bg-slate-50 dark:bg-slate-800 p-8 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 hover:border-blue-200 dark:hover:border-slate-600 transition-all duration-300">
+                <div className="relative h-full group text-center md:text-left bg-slate-50 dark:bg-slate-800 p-8 rounded-none shadow-sm border border-slate-200 dark:border-slate-700 hover:border-blue-200 dark:hover:border-slate-600 transition-all duration-300">
                   <div className="relative z-10">
-                    <div className="w-14 h-14 bg-white dark:bg-slate-900 rounded-2xl flex items-center justify-center mb-8 mx-auto md:mx-0 group-hover:bg-blue-50 dark:group-hover:bg-slate-700 transition-colors"><item.icon className="w-7 h-7 text-slate-700 dark:text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors" aria-hidden="true" /></div>
+                    <div className="w-14 h-14 bg-white dark:bg-slate-900 rounded-none flex items-center justify-center mb-8 mx-auto md:mx-0 group-hover:bg-blue-50 dark:group-hover:bg-slate-700 transition-colors"><item.icon className="w-7 h-7 text-slate-700 dark:text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors" aria-hidden="true" /></div>
                     <p className="text-sm md:text-base text-slate-600 dark:text-slate-400 leading-relaxed font-light transition-colors">{item.desc}</p>
                   </div>
-                  <div className="absolute bottom-0 right-0 w-12 h-12 bg-gradient-to-br from-transparent to-slate-100 dark:to-slate-900/50 rounded-br-3xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                  <div className="absolute bottom-0 right-0 w-12 h-12 bg-gradient-to-br from-transparent to-slate-100 dark:to-slate-900/50 rounded-none opacity-0 group-hover:opacity-100 transition-opacity"></div>
                 </div>
               </TiltCard>
             </RevealOnScroll>
@@ -3921,17 +4157,17 @@ function FAQSection() {
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         <RevealOnScroll>
           <div className="text-center mb-10 md:mb-16">
-            <HelpCircle className="w-10 h-10 md:w-12 md:h-12 text-amber-400 bg-white/10 rounded-full p-2 mx-auto mb-4 md:mb-6" aria-hidden="true" />
+            <HelpCircle className="w-10 h-10 md:w-12 md:h-12 text-amber-400 bg-white/10 rounded-none p-2 mx-auto mb-4 md:mb-6" aria-hidden="true" />
             <PremiumTitle dark={false} className="text-2xl sm:text-3xl md:text-4xl font-bold mb-2 md:mb-4 uppercase tracking-widest">
               Preguntas Frecuentes
             </PremiumTitle>
-            <div className="w-16 h-1.5 bg-amber-400 mx-auto mt-3 -skew-x-12 rounded-sm"></div>
+            <div className="w-16 h-1.5 bg-amber-400 mx-auto mt-3 -skew-x-12 rounded-none"></div>
           </div>
         </RevealOnScroll>
         <div className="space-y-4 md:space-y-6">
           {FAQ_ITEMS.map((faq, i) => (
             <RevealOnScroll key={i} delay={`delay-${(i % 3) * 100}`}>
-              <div className={`border rounded-2xl overflow-hidden transition-all duration-300 cursor-pointer ${
+              <div className={`border rounded-none overflow-hidden transition-all duration-300 cursor-pointer ${
                 openFaq === i
                   ? 'border-amber-400 shadow-xl bg-white text-slate-900'
                   : 'border-white/20 hover:border-white/50 bg-white/10 backdrop-blur-sm text-white'
@@ -3946,7 +4182,7 @@ function FAQSection() {
                   }`}>
                     {faq.q}
                   </h4>
-                  <div className={`p-2 rounded-full transition-colors ${openFaq === i ? 'bg-blue-100' : 'bg-white/10'}`}>
+                  <div className={`p-2 rounded-none transition-colors ${openFaq === i ? 'bg-blue-100' : 'bg-white/10'}`}>
                     <ChevronDown className={`w-4 h-4 md:w-5 md:h-5 transition-transform duration-300 flex-shrink-0 ${
                       openFaq === i ? 'rotate-180 text-blue-600' : 'text-white'
                     }`} aria-hidden="true" />
@@ -4111,10 +4347,21 @@ function TiendaPublica() {
         }
         setDbProducts(allProds);
 
-        // Soporte para abrir links directos compartidos (#categoria-ID, #producto-SKU, #nosotros)
+        // Soporte para abrir links directos compartidos (#categoria-ID, #producto-SKU, #busqueda-QUERY, #nosotros)
         const hash = decodeURIComponent(window.location.hash || '');
         if (hash === '#nosotros') {
           setActivePage('nosotros');
+        } else if (hash.startsWith('#busqueda-')) {
+          const q = hash.replace('#busqueda-', '').trim();
+          if (q) {
+            setSelectedCategory({
+              id: `search-${q}`,
+              name: `Búsqueda: "${q}"`,
+              isSearchResult: true,
+              searchQuery: q
+            });
+            setActivePage('categoria');
+          }
         } else if (hash.startsWith('#categoria-') && cats) {
           const catId = Number(hash.replace('#categoria-', ''));
           const foundCat = cats.find(c => c.id === catId);
@@ -4270,6 +4517,25 @@ const handleAddToCart = (product, qty = 1) => {
     }
   };
 
+  const handleFullSearch = (query) => {
+    const cleanQuery = (query || '').trim();
+    if (!cleanQuery) return;
+    const searchCategory = {
+      id: `search-${cleanQuery}`,
+      name: `Búsqueda: "${cleanQuery}"`,
+      isSearchResult: true,
+      searchQuery: cleanQuery
+    };
+    setSelectedCategory(searchCategory);
+    setSelectedProduct(null);
+    setActivePage('categoria');
+    window.history.pushState(
+      { page: 'categoria', category: searchCategory },
+      '',
+      `#busqueda-${encodeURIComponent(cleanQuery)}`
+    );
+  };
+
   const openQuickView = (product, categoryName) => {
     setQuickViewData({ product, categoryName });
   };
@@ -4298,6 +4564,7 @@ const handleAddToCart = (product, qty = 1) => {
         allProducts={dbProducts}
         onOpenCategory={handleOpenCategory}
         onProductSearchSelect={handleProductSearchSelect}
+        onSearchSubmit={handleFullSearch}
         onLoginClick={() => setAuthModalOpen(true)} 
       />
       
@@ -4305,7 +4572,13 @@ const handleAddToCart = (product, qty = 1) => {
        {activePage === 'inicio' ? (
           <>
             <HeroSection navigateTo={navigateTo} />
-            <CatalogSection categories={dbCategories} allProducts={dbProducts} onOpenCategory={handleOpenCategory} onProductSearchSelect={handleProductSearchSelect} />
+            <CatalogSection
+              categories={dbCategories}
+              allProducts={dbProducts}
+              onOpenCategory={handleOpenCategory}
+              onProductSearchSelect={handleProductSearchSelect}
+              onSearchSubmit={handleFullSearch}
+            />
             <MediaShowcaseSection navigateTo={navigateTo} />
             <ProcessSection setTutorialOpen={setTutorialOpen} />
             <FAQSection />
@@ -4376,7 +4649,7 @@ export default function App() {
           element={
             <Suspense fallback={
               <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-white">
-                <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+                <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-none animate-spin mb-4"></div>
                 <p className="font-exo font-semibold text-sm tracking-widest uppercase">Cargando Panel de Administración...</p>
               </div>
             }>

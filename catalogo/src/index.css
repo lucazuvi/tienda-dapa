@@ -194,3 +194,23 @@ body {
 .dark .dark\:bg-blue-900\/30 { background-color: rgba(30, 58, 138, 0.30) !important; }
 .dark .dark\:bg-blue-900\/20 { background-color: rgba(30, 58, 138, 0.20) !important; }
 .dark .dark\:border-blue-500\/25 { border-color: rgba(59, 130, 246, 0.25) !important; }
+
+/* ==========================================================================
+   INTERFAZ RECTANGULAR EN TODA LA PÁGINA (PANEL WEB Y ADMINISTRADOR)
+   Fuerza bordes rectos en desplegables, formularios, tarjetas, modales y botones
+   ========================================================================== */
+.rounded,
+.rounded-sm,
+.rounded-md,
+.rounded-lg,
+.rounded-xl,
+.rounded-2xl,
+.rounded-3xl,
+.rounded-none,
+.rounded-full:not(.animate-spin),
+input:not([type="radio"]),
+select,
+textarea,
+button {
+  border-radius: 0px !important;
+}

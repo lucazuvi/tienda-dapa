@@ -1517,9 +1517,9 @@ export default function AdminPanel() {
   if (!session || !isAuthorizedAdmin) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 font-montserrat">
-        <div className="bg-slate-800 p-8 rounded-3xl shadow-2xl w-full max-w-md border border-slate-700 animate-in fade-in zoom-in duration-500">
+        <div className="bg-slate-800 p-8 rounded-none shadow-2xl w-full max-w-md border border-slate-700 animate-in fade-in zoom-in duration-500">
           <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-blue-900/50 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-500/30">
+            <div className="w-16 h-16 bg-blue-900/50 rounded-none flex items-center justify-center mx-auto mb-4 border border-blue-500/30">
               <Lock className="w-8 h-8 text-blue-400" />
             </div>
             <h1 className="text-2xl font-bold font-michroma text-white tracking-widest uppercase">D.A.P.A</h1>
@@ -1528,10 +1528,10 @@ export default function AdminPanel() {
 
           {session && !isAuthorizedAdmin ? (
             <div className="text-center space-y-4">
-              <p className="text-red-400 text-xs font-bold bg-red-900/20 p-4 rounded-xl border border-red-800">
+              <p className="text-red-400 text-xs font-bold bg-red-900/20 p-4 rounded-none border border-red-800">
                 La cuenta actual ({session.user.email}) es de cliente y no tiene permisos de administrador.
               </p>
-              <button onClick={handleLogout} className="w-full bg-red-600 hover:bg-red-500 text-white font-bold uppercase tracking-widest py-3 rounded-xl transition-colors text-xs">
+              <button onClick={handleLogout} className="w-full bg-red-600 hover:bg-red-500 text-white font-bold uppercase tracking-widest py-3 rounded-none transition-colors text-xs">
                 Cerrar sesión actual
               </button>
             </div>
@@ -1539,14 +1539,14 @@ export default function AdminPanel() {
             <form onSubmit={handleLogin} className="space-y-5">
               <div className="space-y-2">
                 <label className="text-xs font-bold uppercase tracking-widest text-slate-400">Correo Electrónico</label>
-                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full bg-slate-900 border border-slate-700 px-4 py-3 rounded-xl text-white outline-none focus:border-blue-500 transition-colors" placeholder="admin@dapa.com" />
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full bg-slate-900 border border-slate-700 px-4 py-3 rounded-none text-white outline-none focus:border-blue-500 transition-colors" placeholder="admin@dapa.com" />
               </div>
               <div className="space-y-2">
                 <label className="text-xs font-bold uppercase tracking-widest text-slate-400">Contraseña</label>
-                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full bg-slate-900 border border-slate-700 px-4 py-3 rounded-xl text-white outline-none focus:border-blue-500 transition-colors" placeholder="••••••••" />
+                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full bg-slate-900 border border-slate-700 px-4 py-3 rounded-none text-white outline-none focus:border-blue-500 transition-colors" placeholder="••••••••" />
               </div>
-              {loginError && <p className="text-red-400 text-xs font-bold text-center bg-red-900/20 p-2 rounded-lg border border-red-900">{loginError}</p>}
-              <button type="submit" disabled={isLoggingIn} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold uppercase tracking-widest py-4 rounded-xl transition-colors mt-4 shadow-lg focus:outline-none disabled:opacity-50">
+              {loginError && <p className="text-red-400 text-xs font-bold text-center bg-red-900/20 p-2 rounded-none border border-red-900">{loginError}</p>}
+              <button type="submit" disabled={isLoggingIn} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold uppercase tracking-widest py-4 rounded-none transition-colors mt-4 shadow-lg focus:outline-none disabled:opacity-50">
                 {isLoggingIn ? 'Verificando...' : 'Ingresar al Panel'}
               </button>
             </form>
@@ -1563,7 +1563,7 @@ export default function AdminPanel() {
   return (
     <div className="min-h-screen flex bg-slate-100 dark:bg-slate-900 font-montserrat">
       {notification && (
-        <div className={`fixed top-6 right-6 px-6 py-3.5 rounded-2xl shadow-2xl z-[250] flex items-center gap-3 animate-in slide-in-from-top-10 border text-white font-bold text-xs uppercase tracking-wider ${
+        <div className={`fixed top-6 right-6 px-6 py-3.5 rounded-none shadow-2xl z-[250] flex items-center gap-3 animate-in slide-in-from-top-10 border text-white font-bold text-xs uppercase tracking-wider ${
           notification.type === 'error' 
             ? 'bg-red-600 border-red-400 shadow-red-600/30' 
             : 'bg-green-600 border-green-400 shadow-green-600/30'
@@ -1580,29 +1580,29 @@ export default function AdminPanel() {
           <span className="text-[10px] font-bold tracking-[0.2em] uppercase text-blue-500 font-exo">Admin Panel</span>
         </div>
         <div className="flex-1 py-6 px-4 space-y-2">
-          <button onClick={() => setActiveTab('productos')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors font-semibold text-sm ${activeTab === 'productos' ? 'bg-blue-600 text-white' : 'hover:bg-slate-800 hover:text-white'}`}>
+          <button onClick={() => setActiveTab('productos')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-none transition-colors font-semibold text-sm ${activeTab === 'productos' ? 'bg-blue-600 text-white' : 'hover:bg-slate-800 hover:text-white'}`}>
             <Tags className="w-5 h-5" /> Repuestos
           </button>
-          <button onClick={() => setActiveTab('pedidos')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors font-semibold text-sm ${activeTab === 'pedidos' ? 'bg-blue-600 text-white' : 'hover:bg-slate-800 hover:text-white'}`}>
+          <button onClick={() => setActiveTab('pedidos')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-none transition-colors font-semibold text-sm ${activeTab === 'pedidos' ? 'bg-blue-600 text-white' : 'hover:bg-slate-800 hover:text-white'}`}>
             <ClipboardList className="w-5 h-5" /> Pedidos
             {pendingOrdersCount > 0 && (
-              <span className="ml-auto bg-red-500 text-white text-[10px] px-2 py-1 rounded-full">{pendingOrdersCount}</span>
+              <span className="ml-auto bg-red-500 text-white text-[10px] px-2 py-1 rounded-none">{pendingOrdersCount}</span>
             )}
           </button>
-          <button onClick={() => setActiveTab('estadisticas')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors font-semibold text-sm ${activeTab === 'estadisticas' ? 'bg-blue-600 text-white' : 'hover:bg-slate-800 hover:text-white'}`}>
+          <button onClick={() => setActiveTab('estadisticas')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-none transition-colors font-semibold text-sm ${activeTab === 'estadisticas' ? 'bg-blue-600 text-white' : 'hover:bg-slate-800 hover:text-white'}`}>
             <BarChart3 className="w-5 h-5" /> Estadísticas
             {stats.outOfStockProducts.length > 0 && (
-              <span className="ml-auto bg-amber-500 text-slate-900 font-bold text-[10px] px-2 py-0.5 rounded-full">
+              <span className="ml-auto bg-amber-500 text-slate-900 font-bold text-[10px] px-2 py-0.5 rounded-none">
                 {stats.outOfStockProducts.length}
               </span>
             )}
           </button>
         </div>
         <div className="p-4 border-t border-slate-800 space-y-2">
-          <button onClick={() => navigate('/')} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors text-xs uppercase tracking-widest font-bold">
+          <button onClick={() => navigate('/')} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-none bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors text-xs uppercase tracking-widest font-bold">
             <ArrowLeft className="w-4 h-4" /> Ver Tienda
           </button>
-          <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-red-900/30 hover:bg-red-600 text-red-400 hover:text-white transition-colors text-xs uppercase tracking-widest font-bold">
+          <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-none bg-red-900/30 hover:bg-red-600 text-red-400 hover:text-white transition-colors text-xs uppercase tracking-widest font-bold">
             <LogOut className="w-4 h-4" /> Cerrar Sesión
           </button>
         </div>
@@ -1614,7 +1614,7 @@ export default function AdminPanel() {
             {activeTab === 'productos' ? 'Gestión de Inventario' : activeTab === 'pedidos' ? 'Bandeja de Pedidos' : 'Estadísticas y Stock'}
           </h1>
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold">A</div>
+            <div className="w-8 h-8 bg-blue-100 text-blue-600 rounded-none flex items-center justify-center font-bold">A</div>
             <span className="text-sm font-semibold text-slate-600 dark:text-slate-300">{session.user.email}</span>
           </div>
         </header>
@@ -1625,7 +1625,7 @@ export default function AdminPanel() {
           {/* VISTA 1: PRODUCTOS E INVENTARIO */}
           {/* =============================================================== */}
           {activeTab === 'productos' && (
-            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm flex flex-col h-full overflow-hidden">
+            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-none shadow-sm flex flex-col h-full overflow-hidden">
               
               {/* FILA SUPERIOR: TÍTULO, BUSCADOR Y BOTONES DE ACCIÓN */}
               <div className="p-5 border-b border-slate-200 dark:border-slate-700 flex flex-col gap-4">
@@ -1644,7 +1644,7 @@ export default function AdminPanel() {
                       value={searchTerm} 
                       onChange={(e) => setSearchTerm(e.target.value)} 
                       placeholder="Buscar por código, nombre o marca..." 
-                      className="w-full pl-10 pr-8 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs text-slate-800 dark:text-white outline-none focus:border-blue-500"
+                      className="w-full pl-10 pr-8 py-2 rounded-none border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs text-slate-800 dark:text-white outline-none focus:border-blue-500"
                     />
                     {searchTerm && (
                       <button onClick={() => setSearchTerm('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white">
@@ -1654,25 +1654,25 @@ export default function AdminPanel() {
                   </div>
                   
                   <div className="flex flex-wrap gap-2">
-                    <button onClick={() => setIsCategoryModalOpen(true)} className="bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-3 py-2 rounded-xl font-bold uppercase tracking-widest text-[11px] flex items-center gap-1.5 transition-colors focus:outline-none">
+                    <button onClick={() => setIsCategoryModalOpen(true)} className="bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-3 py-2 rounded-none font-bold uppercase tracking-widest text-[11px] flex items-center gap-1.5 transition-colors focus:outline-none">
                       <ListPlus className="w-4 h-4" /> + Categoría
                     </button>
-                    <button onClick={() => setIsBrandModalOpen(true)} className="bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-3 py-2 rounded-xl font-bold uppercase tracking-widest text-[11px] flex items-center gap-1.5 transition-colors focus:outline-none">
+                    <button onClick={() => setIsBrandModalOpen(true)} className="bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-3 py-2 rounded-none font-bold uppercase tracking-widest text-[11px] flex items-center gap-1.5 transition-colors focus:outline-none">
                       <Tag className="w-4 h-4" /> + Marca
                     </button>
                     <button 
                       onClick={() => setIsBulkPriceModalOpen(true)} 
-                      className="bg-purple-600 hover:bg-purple-500 text-white px-3.5 py-2 rounded-xl font-bold uppercase tracking-widest text-[11px] flex items-center gap-1.5 shadow-lg shadow-purple-600/20 transition-colors focus:outline-none"
+                      className="bg-purple-600 hover:bg-purple-500 text-white px-3.5 py-2 rounded-none font-bold uppercase tracking-widest text-[11px] flex items-center gap-1.5 shadow-lg shadow-purple-600/20 transition-colors focus:outline-none"
                     >
                       <Percent className="w-4 h-4" /> Actualizar %
                     </button>
                     <button 
                       onClick={() => { setExcelPreview([]); setExcelFileName(''); setIsExcelModalOpen(true); }} 
-                      className="bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-2 rounded-xl font-bold uppercase tracking-widest text-[11px] flex items-center gap-1.5 shadow-lg shadow-emerald-600/20 transition-colors focus:outline-none"
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-2 rounded-none font-bold uppercase tracking-widest text-[11px] flex items-center gap-1.5 shadow-lg shadow-emerald-600/20 transition-colors focus:outline-none"
                     >
                       <FileSpreadsheet className="w-4 h-4" /> Importar Excel
                     </button>
-                    <button onClick={openAddProductModal} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl font-bold uppercase tracking-widest text-[11px] flex items-center gap-1.5 shadow-lg shadow-blue-600/20 transition-colors focus:outline-none">
+                    <button onClick={openAddProductModal} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-none font-bold uppercase tracking-widest text-[11px] flex items-center gap-1.5 shadow-lg shadow-blue-600/20 transition-colors focus:outline-none">
                       <Plus className="w-4 h-4" /> Nuevo Repuesto
                     </button>
                   </div>
@@ -1688,7 +1688,7 @@ export default function AdminPanel() {
                   <select
                     value={filterCategory}
                     onChange={(e) => setFilterCategory(e.target.value)}
-                    className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs rounded-xl px-3 py-2 outline-none focus:border-blue-500 font-medium"
+                    className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs rounded-none px-3 py-2 outline-none focus:border-blue-500 font-medium"
                   >
                     <option value="todas">Todas las Categorías ({categories.length})</option>
                     {categories.map(cat => (
@@ -1700,7 +1700,7 @@ export default function AdminPanel() {
                   <select
                     value={filterBrand}
                     onChange={(e) => setFilterBrand(e.target.value)}
-                    className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs rounded-xl px-3 py-2 outline-none focus:border-blue-500 font-medium"
+                    className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs rounded-none px-3 py-2 outline-none focus:border-blue-500 font-medium"
                   >
                     <option value="todas">Todas las Marcas ({brands.length})</option>
                     {brands.map(b => (
@@ -1712,7 +1712,7 @@ export default function AdminPanel() {
                   <select
                     value={filterStock}
                     onChange={(e) => setFilterStock(e.target.value)}
-                    className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs rounded-xl px-3 py-2 outline-none focus:border-blue-500 font-medium"
+                    className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs rounded-none px-3 py-2 outline-none focus:border-blue-500 font-medium"
                   >
                     <option value="todos">Stock: Todos</option>
                     <option value="con_stock">✅ Con Stock (&gt; 0)</option>
@@ -1724,7 +1724,7 @@ export default function AdminPanel() {
                   <select
                     value={sortBy}
                     onChange={(e) => setSortBy(e.target.value)}
-                    className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs rounded-xl px-3 py-2 outline-none focus:border-blue-500 font-medium"
+                    className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs rounded-none px-3 py-2 outline-none focus:border-blue-500 font-medium"
                   >
                     <option value="recientes">Orden: Más recientes</option>
                     <option value="nombre_asc">Orden: Nombre (A - Z)</option>
@@ -1753,7 +1753,7 @@ export default function AdminPanel() {
                     <Package className="w-16 h-16 text-slate-300 mb-4" />
                     <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Sin resultados para estos filtros</h3>
                     {hasActiveProductFilters && (
-                      <button onClick={clearAllProductFilters} className="mt-2 px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold uppercase tracking-wider">
+                      <button onClick={clearAllProductFilters} className="mt-2 px-4 py-2 rounded-none bg-blue-600 text-white text-xs font-bold uppercase tracking-wider">
                         Ver todos los repuestos
                       </button>
                     )}
@@ -1776,9 +1776,9 @@ export default function AdminPanel() {
                         <tr key={prod.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                           <td className="p-3.5 text-center">
                             {prod.image_url ? (
-                              <img src={prod.image_url} alt={prod.name} className="w-10 h-10 object-cover rounded-lg border border-slate-200" />
+                              <img src={prod.image_url} alt={prod.name} className="w-10 h-10 object-cover rounded-none border border-slate-200" />
                             ) : (
-                              <div className="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center justify-center border border-slate-200 dark:border-slate-700">
+                              <div className="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded-none flex items-center justify-center border border-slate-200 dark:border-slate-700">
                                 <ImageIcon className="w-4 h-4 text-slate-400" />
                               </div>
                             )}
@@ -1803,13 +1803,13 @@ export default function AdminPanel() {
                                   if (e.key === 'Enter') saveInlineEdit(prod);
                                   if (e.key === 'Escape') setInlineEdit({ id: null, field: null, value: '' });
                                 }}
-                                className="w-28 text-right px-2 py-1 rounded-lg border border-blue-500 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm font-bold outline-none"
+                                className="w-28 text-right px-2 py-1 rounded-none border border-blue-500 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm font-bold outline-none"
                               />
                             ) : (
                               <button
                                 onClick={() => startInlineEdit(prod, 'price')}
                                 title="Clic para editar precio rápidamente"
-                                className="text-sm font-bold text-slate-800 dark:text-white hover:text-blue-500 dark:hover:text-blue-400 px-2 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors"
+                                className="text-sm font-bold text-slate-800 dark:text-white hover:text-blue-500 dark:hover:text-blue-400 px-2 py-1 rounded-none hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors"
                               >
                                 ${Number(prod.price).toLocaleString('es-AR')}
                               </button>
@@ -1829,13 +1829,13 @@ export default function AdminPanel() {
                                   if (e.key === 'Enter') saveInlineEdit(prod);
                                   if (e.key === 'Escape') setInlineEdit({ id: null, field: null, value: '' });
                                 }}
-                                className="w-20 text-center px-2 py-1 rounded-lg border border-blue-500 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs font-bold outline-none"
+                                className="w-20 text-center px-2 py-1 rounded-none border border-blue-500 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs font-bold outline-none"
                               />
                             ) : (
                               <button
                                 onClick={() => startInlineEdit(prod, 'stock')}
                                 title="Clic para editar stock rápidamente"
-                                className={`px-3 py-1 rounded-full text-xs font-bold transition-transform hover:scale-105 ${
+                                className={`px-3 py-1 rounded-none text-xs font-bold transition-transform hover:scale-105 ${
                                   prod.stock > 2
                                     ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400'
                                     : prod.stock > 0
@@ -1850,10 +1850,10 @@ export default function AdminPanel() {
 
                           <td className="p-3.5 text-center">
                             <div className="flex items-center justify-center gap-2">
-                              <button onClick={() => openEditProductModal(prod)} className="p-2 text-blue-600 hover:bg-blue-100 dark:hover:bg-slate-700 rounded-lg transition-colors focus:outline-none" title="Editar ficha completa">
+                              <button onClick={() => openEditProductModal(prod)} className="p-2 text-blue-600 hover:bg-blue-100 dark:hover:bg-slate-700 rounded-none transition-colors focus:outline-none" title="Editar ficha completa">
                                 <Edit className="w-4 h-4" />
                               </button>
-                              <button onClick={() => setProductToDelete(prod)} className="p-2 text-red-500 hover:bg-red-100 dark:hover:bg-slate-700 rounded-lg transition-colors focus:outline-none" title="Eliminar">
+                              <button onClick={() => setProductToDelete(prod)} className="p-2 text-red-500 hover:bg-red-100 dark:hover:bg-slate-700 rounded-none transition-colors focus:outline-none" title="Eliminar">
                                 <Trash2 className="w-4 h-4" />
                               </button>
                             </div>
@@ -1875,14 +1875,14 @@ export default function AdminPanel() {
                     <button
                       disabled={currentPage === 1}
                       onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                      className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 disabled:opacity-40 flex items-center gap-1 font-bold"
+                      className="px-3 py-1.5 rounded-none border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 disabled:opacity-40 flex items-center gap-1 font-bold"
                     >
                       <ChevronLeft className="w-4 h-4" /> Anterior
                     </button>
                     <button
                       disabled={currentPage === totalProductPages}
                       onClick={() => setCurrentPage(p => Math.min(totalProductPages, p + 1))}
-                      className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 disabled:opacity-40 flex items-center gap-1 font-bold"
+                      className="px-3 py-1.5 rounded-none border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 disabled:opacity-40 flex items-center gap-1 font-bold"
                     >
                       Siguiente <ChevronRight className="w-4 h-4" />
                     </button>
@@ -1897,7 +1897,7 @@ export default function AdminPanel() {
           {/* =============================================================== */}
           {activeTab === 'pedidos' && (
             <div className="space-y-6">
-              <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row justify-between items-center gap-4 shadow-sm">
+              <div className="bg-white dark:bg-slate-800 p-4 rounded-none border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row justify-between items-center gap-4 shadow-sm">
                 <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                   {[
                     { id: 'todos', label: `Todos (${orders.length})` },
@@ -1908,7 +1908,7 @@ export default function AdminPanel() {
                     <button
                       key={tab.id}
                       onClick={() => setOrderFilter(tab.id)}
-                      className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors ${
+                      className={`px-4 py-2 rounded-none text-xs font-bold uppercase tracking-wider transition-colors ${
                         orderFilter === tab.id
                           ? 'bg-blue-600 text-white shadow-sm'
                           : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
@@ -1922,7 +1922,7 @@ export default function AdminPanel() {
                 <div className="flex flex-wrap gap-2 w-full sm:w-auto justify-end">
                   <button
                     onClick={() => setIsPosModalOpen(true)}
-                    className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 transition-colors"
+                    className="px-4 py-2 rounded-none bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 transition-colors"
                   >
                     <ShoppingBag className="w-4 h-4" /> Nueva Venta Manual
                   </button>
@@ -1930,7 +1930,7 @@ export default function AdminPanel() {
                   {completedOrdersCount > 0 && (
                     <button
                       onClick={() => setConfirmClearCompleted(true)}
-                      className="px-4 py-2 rounded-xl bg-red-50 dark:bg-red-900/20 hover:bg-red-600 text-red-600 dark:text-red-400 hover:text-white border border-red-200 dark:border-red-800 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors"
+                      className="px-4 py-2 rounded-none bg-red-50 dark:bg-red-900/20 hover:bg-red-600 text-red-600 dark:text-red-400 hover:text-white border border-red-200 dark:border-red-800 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors"
                     >
                       <Trash2 className="w-4 h-4" /> Limpiar Finalizados ({completedOrdersCount})
                     </button>
@@ -1941,14 +1941,14 @@ export default function AdminPanel() {
               {isLoading ? (
                 <div className="p-10 text-center text-slate-500">Cargando pedidos...</div>
               ) : filteredOrders.length === 0 ? (
-                <div className="bg-white dark:bg-slate-800 rounded-2xl p-20 text-center border border-slate-200 dark:border-slate-700">
+                <div className="bg-white dark:bg-slate-800 rounded-none p-20 text-center border border-slate-200 dark:border-slate-700">
                   <ClipboardList className="w-16 h-16 text-slate-300 mx-auto mb-4" />
                   <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">No hay pedidos en esta vista</h3>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
                   {filteredOrders.map(order => (
-                    <div key={order.id} className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm overflow-hidden flex flex-col">
+                    <div key={order.id} className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-none shadow-sm overflow-hidden flex flex-col">
                       <div className="p-5 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 flex justify-between items-start gap-3">
                         <div>
                           <span className="text-xs font-bold tracking-widest uppercase text-blue-600 block mb-1">Pedido #{order.id}</span>
@@ -1961,7 +1961,7 @@ export default function AdminPanel() {
                           <select 
                             value={order.status} 
                             onChange={(e) => updateOrderStatus(order.id, e.target.value)} 
-                            className={`text-xs font-bold uppercase tracking-wider px-3 py-1.5 rounded-lg outline-none cursor-pointer border ${
+                            className={`text-xs font-bold uppercase tracking-wider px-3 py-1.5 rounded-none outline-none cursor-pointer border ${
                               isOrderPending(order.status) 
                                 ? 'bg-orange-100 text-orange-700 border-orange-200' 
                                 : order.status === 'Facturado' 
@@ -1983,7 +1983,7 @@ export default function AdminPanel() {
                           <button
                             onClick={() => setOrderToDelete(order)}
                             title="Eliminar pedido"
-                            className="p-2 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors focus:outline-none"
+                            className="p-2 rounded-none text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors focus:outline-none"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -1991,7 +1991,7 @@ export default function AdminPanel() {
                       </div>
 
                       <div className="p-5 flex-1 flex flex-col">
-                        <div className="grid grid-cols-2 gap-4 mb-5 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-100 dark:border-slate-700">
+                        <div className="grid grid-cols-2 gap-4 mb-5 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-none border border-slate-100 dark:border-slate-700">
                           <div>
                             <div className="flex items-center gap-1.5 text-xs text-slate-400 font-bold uppercase tracking-widest mb-1">
                               <UserIcon className="w-3 h-3"/> Cliente
@@ -2046,7 +2046,7 @@ export default function AdminPanel() {
 
                           return (
                             <div className="mt-auto space-y-3">
-                              <div className="bg-blue-50/50 dark:bg-slate-900/60 border border-blue-100 dark:border-slate-700 rounded-xl p-4">
+                              <div className="bg-blue-50/50 dark:bg-slate-900/60 border border-blue-100 dark:border-slate-700 rounded-none p-4">
                                 <h5 className="text-[10px] font-bold uppercase tracking-widest text-blue-600 dark:text-blue-400 mb-2">
                                   Datos de Envío / Especificaciones
                                 </h5>
@@ -2056,7 +2056,7 @@ export default function AdminPanel() {
                               </div>
 
                               {imageLinks.length > 0 && (
-                                <div className="bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-700 rounded-xl p-3">
+                                <div className="bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-700 rounded-none p-3">
                                   <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">
                                     Fotos adjuntas por el cliente ({imageLinks.length})
                                   </span>
@@ -2067,7 +2067,7 @@ export default function AdminPanel() {
                                         href={imgUrl}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="group relative w-20 h-20 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 flex items-center justify-center shadow-sm hover:border-blue-500 transition-all"
+                                        className="group relative w-20 h-20 rounded-none overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 flex items-center justify-center shadow-sm hover:border-blue-500 transition-all"
                                       >
                                         <img src={imgUrl} alt={`Adjunto ${imgIdx + 1}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                                         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-[10px] font-bold">
@@ -2103,7 +2103,7 @@ export default function AdminPanel() {
             <div className="space-y-8">
               {/* Tarjetas de Resumen Comercial */}
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
-                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-none border border-slate-200 dark:border-slate-700 shadow-sm">
                   <span className="text-xs font-bold uppercase tracking-widest text-slate-400 block mb-2">Facturación del Mes</span>
                   <p className="text-3xl font-bold font-exo text-emerald-600 dark:text-emerald-400">
                     ${stats.monthlyRevenue.toLocaleString('es-AR')}
@@ -2111,7 +2111,7 @@ export default function AdminPanel() {
                   <span className="text-xs text-slate-500 mt-2 block">{stats.monthlyBilledCount} ventas cerradas este mes</span>
                 </div>
 
-                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-none border border-slate-200 dark:border-slate-700 shadow-sm">
                   <span className="text-xs font-bold uppercase tracking-widest text-slate-400 block mb-2">Facturación Histórica</span>
                   <p className="text-3xl font-bold font-exo text-slate-900 dark:text-white">
                     ${stats.totalRevenue.toLocaleString('es-AR')}
@@ -2119,7 +2119,7 @@ export default function AdminPanel() {
                   <span className="text-xs text-slate-500 mt-2 block">{stats.billedCount} ventas totales • Ticket prom: ${stats.avgTicket.toLocaleString('es-AR')}</span>
                 </div>
 
-                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-none border border-slate-200 dark:border-slate-700 shadow-sm">
                   <span className="text-xs font-bold uppercase tracking-widest text-slate-400 block mb-2">Capital en Mercadería</span>
                   <p className="text-3xl font-bold font-exo text-blue-600 dark:text-blue-400">
                     ${stats.totalInventoryValue.toLocaleString('es-AR')}
@@ -2127,7 +2127,7 @@ export default function AdminPanel() {
                   <span className="text-xs text-slate-500 mt-2 block">{products.length} artículos activos en catálogo</span>
                 </div>
 
-                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-none border border-slate-200 dark:border-slate-700 shadow-sm">
                   <span className="text-xs font-bold uppercase tracking-widest text-slate-400 block mb-2">Alertas de Reposición</span>
                   <p className="text-3xl font-bold font-exo text-amber-500">
                     {stats.outOfStockProducts.length + stats.lowStockProducts.length}
@@ -2139,7 +2139,7 @@ export default function AdminPanel() {
               </div>
 
               {/* Tabla de Repuestos sin Stock o con Stock Crítico */}
-              <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm overflow-hidden">
+              <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-none shadow-sm overflow-hidden">
                 <div className="p-6 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
                   <div>
                     <h3 className="font-bold text-base text-slate-800 dark:text-white uppercase tracking-wider">
@@ -2178,7 +2178,7 @@ export default function AdminPanel() {
                             <td className="p-4 text-slate-900 dark:text-white font-medium">{prod.name}</td>
                             <td className="p-4 text-slate-500 text-xs uppercase">{prod.brand?.name || '-'}</td>
                             <td className="p-4 text-center">
-                              <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                              <span className={`px-3 py-1 rounded-none text-xs font-bold ${
                                 prod.stock <= 0 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
                               }`}>
                                 {prod.stock <= 0 ? 'Agotado (0)' : `${prod.stock} u.`}
@@ -2196,7 +2196,7 @@ export default function AdminPanel() {
                                       showNotification(`Se sumaron +${addQty} u. a ${prod.sku_code}`, 'success');
                                     }
                                   }}
-                                  className="px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-slate-700 hover:bg-blue-600 text-blue-600 dark:text-blue-300 hover:text-white text-xs font-bold transition-colors"
+                                  className="px-2.5 py-1 rounded-none bg-blue-50 dark:bg-slate-700 hover:bg-blue-600 text-blue-600 dark:text-blue-300 hover:text-white text-xs font-bold transition-colors"
                                 >
                                   +{addQty}
                                 </button>
@@ -2220,10 +2220,10 @@ export default function AdminPanel() {
       {/* ==================================================================== */}
       {isBulkPriceModalOpen && (
         <div className="fixed inset-0 bg-slate-900/70 z-[210] flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 border border-slate-200 dark:border-slate-700">
+          <div className="bg-white dark:bg-slate-800 rounded-none shadow-2xl w-full max-w-lg overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 border border-slate-200 dark:border-slate-700">
             <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-900/50">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400">
+                <div className="p-2.5 rounded-none bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400">
                   <Percent className="w-5 h-5" />
                 </div>
                 <div>
@@ -2251,7 +2251,7 @@ export default function AdminPanel() {
                       type="button"
                       key={opt.id}
                       onClick={() => setBulkScope(opt.id)}
-                      className={`py-2.5 px-3 rounded-xl text-xs font-bold uppercase tracking-wider border transition-colors ${
+                      className={`py-2.5 px-3 rounded-none text-xs font-bold uppercase tracking-wider border transition-colors ${
                         bulkScope === opt.id
                           ? 'bg-purple-600 text-white border-purple-600'
                           : 'bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
@@ -2270,7 +2270,7 @@ export default function AdminPanel() {
                     required
                     value={bulkCategoryId}
                     onChange={(e) => setBulkCategoryId(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:border-purple-500"
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-none text-sm text-slate-900 dark:text-white outline-none focus:border-purple-500"
                   >
                     <option value="">Elegir categoría...</option>
                     {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -2285,7 +2285,7 @@ export default function AdminPanel() {
                     required
                     value={bulkBrandId}
                     onChange={(e) => setBulkBrandId(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:border-purple-500"
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-none text-sm text-slate-900 dark:text-white outline-none focus:border-purple-500"
                   >
                     <option value="">Elegir marca...</option>
                     {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
@@ -2303,7 +2303,7 @@ export default function AdminPanel() {
                     placeholder="Ej: 15 (o -10 p/ descuento)"
                     value={bulkPercentage}
                     onChange={(e) => setBulkPercentage(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:border-purple-500 font-bold"
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-none text-sm text-slate-900 dark:text-white outline-none focus:border-purple-500 font-bold"
                   />
                 </div>
 
@@ -2312,7 +2312,7 @@ export default function AdminPanel() {
                   <select
                     value={bulkRounding}
                     onChange={(e) => setBulkRounding(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:border-purple-500"
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-none text-sm text-slate-900 dark:text-white outline-none focus:border-purple-500"
                   >
                     <option value="1">Sin redondeo ($1)</option>
                     <option value="10">Múltiplos de $10</option>
@@ -2323,7 +2323,7 @@ export default function AdminPanel() {
                 </div>
               </div>
 
-              <div className="bg-purple-50/60 dark:bg-slate-900/70 border border-purple-200 dark:border-slate-700 rounded-xl p-4 text-xs text-slate-600 dark:text-slate-300 space-y-1">
+              <div className="bg-purple-50/60 dark:bg-slate-900/70 border border-purple-200 dark:border-slate-700 rounded-none p-4 text-xs text-slate-600 dark:text-slate-300 space-y-1">
                 <p className="font-bold text-slate-800 dark:text-white">
                   Se modificarán <strong>{targetBulkProducts.length}</strong> repuestos.
                 </p>
@@ -2341,14 +2341,14 @@ export default function AdminPanel() {
                 <button
                   type="button"
                   onClick={() => setIsBulkPriceModalOpen(false)}
-                  className="px-5 py-2.5 rounded-xl text-xs font-bold uppercase text-slate-500 hover:bg-slate-100"
+                  className="px-5 py-2.5 rounded-none text-xs font-bold uppercase text-slate-500 hover:bg-slate-100"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting || targetBulkProducts.length === 0}
-                  className="px-6 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold uppercase tracking-widest shadow-lg shadow-purple-600/30 disabled:opacity-50"
+                  className="px-6 py-2.5 rounded-none bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold uppercase tracking-widest shadow-lg shadow-purple-600/30 disabled:opacity-50"
                 >
                   {isSubmitting ? 'Actualizando...' : 'Aplicar Aumento / Descuento'}
                 </button>
@@ -2363,10 +2363,10 @@ export default function AdminPanel() {
       {/* ==================================================================== */}
       {isPosModalOpen && (
         <div className="fixed inset-0 bg-slate-900/70 z-[210] flex items-center justify-center p-4 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 max-h-[92vh]">
+          <div className="bg-white dark:bg-slate-800 rounded-none shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 max-h-[92vh]">
             <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-900/50">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400">
+                <div className="p-2.5 rounded-none bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400">
                   <ShoppingBag className="w-5 h-5" />
                 </div>
                 <div>
@@ -2390,7 +2390,7 @@ export default function AdminPanel() {
                     required
                     value={posCustomerName}
                     onChange={(e) => setPosCustomerName(e.target.value)}
-                    className="w-full mt-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2.5 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500"
+                    className="w-full mt-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2.5 rounded-none text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500"
                   />
                 </div>
                 <div>
@@ -2400,7 +2400,7 @@ export default function AdminPanel() {
                     value={posCustomerPhone}
                     onChange={(e) => setPosCustomerPhone(e.target.value)}
                     placeholder="Ej: 2478..."
-                    className="w-full mt-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2.5 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500"
+                    className="w-full mt-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2.5 rounded-none text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500"
                   />
                 </div>
                 <div>
@@ -2408,7 +2408,7 @@ export default function AdminPanel() {
                   <select
                     value={posPaymentMethod}
                     onChange={(e) => setPosPaymentMethod(e.target.value)}
-                    className="w-full mt-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2.5 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500"
+                    className="w-full mt-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2.5 rounded-none text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500"
                   >
                     <option value="Efectivo">Efectivo</option>
                     <option value="Transferencia">Transferencia</option>
@@ -2429,11 +2429,11 @@ export default function AdminPanel() {
                     value={posSearch}
                     onChange={(e) => setPosSearch(e.target.value)}
                     placeholder="Escribí el código SKU o nombre del repuesto..."
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500"
+                    className="w-full pl-10 pr-4 py-2.5 rounded-none border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500"
                   />
                 </div>
                 {posSuggestions.length > 0 && (
-                  <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-30 max-h-56 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-700">
+                  <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-none shadow-xl z-30 max-h-56 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-700">
                     {posSuggestions.map(prod => (
                       <button
                         type="button"
@@ -2454,7 +2454,7 @@ export default function AdminPanel() {
               </div>
 
               {/* Lista de ítems cargados */}
-              <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+              <div className="border border-slate-200 dark:border-slate-700 rounded-none overflow-hidden">
                 {posItems.length === 0 ? (
                   <div className="p-8 text-center text-xs text-slate-400">
                     Todavía no agregaste repuestos a esta venta.
@@ -2485,7 +2485,7 @@ export default function AdminPanel() {
                                 const q = Math.max(1, parseInt(e.target.value, 10) || 1);
                                 setPosItems(prev => prev.map((it, i) => i === idx ? { ...it, quantity: q } : it));
                               }}
-                              className="w-16 text-center py-1 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-bold"
+                              className="w-16 text-center py-1 rounded-none border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-bold"
                             />
                           </td>
                           <td className="p-3 text-right font-bold text-slate-900 dark:text-white">
@@ -2513,7 +2513,7 @@ export default function AdminPanel() {
                     type="checkbox"
                     checked={posDiscountStock}
                     onChange={(e) => setPosDiscountStock(e.target.checked)}
-                    className="w-4 h-4 rounded text-blue-600"
+                    className="w-4 h-4 rounded-none text-blue-600"
                   />
                   Marcar como Facturado y descontar stock automáticamente
                 </label>
@@ -2530,14 +2530,14 @@ export default function AdminPanel() {
                 <button
                   type="button"
                   onClick={() => setIsPosModalOpen(false)}
-                  className="px-5 py-2.5 rounded-xl text-xs font-bold uppercase text-slate-500 hover:bg-slate-100"
+                  className="px-5 py-2.5 rounded-none text-xs font-bold uppercase text-slate-500 hover:bg-slate-100"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting || posItems.length === 0}
-                  className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase tracking-widest shadow-lg shadow-blue-600/30 disabled:opacity-50"
+                  className="px-6 py-2.5 rounded-none bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase tracking-widest shadow-lg shadow-blue-600/30 disabled:opacity-50"
                 >
                   {isSubmitting ? 'Registrando...' : 'Confirmar Venta'}
                 </button>
@@ -2552,10 +2552,10 @@ export default function AdminPanel() {
       {/* ==================================================================== */}
       {isExcelModalOpen && (
         <div className="fixed inset-0 bg-slate-900/70 z-[210] flex items-center justify-center p-4 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 max-h-[90vh]">
+          <div className="bg-white dark:bg-slate-800 rounded-none shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 max-h-[90vh]">
             <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-900/50">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400">
+                <div className="p-2.5 rounded-none bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400">
                   <FileSpreadsheet className="w-6 h-6" />
                 </div>
                 <div>
@@ -2571,7 +2571,7 @@ export default function AdminPanel() {
             </div>
 
             <div className="p-6 overflow-y-auto space-y-6 flex-1">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-slate-50 dark:bg-slate-900/60 p-4 rounded-2xl border border-slate-200 dark:border-slate-700">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-slate-50 dark:bg-slate-900/60 p-4 rounded-none border border-slate-200 dark:border-slate-700">
                 <div className="text-xs text-slate-600 dark:text-slate-300 space-y-1">
                   <p className="font-bold text-slate-800 dark:text-white uppercase tracking-wider">Columnas reconocidas:</p>
                   <p><strong>Codigo</strong> (SKU), <strong>Nombre</strong>, <strong>Precio</strong>, <strong>Stock</strong>, <strong>Categoria</strong>, <strong>Marca</strong>, <strong>Descripcion</strong>.</p>
@@ -2580,13 +2580,13 @@ export default function AdminPanel() {
                 <button
                   type="button"
                   onClick={handleDownloadTemplate}
-                  className="flex-shrink-0 px-4 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:border-emerald-500 text-xs font-bold uppercase tracking-wider flex items-center gap-2 shadow-sm transition-colors"
+                  className="flex-shrink-0 px-4 py-2.5 rounded-none bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:border-emerald-500 text-xs font-bold uppercase tracking-wider flex items-center gap-2 shadow-sm transition-colors"
                 >
                   <Download className="w-4 h-4 text-emerald-600" /> Descargar Plantilla
                 </button>
               </div>
 
-              <div className="relative border-2 border-dashed border-emerald-400/70 dark:border-emerald-600/60 rounded-2xl p-8 text-center bg-emerald-50/20 dark:bg-emerald-950/10 hover:bg-emerald-50/40 transition-colors cursor-pointer">
+              <div className="relative border-2 border-dashed border-emerald-400/70 dark:border-emerald-600/60 rounded-none p-8 text-center bg-emerald-50/20 dark:bg-emerald-950/10 hover:bg-emerald-50/40 transition-colors cursor-pointer">
                 <input
                   type="file"
                   accept=".xlsx,.xls,.csv"
@@ -2607,7 +2607,7 @@ export default function AdminPanel() {
               )}
 
               {excelPreview.length > 0 && (
-                <div className="bg-emerald-50/60 dark:bg-slate-900/80 border border-emerald-200 dark:border-slate-700 rounded-2xl p-4 grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
+                <div className="bg-emerald-50/60 dark:bg-slate-900/80 border border-emerald-200 dark:border-slate-700 rounded-none p-4 grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
                   <div>
                     <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-600 dark:text-emerald-400 block">
                       Proveedor Detectado
@@ -2627,7 +2627,7 @@ export default function AdminPanel() {
                     setExcelPreview(prev => enrichWithExistingSkus(prev, newPrefix));
                   }}
                   placeholder="Ej: TC- o WG-"
-                  className="mt-1 w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs font-mono font-bold text-slate-900 dark:text-white"
+                  className="mt-1 w-full px-3 py-1.5 rounded-none border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs font-mono font-bold text-slate-900 dark:text-white"
                 />
                     <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">
                       Sumar % (Ej: 21 por IVA)
@@ -2638,11 +2638,11 @@ export default function AdminPanel() {
                       value={importMarkupPct}
                       onChange={(e) => setImportMarkupPct(e.target.value)}
                       placeholder="0"
-                      className="mt-1 w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
+                      className="mt-1 w-full px-3 py-1.5 rounded-none border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
                     />
                   </div>
                   {rawSheetMatrix.length > 0 && (
-                <div className="bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 space-y-3">
+                <div className="bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700 rounded-none p-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
                       ¿Subiste un Excel de un proveedor nuevo con otro diseño?
@@ -2672,7 +2672,7 @@ export default function AdminPanel() {
                               setManualCols(next);
                               applyManualColumnMapping(next);
                             }}
-                            className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
+                            className="mt-1 w-full px-2.5 py-1.5 rounded-none border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
                           >
                             {['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S'].map((letter, idx) => (
                               <option key={letter} value={idx}>Columna {letter}</option>
@@ -2692,7 +2692,7 @@ export default function AdminPanel() {
                             applyManualColumnMapping(next);
                           }}
                           placeholder="Ej: Chapas o Auto"
-                          className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white"
+                          className="mt-1 w-full px-2.5 py-1.5 rounded-none border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white"
                         />
                       </div>
 
@@ -2700,7 +2700,7 @@ export default function AdminPanel() {
                         <button
                           type="button"
                           onClick={() => applyManualColumnMapping(manualCols)}
-                          className="w-full py-1.5 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase"
+                          className="w-full py-1.5 px-3 rounded-none bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase"
                         >
                           Aplicar Mapeo
                         </button>
@@ -2729,7 +2729,7 @@ export default function AdminPanel() {
                     </div>
                   </div>
 
-                  <div className="max-h-64 overflow-y-auto border border-slate-200 dark:border-slate-700 rounded-xl">
+                  <div className="max-h-64 overflow-y-auto border border-slate-200 dark:border-slate-700 rounded-none">
                     <table className="w-full text-left border-collapse text-xs">
                       <thead className="bg-slate-100 dark:bg-slate-900 sticky top-0">
                         <tr>
@@ -2745,7 +2745,7 @@ export default function AdminPanel() {
                         {excelPreview.slice(0, 100).map((item, idx) => (
                           <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
                             <td className="p-2.5">
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                              <span className={`px-2 py-0.5 rounded-none text-[10px] font-bold uppercase ${
                                 item.isUpdate
                                   ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
                                   : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
@@ -2776,7 +2776,7 @@ export default function AdminPanel() {
                   type="button"
                   disabled={isSubmitting}
                   onClick={() => setIsExcelModalOpen(false)}
-                  className="px-5 py-2.5 rounded-xl text-xs font-bold uppercase text-slate-500 hover:bg-slate-200/60 transition-colors"
+                  className="px-5 py-2.5 rounded-none text-xs font-bold uppercase text-slate-500 hover:bg-slate-200/60 transition-colors"
                 >
                   Cancelar
                 </button>
@@ -2784,7 +2784,7 @@ export default function AdminPanel() {
                   type="button"
                   disabled={isSubmitting || excelPreview.length === 0}
                   onClick={handleConfirmExcelImport}
-                  className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold uppercase tracking-widest shadow-lg shadow-emerald-600/30 disabled:opacity-50 flex items-center gap-2 transition-colors"
+                  className="px-6 py-2.5 rounded-none bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold uppercase tracking-widest shadow-lg shadow-emerald-600/30 disabled:opacity-50 flex items-center gap-2 transition-colors"
                 >
                   {isSubmitting ? 'Importando...' : `Confirmar Importación (${excelPreview.length})`}
                 </button>
@@ -2797,8 +2797,8 @@ export default function AdminPanel() {
       {/* MODAL DE CONFIRMACIÓN PARA ELIMINAR REPUESTO */}
       {productToDelete && (
         <div className="fixed inset-0 bg-slate-900/70 z-[220] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-md p-6 border border-slate-200 dark:border-slate-700 animate-in zoom-in-95 duration-200 text-center">
-            <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-full flex items-center justify-center mx-auto mb-4">
+          <div className="bg-white dark:bg-slate-800 rounded-none shadow-2xl w-full max-w-md p-6 border border-slate-200 dark:border-slate-700 animate-in zoom-in-95 duration-200 text-center">
+            <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-none flex items-center justify-center mx-auto mb-4">
               <Trash2 className="w-8 h-8" />
             </div>
             <h3 className="text-lg font-bold text-slate-900 dark:text-white uppercase tracking-widest mb-2">
@@ -2812,7 +2812,7 @@ export default function AdminPanel() {
                 type="button" 
                 disabled={isSubmitting}
                 onClick={() => setProductToDelete(null)} 
-                className="flex-1 py-3 rounded-xl font-bold uppercase tracking-widest text-xs bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                className="flex-1 py-3 rounded-none font-bold uppercase tracking-widest text-xs bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
               >
                 Cancelar
               </button>
@@ -2820,7 +2820,7 @@ export default function AdminPanel() {
                 type="button" 
                 disabled={isSubmitting}
                 onClick={confirmDeleteProduct} 
-                className="flex-1 py-3 rounded-xl font-bold uppercase tracking-widest text-xs bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/30 transition-colors disabled:opacity-60"
+                className="flex-1 py-3 rounded-none font-bold uppercase tracking-widest text-xs bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/30 transition-colors disabled:opacity-60"
               >
                 {isSubmitting ? 'Eliminando...' : 'Sí, Eliminar'}
               </button>
@@ -2832,8 +2832,8 @@ export default function AdminPanel() {
       {/* MODAL DE CONFIRMACIÓN PARA ELIMINAR UN PEDIDO */}
       {orderToDelete && (
         <div className="fixed inset-0 bg-slate-900/70 z-[220] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-md p-6 border border-slate-200 dark:border-slate-700 animate-in zoom-in-95 duration-200 text-center">
-            <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-full flex items-center justify-center mx-auto mb-4">
+          <div className="bg-white dark:bg-slate-800 rounded-none shadow-2xl w-full max-w-md p-6 border border-slate-200 dark:border-slate-700 animate-in zoom-in-95 duration-200 text-center">
+            <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-none flex items-center justify-center mx-auto mb-4">
               <Trash2 className="w-8 h-8" />
             </div>
             <h3 className="text-lg font-bold text-slate-900 dark:text-white uppercase tracking-widest mb-2">
@@ -2847,7 +2847,7 @@ export default function AdminPanel() {
                 type="button" 
                 disabled={isSubmitting}
                 onClick={() => setOrderToDelete(null)} 
-                className="flex-1 py-3 rounded-xl font-bold uppercase tracking-widest text-xs bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 transition-colors"
+                className="flex-1 py-3 rounded-none font-bold uppercase tracking-widest text-xs bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 transition-colors"
               >
                 Cancelar
               </button>
@@ -2855,7 +2855,7 @@ export default function AdminPanel() {
                 type="button" 
                 disabled={isSubmitting}
                 onClick={confirmDeleteOrder} 
-                className="flex-1 py-3 rounded-xl font-bold uppercase tracking-widest text-xs bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/30 transition-colors disabled:opacity-60"
+                className="flex-1 py-3 rounded-none font-bold uppercase tracking-widest text-xs bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/30 transition-colors disabled:opacity-60"
               >
                 {isSubmitting ? 'Borrando...' : 'Sí, Eliminar'}
               </button>
@@ -2867,8 +2867,8 @@ export default function AdminPanel() {
       {/* MODAL DE CONFIRMACIÓN PARA LIMPIAR TODOS LOS PEDIDOS FINALIZADOS */}
       {confirmClearCompleted && (
         <div className="fixed inset-0 bg-slate-900/70 z-[220] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-md p-6 border border-slate-200 dark:border-slate-700 animate-in zoom-in-95 duration-200 text-center">
-            <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-full flex items-center justify-center mx-auto mb-4">
+          <div className="bg-white dark:bg-slate-800 rounded-none shadow-2xl w-full max-w-md p-6 border border-slate-200 dark:border-slate-700 animate-in zoom-in-95 duration-200 text-center">
+            <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-none flex items-center justify-center mx-auto mb-4">
               <Trash2 className="w-8 h-8" />
             </div>
             <h3 className="text-lg font-bold text-slate-900 dark:text-white uppercase tracking-widest mb-2">
@@ -2882,7 +2882,7 @@ export default function AdminPanel() {
                 type="button" 
                 disabled={isSubmitting}
                 onClick={() => setConfirmClearCompleted(false)} 
-                className="flex-1 py-3 rounded-xl font-bold uppercase tracking-widest text-xs bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 transition-colors"
+                className="flex-1 py-3 rounded-none font-bold uppercase tracking-widest text-xs bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 transition-colors"
               >
                 Cancelar
               </button>
@@ -2890,7 +2890,7 @@ export default function AdminPanel() {
                 type="button" 
                 disabled={isSubmitting}
                 onClick={handleClearCompletedOrders} 
-                className="flex-1 py-3 rounded-xl font-bold uppercase tracking-widest text-xs bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/30 transition-colors disabled:opacity-60"
+                className="flex-1 py-3 rounded-none font-bold uppercase tracking-widest text-xs bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/30 transition-colors disabled:opacity-60"
               >
                 {isSubmitting ? 'Limpiando...' : 'Sí, Limpiar Todo'}
               </button>
@@ -2902,7 +2902,7 @@ export default function AdminPanel() {
       {/* MODAL: PRODUCTO (Crear / Editar) */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 my-8">
+          <div className="bg-white dark:bg-slate-800 rounded-none shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 my-8">
             <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-900/50">
               <h2 className="text-xl font-bold uppercase tracking-widest text-slate-800 dark:text-white">
                 {editingProductId ? 'Editar Repuesto' : 'Nuevo Repuesto'}
@@ -2914,7 +2914,7 @@ export default function AdminPanel() {
             <form onSubmit={handleSubmitProduct} className="p-6 md:p-8 flex flex-col md:flex-row gap-8">
               <div className="w-full md:w-1/3 flex flex-col gap-4">
                 <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Foto del Repuesto</label>
-                <div className="relative border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-2xl h-48 md:h-full min-h-[200px] flex items-center justify-center bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 transition-colors overflow-hidden group">
+                <div className="relative border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-none h-48 md:h-full min-h-[200px] flex items-center justify-center bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 transition-colors overflow-hidden group">
                   <input type="file" accept="image/*" onChange={handleImageChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
                   {imagePreview ? (
                     <img src={imagePreview} alt="Vista previa" className="w-full h-full object-contain p-2" />
@@ -2931,24 +2931,24 @@ export default function AdminPanel() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Código (SKU) *</label>
-                    <input required name="sku_code" value={formData.sku_code} onChange={handleInputChange} type="text" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500" />
+                    <input required name="sku_code" value={formData.sku_code} onChange={handleInputChange} type="text" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-none text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500" />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Nombre del Repuesto *</label>
-                    <input required name="name" value={formData.name} onChange={handleInputChange} type="text" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500" />
+                    <input required name="name" value={formData.name} onChange={handleInputChange} type="text" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-none text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500" />
                   </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Categoría *</label>
-                    <select required name="category_id" value={formData.category_id} onChange={handleInputChange} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500">
+                    <select required name="category_id" value={formData.category_id} onChange={handleInputChange} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-none text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500">
                       <option value="">Seleccionar...</option>
                       {categories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
                     </select>
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Marca *</label>
-                    <select required name="brand_id" value={formData.brand_id} onChange={handleInputChange} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500">
+                    <select required name="brand_id" value={formData.brand_id} onChange={handleInputChange} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-none text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500">
                       <option value="">Seleccionar...</option>
                       {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                     </select>
@@ -2957,22 +2957,22 @@ export default function AdminPanel() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Precio (ARS) *</label>
-                    <input required name="price" value={formData.price} onChange={handleInputChange} type="number" step="0.01" min="0" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500" />
+                    <input required name="price" value={formData.price} onChange={handleInputChange} type="number" step="0.01" min="0" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-none text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500" />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Stock *</label>
-                    <input required name="stock" value={formData.stock} onChange={handleInputChange} type="number" min="0" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500" />
+                    <input required name="stock" value={formData.stock} onChange={handleInputChange} type="number" min="0" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-none text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500" />
                   </div>
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Descripción / Compatibilidad (Opcional)</label>
-                  <textarea name="description" value={formData.description} onChange={handleInputChange} rows="2" placeholder="Ej: Aplicable a motores 1.6 8v..." className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500 resize-none" />
+                  <textarea name="description" value={formData.description} onChange={handleInputChange} rows="2" placeholder="Ej: Aplicable a motores 1.6 8v..." className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-none text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500 resize-none" />
                 </div>
                 <div className="pt-2 flex justify-end gap-4 mt-auto">
-                  <button type="button" onClick={() => setIsModalOpen(false)} className="px-6 py-3 rounded-xl font-bold uppercase text-xs text-slate-500 hover:bg-slate-100 transition-colors">
+                  <button type="button" onClick={() => setIsModalOpen(false)} className="px-6 py-3 rounded-none font-bold uppercase text-xs text-slate-500 hover:bg-slate-100 transition-colors">
                     Cancelar
                   </button>
-                  <button type="submit" disabled={isSubmitting} className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-3 rounded-xl font-bold uppercase text-xs flex items-center gap-2 shadow-lg disabled:opacity-70">
+                  <button type="submit" disabled={isSubmitting} className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-3 rounded-none font-bold uppercase text-xs flex items-center gap-2 shadow-lg disabled:opacity-70">
                     {isSubmitting ? 'Guardando...' : <><Save className="w-4 h-4" /> {editingProductId ? 'Actualizar' : 'Guardar'}</>}
                   </button>
                 </div>
@@ -2985,7 +2985,7 @@ export default function AdminPanel() {
       {/* MODAL: NUEVA CATEGORÍA */}
       {isCategoryModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 z-[110] flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+          <div className="bg-white dark:bg-slate-800 rounded-none shadow-2xl w-full max-w-sm overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
             <div className="p-5 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-900/50">
               <h2 className="text-sm font-bold uppercase tracking-widest text-slate-800 dark:text-white">Nueva Categoría</h2>
               <button onClick={() => setIsCategoryModalOpen(false)}><X className="w-5 h-5 text-slate-400" /></button>
@@ -2993,13 +2993,13 @@ export default function AdminPanel() {
             <form onSubmit={handleAddCategory} className="p-6 space-y-4">
               <div className="space-y-2">
                 <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Nombre (Ej: Suspensión)</label>
-                <input required value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} type="text" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500" />
+                <input required value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} type="text" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-none text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500" />
               </div>
               <div className="space-y-2">
                 <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Descripción (Opcional)</label>
-                <input value={newCategoryDesc} onChange={(e) => setNewCategoryDesc(e.target.value)} type="text" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500" />
+                <input value={newCategoryDesc} onChange={(e) => setNewCategoryDesc(e.target.value)} type="text" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-none text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500" />
               </div>
-              <button type="submit" disabled={isSubmitting} className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold uppercase text-xs mt-2 disabled:opacity-70">
+              <button type="submit" disabled={isSubmitting} className="w-full bg-blue-600 text-white py-3 rounded-none font-bold uppercase text-xs mt-2 disabled:opacity-70">
                 Guardar
               </button>
             </form>
@@ -3010,7 +3010,7 @@ export default function AdminPanel() {
       {/* MODAL: NUEVA MARCA */}
       {isBrandModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 z-[110] flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+          <div className="bg-white dark:bg-slate-800 rounded-none shadow-2xl w-full max-w-sm overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
             <div className="p-5 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-900/50">
               <h2 className="text-sm font-bold uppercase tracking-widest text-slate-800 dark:text-white">Nueva Marca</h2>
               <button onClick={() => setIsBrandModalOpen(false)}><X className="w-5 h-5 text-slate-400" /></button>
@@ -3018,9 +3018,9 @@ export default function AdminPanel() {
             <form onSubmit={handleAddBrand} className="p-6 space-y-4">
               <div className="space-y-2">
                 <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Nombre de la Marca (Ej: NGK)</label>
-                <input required value={newBrandName} onChange={(e) => setNewBrandName(e.target.value)} type="text" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500" />
+                <input required value={newBrandName} onChange={(e) => setNewBrandName(e.target.value)} type="text" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-none text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500" />
               </div>
-              <button type="submit" disabled={isSubmitting} className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold uppercase text-xs mt-2 disabled:opacity-70">
+              <button type="submit" disabled={isSubmitting} className="w-full bg-blue-600 text-white py-3 rounded-none font-bold uppercase text-xs mt-2 disabled:opacity-70">
                 Guardar
               </button>
             </form>
