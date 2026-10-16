@@ -11,117 +11,6 @@ import { supabase } from './supabase';
 
 const ADMIN_EMAILS = ['admin@dapa.com'];
 
-// =======================================================================
-// NORMALIZACIÓN DE CATEGORÍAS (evita duplicados al importar listas de distintos proveedores)
-// =======================================================================
-const stripAccentsLower = (str) =>
-  String(str || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .trim();
-
-const CATCH_ALL_CATEGORY = 'Accesorios y Varios';
-
-// Cada palabra clave se busca al inicio de una palabra (así "led" no coincide con "toledo" ni "aro" con "faro").
-const CANONICAL_CATEGORY_RULES = [
-  ['Cerraduras y Cerrajería', ['cerradur', 'cerraj', 'cilindro', 'tambor', 'reten de puerta', 'traba']],
-  ['Manijas y Tiradores', ['manij', 'tirador', 'abrepuerta', 'levanta manija']],
-  ['Alzacristales y Levantavidrios', ['alzacristal', 'levantavidrio', 'levantacristal', 'maquina de vidrio', 'maquina levanta', 'coliza']],
-  ['Espejos y Retrovisores', ['espej', 'retrovisor', 'cacha', 'vidrio espejo']],
-  ['Iluminación, Ópticas y Faros', ['optic', 'faro', 'farol', 'lampar', 'led', 'giro', 'buscahuella', 'auxiliar', 'plafon']],
-  ['Paragolpes, Parrillas y Carrocería', ['paragolp', 'parachoque', 'parrill', 'guardabarro', 'capot', 'frente', 'alma', 'moldura', 'spoiler', 'babero']],
-  ['Burletes y Gomas', ['burlet', 'goma', 'fuelle', 'tope']],
-  ['Bisagras, Capot y Baúl', ['bisagr', 'amortiguador de baul', 'amortiguador de porton', 'resorte a gas', 'cable capot']],
-  ['Limpiaparabrisas y Lavaparabrisas', ['escobill', 'limpiaparabrisa', 'sapito', 'brazo limpia', 'lavaparabrisa']],
-  ['Insignias, Emblemas y Tazas', ['insigni', 'emblem', 'logo', 'taza', 'centro de llanta', 'acrilico']],
-  ['Refrigeración y Climatización', ['radiador', 'electro', 'termostat', 'bomba de agua', 'calefac', 'manguera', 'bidon', 'deposito']],
-  ['Motor y Distribución', ['motor', 'junta', 'correa', 'tensor', 'distribuc', 'filtro', 'piston', 'aro', 'valvul']],
-  ['Suspensión y Tren Delantero', ['amortiguador', 'espiral', 'rotul', 'extremo', 'bielet', 'buje', 'cazolet', 'ruleman', 'rodamiento', 'homocinetic', 'semieje']],
-  ['Frenos y Embrague', ['freno', 'pastill', 'disco', 'campana', 'zapata', 'embrague', 'crapodina']],
-  ['Electricidad, Encendido e Inyección', ['bobina', 'bujia', 'sensor', 'bulbo', 'tecla', 'interruptor', 'llave de luz', 'comando', 'destellador', 'relay', 'rele', 'arranque', 'alternador', 'fusibl']],
-  ['Interior y Tapicería', ['tapiz', 'alfombr', 'pomo', 'bocha', 'cofia', 'pedalera', 'parasol', 'cenicero', 'consola', 'tablero', 'guantera']],
-  [CATCH_ALL_CATEGORY, ['accesorio', 'cinta', 'adhesiv', 'quimic', 'lubricant', 'aditiv', 'herramient', 'bulon', 'grapa', 'clip', 'fijacion']]
-].map(([name, keywords], ruleIndex) => ({
-  name,
-  ruleIndex,
-  regexes: keywords.map(k => new RegExp('(?:^|[^a-z0-9])' + k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
-}));
-
-const GENERIC_CATEGORY_KEYS = new Set([
-  '', 'general', 'varios', 'varias', 'vario', 'otros', 'otras', 'otro', 'multimarca', 'sin categoria', 'sin clasificar', 's/c', '-'
-]);
-
-// Devuelve la regla canónica cuya palabra clave aparece primero en el texto (ante empate, gana el orden de la lista).
-const matchCanonicalCategory = (normalizedText) => {
-  if (!normalizedText) return null;
-  let best = null;
-  for (const rule of CANONICAL_CATEGORY_RULES) {
-    for (const rx of rule.regexes) {
-      const m = rx.exec(normalizedText);
-      if (!m) continue;
-      const pos = m.index;
-      if (!best || pos < best.pos || (pos === best.pos && rule.ruleIndex < best.rule.ruleIndex)) {
-        best = { rule, pos };
-      }
-    }
-  }
-  return best ? best.rule.name : null;
-};
-
-const stripPluralS = (w) => (w.length > 3 && w.endsWith('s') ? w.slice(0, -1) : w);
-const stripPluralEs = (w) => (w.length > 4 && w.endsWith('es') ? w.slice(0, -2) : w);
-
-const sameWordIgnoringPlural = (a, b) =>
-  a === b ||
-  stripPluralS(a) === b || stripPluralEs(a) === b ||
-  a === stripPluralS(b) || a === stripPluralEs(b) ||
-  stripPluralS(a) === stripPluralS(b);
-
-const samePhraseIgnoringPlural = (a, b) => {
-  const wa = a.split(' ');
-  const wb = b.split(' ');
-  return wa.length === wb.length && wa.every((w, i) => sameWordIgnoringPlural(w, wb[i]));
-};
-
-/**
- * Unifica el nombre de una categoría en una de las categorías canónicas.
- * 1) Evalúa rawCategory; si está vacía/genérica ("General", "Varios"...) evalúa productName.
- * 2) Si no coincide con ninguna regla devuelve el nombre limpio (primera letra en mayúscula),
- *    reutilizando una categoría ya existente (knownNames) si solo difiere en tildes/mayúsculas/plural.
- * knownNames es opcional: lista de nombres de categorías existentes para evitar duplicados singular/plural.
- */
-function normalizeCategoryName(rawCategory = '', productName = '', knownNames = []) {
-  const rawKey = stripAccentsLower(rawCategory);
-  const nameKey = stripAccentsLower(productName);
-  const isGeneric = GENERIC_CATEGORY_KEYS.has(rawKey);
-
-  let canonical = null;
-  if (!isGeneric) {
-    canonical = matchCanonicalCategory(rawKey);
-    // Si la categoría original solo cae en el cajón de "Accesorios y Varios", el nombre del producto puede ser más específico.
-    if (canonical === CATCH_ALL_CATEGORY) {
-      canonical = matchCanonicalCategory(nameKey) || CATCH_ALL_CATEGORY;
-    }
-  } else {
-    canonical = matchCanonicalCategory(nameKey);
-  }
-  if (canonical) return canonical;
-
-  // Sin regla: categoría vacía/genérica va al cajón general; el resto conserva su nombre limpio.
-  if (isGeneric) return CATCH_ALL_CATEGORY;
-
-  const cleaned = String(rawCategory).replace(/\s+/g, ' ').trim();
-  const display = cleaned.charAt(0).toUpperCase() + cleaned.slice(1).toLowerCase();
-  const displayKey = stripAccentsLower(display);
-  const known = (knownNames || []).find(n => {
-    const k = stripAccentsLower(n);
-    return k === displayKey || samePhraseIgnoringPlural(k, displayKey);
-  });
-  return known || display;
-}
-
 // Cargador dinámico de SheetJS (permite leer .xlsx y .xls sin instalar paquetes extra)
 const loadXlsxLibrary = () => {
   return new Promise((resolve, reject) => {
@@ -177,9 +66,6 @@ export default function AdminPanel() {
   const [productToDelete, setProductToDelete] = useState(null);
   const [orderToDelete, setOrderToDelete] = useState(null);
   const [confirmClearCompleted, setConfirmClearCompleted] = useState(false);
-  const [confirmUnify, setConfirmUnify] = useState(false);
-  const [isUnifying, setIsUnifying] = useState(false);
-  const [unifyProgress, setUnifyProgress] = useState('');
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [notification, setNotification] = useState(null);
@@ -591,12 +477,38 @@ export default function AdminPanel() {
     return 'Multimarca';
   };
 
-  const detectCategoryFromName = (nameStr) => {
-    const n = String(nameStr || '').toUpperCase().trim();
-    if (n.startsWith('OPTICA') || n.startsWith('OPT.') || n.startsWith('VIDRIO OPT') || n.startsWith('VIDRIO DE OPT') || n.startsWith('LENTE OPT') || n.startsWith('LENTE DE OPT') || n.startsWith('ARO OPT') || n.startsWith('ARO DE OPT') || n.startsWith('CASCO OPT') || n.startsWith('CASCO DE OPT')) return 'Ópticas';
-    if (n.startsWith('FARO') || n.startsWith('FAROL') || n.startsWith('FARITO') || n.startsWith('LENTE FARO') || n.startsWith('LENTES FARO') || n.startsWith('VIDRIO FARO') || n.startsWith('CIRCUITO FARO') || n.startsWith('ARO FARO') || n.startsWith('ACRILICO FARO')) return 'Faros';
-    if (n.includes('PARAG') && !n.startsWith('FARO') && !n.startsWith('OPTICA') && !n.startsWith('GUARD') && !n.startsWith('CAPOT') && !n.startsWith('FRENTE')) return 'Paragolpes';
-    return 'Chapas';
+  // Clasificador y normalizador universal para no crear más de 90 categorías
+  const detectCategoryFromName = (nameStr, rawCategory = '') => {
+    const combined = `${rawCategory} ${nameStr}`
+      .toUpperCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim();
+    const n = String(nameStr || '')
+      .toUpperCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim();
+
+    if (n.startsWith('OPTICA') || n.startsWith('OPT.') || n.startsWith('# OP') || n.includes('VIDRIO OPT') || n.includes('VIDRIO DE OPT') || n.includes('LENTE OPT') || n.includes('LENTE POLICARBONATO') || n.includes('LENTE ') || n.includes('ARO OPT') || n.includes('RETEN OPTICA') || n.includes('CASCO OPT')) return 'Ópticas';
+    if (n.startsWith('FARO') || n.startsWith('FAROL') || n.startsWith('FARITO') || n.includes('FARO ') || n.includes('BUSCAHUELLA') || n.includes('LAMPARA') || n.includes('PORTALAMPARA') || n.includes('BARRA CURVA') || n.includes('LED')) return 'Faros e Iluminación';
+    if (combined.includes('PARABRISAS') || combined.includes('LUNETA') || combined.includes('CRISTAL') || combined.includes('PUERTA DELANTERA') || combined.includes('PUERTA TRASERA') || combined.includes('ALETA') || combined.includes('COLETA')) return 'Cristales y Parabrisas';
+    if (combined.includes('CERRADUR') || combined.includes('CERRAJ') || combined.includes('CILINDRO') || combined.includes('TAMBOR') || combined.includes('RETEN') || combined.includes('TRABA ')) return 'Cerraduras y Cerrajería';
+    if (combined.includes('MANIJ') || combined.includes('TIRADOR') || combined.includes('ABREPUERTA')) return 'Manijas y Tiradores';
+    if (combined.includes('ALZACRISTAL') || combined.includes('LEVANTAVIDRIO') || combined.includes('LEVANTACRISTAL') || combined.includes('MAQUINA') || combined.includes('COLIZA')) return 'Alzacristales y Levantavidrios';
+    if (combined.includes('ESPEJ') || combined.includes('RETROVISOR') || combined.includes('LUNA') || combined.includes('CACHA')) return 'Espejos y Lunas';
+    if (combined.includes('ALFOMBR') || combined.includes('CUBRE BAUL') || combined.includes('HABITACULO') || combined.includes('TAPIZ') || combined.includes('COFIA') || combined.includes('POMO') || combined.includes('BOCHA') || combined.includes('PARASOL')) return 'Alfombras e Interior';
+    if (combined.includes('TAZA') || combined.includes('INSIGNI') || combined.includes('EMBLEM') || combined.includes('ACRILICO')) return 'Tazas e Insignias';
+    if (combined.includes('BURLET') || combined.includes('GOMA') || combined.includes('FUELLE') || combined.includes('TOPE')) return 'Burletes y Gomas';
+    if (combined.includes('BISAGR') || combined.includes('AMORTIG. DE PTON') || combined.includes('AMORTIGUADOR DE BAUL') || combined.includes('AMORTIGUADOR PORTON') || combined.includes('RESORTE A GAS')) return 'Bisagras y Amortiguadores de Portón';
+    if (combined.includes('RADIADOR') || combined.includes('ELECTRO') || combined.includes('CALEFAC') || combined.includes('MANGUERA') || combined.includes('DEPOSITO') || combined.includes('BIDON') || combined.includes('TERMOSTAT') || combined.includes('TAPA DE COMBUSTIBLE') || combined.includes('TAPA RADIADOR')) return 'Refrigeración y Tanque';
+    if (combined.includes('PARAG') || combined.includes('PARRILL') || combined.includes('REJILL') || combined.includes('SPOILER') || combined.includes('MOLDURA') || combined.includes('PUNTERA') || combined.includes('ESTRIBERA') || combined.includes('ALARGUE') || combined.includes('BABERO')) return 'Paragolpes, Parrillas y Molduras';
+    if (combined.includes('CAPOT') || combined.includes('GUARDABARRO') || combined.includes('GUARD.') || combined.includes('FRENTE') || combined.includes('PANEL') || combined.includes('ZOCALO') || combined.includes('PISO') || combined.includes('PASARR') || combined.includes('PARANTE') || combined.includes('TAPA BAUL') || combined.includes('COLA ')) return 'Chapas y Carrocería';
+    if (combined.includes('GRAMPA') || combined.includes('CLIP') || combined.includes('FIJACION') || combined.includes('ABRAZADERA') || combined.includes('ARANDELA') || combined.includes('BULON') || combined.includes('TUERCA') || combined.includes('TORNILLO')) return 'Fijaciones, Grampas y Bulonería';
+    if (combined.includes('CABLE') || combined.includes('DESTELLADOR') || combined.includes('RELAY') || combined.includes('RELE') || combined.includes('TECLA') || combined.includes('INTERRUPTOR') || combined.includes('LLAVE') || combined.includes('BULBO') || combined.includes('SENSOR') || combined.includes('BOCINA') || combined.includes('FUSIBL')) return 'Electricidad y Cables';
+    if (combined.includes('ESCOBILL') || combined.includes('LIMPIAPARABRISA') || combined.includes('SAPITO') || combined.includes('BRAZO LIMPIA')) return 'Limpiaparabrisas';
+
+    return 'Accesorios y Repuestos Varios';
   };
 
   const parsePriceNumber = (val) => {
@@ -604,6 +516,7 @@ export default function AdminPanel() {
     const s = String(val ?? '').trim();
     if (!s) return 0;
     const cleaned = s.replace(/[^0-9.,-]/g, '');
+    if (!cleaned) return 0;
     if (cleaned.includes(',') && cleaned.includes('.')) {
       if (cleaned.lastIndexOf(',') > cleaned.lastIndexOf('.')) {
         return Math.round((parseFloat(cleaned.replace(/\./g, '').replace(',', '.')) || 0) * 100) / 100;
@@ -623,7 +536,6 @@ export default function AdminPanel() {
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '');
 
-// Normaliza códigos ignorando espacios y guiones (Así "TC -  3631" coincide con "TC-3631" o "3631")
   const normalizeSkuCode = (sku) =>
     String(sku || '').replace(/[\s-]+/g, '').toLowerCase();
 
@@ -632,7 +544,6 @@ export default function AdminPanel() {
     products.forEach(p => {
       const fullNorm = normalizeSkuCode(p.sku_code);
       existingSkuMap.set(fullNorm, p);
-      // También indexamos sin el prefijo TC para que coincida aunque subas el código numérico puro
       const withoutTc = fullNorm.replace(/^tc/, '');
       if (withoutTc) existingSkuMap.set(withoutTc, p);
     });
@@ -657,26 +568,11 @@ export default function AdminPanel() {
     try {
       const pct = parseFloat(importMarkupPct) || 0;
 
-      // 1. Crear categorías nuevas si no existen (Ópticas, Faros, Paragolpes, Chapas, etc.)
-      // Categorías existentes leídas directamente de Supabase (se comparan sin tildes ni mayúsculas)
-      const { data: freshCats } = await supabase.from('categories').select('id, name');
-      const existingCats = freshCats && freshCats.length > 0 ? freshCats : categories;
-      const catMap = new Map(existingCats.map(c => [normalizeKey(c.name), c.id]));
-      const knownCatNames = existingCats.map(c => c.name);
-
-      // Unifica la categoría de cada fila en una categoría canónica (nunca más duplicados entre proveedores)
-      const normalizedRows = excelPreview.map(r => {
-        const canonicalName = normalizeCategoryName(r.categoryName, r.name, knownCatNames);
-        if (!knownCatNames.some(n => normalizeKey(n) === normalizeKey(canonicalName))) knownCatNames.push(canonicalName);
-        return { ...r, categoryName: canonicalName };
-      });
-
-      const newCatsByKey = new Map();
-      normalizedRows.forEach(r => {
-        const key = normalizeKey(r.categoryName);
-        if (r.categoryName && !catMap.has(key) && !newCatsByKey.has(key)) newCatsByKey.set(key, r.categoryName);
-      });
-      const uniqueNewCats = [...newCatsByKey.values()];
+      // 1. Asegurar categorías actuales desde Supabase
+      const { data: dbCats } = await supabase.from('categories').select('*');
+      const catMap = new Map((dbCats || []).map(c => [normalizeKey(c.name), c.id]));
+      const uniqueNewCats = [...new Set(excelPreview.map(r => r.categoryName))]
+        .filter(name => name && !catMap.has(normalizeKey(name)));
 
       if (uniqueNewCats.length > 0) {
         const { data: insertedCats, error: catErr } = await supabase
@@ -687,8 +583,9 @@ export default function AdminPanel() {
         insertedCats?.forEach(c => catMap.set(normalizeKey(c.name), c.id));
       }
 
-      // 2. Crear marcas limpias si no existen (Ford, Volkswagen, Renault, etc.)
-      const brandMap = new Map(brands.map(b => [normalizeKey(b.name), b.id]));
+      // 2. Asegurar marcas actuales desde Supabase
+      const { data: dbBrands } = await supabase.from('brands').select('*');
+      const brandMap = new Map((dbBrands || []).map(b => [normalizeKey(b.name), b.id]));
       const uniqueNewBrands = [...new Set(excelPreview.map(r => r.brandName))]
         .filter(name => name && !brandMap.has(normalizeKey(name)));
 
@@ -701,20 +598,35 @@ export default function AdminPanel() {
         insertedBrands?.forEach(b => brandMap.set(normalizeKey(b.name), b.id));
       }
 
-      // Mapa de productos existentes ignorando espacios/guiones
+      // 3. Traer todos los SKUs de la base (incluyendo inactivos/archivados para evitar choque de duplicados)
+      setImportProgress('Verificando códigos existentes en la base de datos...');
       const existingSkuMap = new Map();
-      products.forEach(p => {
-        const fullNorm = normalizeSkuCode(p.sku_code);
-        existingSkuMap.set(fullNorm, p);
-        const withoutTc = fullNorm.replace(/^tc/, '');
-        if (withoutTc) existingSkuMap.set(withoutTc, p);
-      });
+      let fromSku = 0;
+      const stepSku = 1000;
+      while (true) {
+        const { data: batchSkus, error: skuErr } = await supabase
+          .from('products')
+          .select('id, sku_code, stock')
+          .range(fromSku, fromSku + stepSku - 1);
+        if (skuErr || !batchSkus || batchSkus.length === 0) break;
+        batchSkus.forEach(p => {
+          const fullNorm = normalizeSkuCode(p.sku_code);
+          existingSkuMap.set(fullNorm, p);
+          const withoutTc = fullNorm.replace(/^tc/, '');
+          if (withoutTc) existingSkuMap.set(withoutTc, p);
+        });
+        if (batchSkus.length < stepSku) break;
+        fromSku += stepSku;
+      }
+
+      const fallbackCatId = Array.from(catMap.values())[0] || null;
+      const fallbackBrandId = Array.from(brandMap.values())[0] || null;
 
       const toInsert = [];
       const toUpdate = [];
       const seenSkusInBatch = new Set();
 
-      normalizedRows.forEach(item => {
+      excelPreview.forEach(item => {
         const finalSku = `${skuPrefix}${item.sku_code}`.trim();
         const normKeyWithPrefix = normalizeSkuCode(finalSku);
         const normKeyRaw = normalizeSkuCode(item.sku_code);
@@ -723,13 +635,12 @@ export default function AdminPanel() {
         seenSkusInBatch.add(normKeyWithPrefix);
 
         const adjustedPrice = Math.round(item.price * (1 + pct / 100));
-        const newCategoryId = catMap.get(normalizeKey(item.categoryName)) || categories[0]?.id;
-        const newBrandId = brandMap.get(normalizeKey(item.brandName)) || brands[0]?.id;
+        const newCategoryId = catMap.get(normalizeKey(item.categoryName)) || fallbackCatId;
+        const newBrandId = brandMap.get(normalizeKey(item.brandName)) || fallbackBrandId;
 
         const existingProd = existingSkuMap.get(normKeyWithPrefix) || existingSkuMap.get(normKeyRaw);
 
         if (existingProd) {
-          // Actualiza Precio, Nombre, Categoría (Ópticas/Faros/Paragolpes/Chapas) y Marca limpia:
           toUpdate.push({
             id: existingProd.id,
             sku_code: finalSku,
@@ -768,49 +679,14 @@ export default function AdminPanel() {
 
       if (toUpdate.length > 0) {
         for (let i = 0; i < toUpdate.length; i += batchSize) {
-          setImportProgress(`Reclasificando y actualizando: ${Math.min(i + batchSize, toUpdate.length).toLocaleString('es-AR')} de ${toUpdate.length.toLocaleString('es-AR')}...`);
+          setImportProgress(`Actualizando existentes: ${Math.min(i + batchSize, toUpdate.length).toLocaleString('es-AR')} de ${toUpdate.length.toLocaleString('es-AR')}...`);
           const batch = toUpdate.slice(i, i + batchSize);
           const { error: updateErr } = await supabase.from('products').upsert(batch, { onConflict: 'id' });
           if (updateErr) throw updateErr;
         }
       }
 
-    // 3. Limpiar categorías y marcas viejas que hayan quedado vacías (leyendo TODOS los productos sin el límite de 1000)
-      setImportProgress('Limpiando categorías y marcas en desuso...');
-      let allProdRefs = [];
-      let fromRef = 0;
-      const stepRef = 1000;
-      while (true) {
-        const { data: batchRef, error: refErr } = await supabase
-          .from('products')
-          .select('category_id, brand_id')
-          .range(fromRef, fromRef + stepRef - 1);
-        if (refErr || !batchRef || batchRef.length === 0) break;
-        allProdRefs = [...allProdRefs, ...batchRef];
-        if (batchRef.length < stepRef) break;
-        fromRef += stepRef;
-      }
-
-      if (allProdRefs.length > 0) {
-        const usedCatIds = new Set(allProdRefs.map(p => p.category_id).filter(Boolean));
-        const usedBrandIds = new Set(allProdRefs.map(p => p.brand_id).filter(Boolean));
-
-        const { data: allCats } = await supabase.from('categories').select('id');
-        const unusedCatIds = (allCats || []).map(c => c.id).filter(id => !usedCatIds.has(id));
-        if (unusedCatIds.length > 0) {
-          await supabase.from('categories').delete().in('id', unusedCatIds);
-        }
-
-        const { data: allBrands } = await supabase.from('brands').select('id');
-        const unusedBrandIds = (allBrands || []).map(b => b.id).filter(id => !usedBrandIds.has(id));
-        if (unusedBrandIds.length > 0) {
-          for (let i = 0; i < unusedBrandIds.length; i += 200) {
-            await supabase.from('brands').delete().in('id', unusedBrandIds.slice(i, i + 200));
-          }
-        }
-      }
-
-      showNotification(`¡Listo! ${toInsert.length.toLocaleString('es-AR')} nuevos y ${toUpdate.length.toLocaleString('es-AR')} reclasificados/actualizados.`, 'success');
+      showNotification(`¡Listo! ${toInsert.length.toLocaleString('es-AR')} nuevos y ${toUpdate.length.toLocaleString('es-AR')} actualizados.`, 'success');
       setIsExcelModalOpen(false);
       setExcelPreview([]);
       setExcelFileName('');
@@ -824,7 +700,6 @@ export default function AdminPanel() {
     }
   };
 
-  // Función para aplicar el Mapeo Manual de Columnas sobre cualquier archivo nuevo
   const applyManualColumnMapping = (customCols = manualCols) => {
     if (!rawSheetMatrix || rawSheetMatrix.length === 0) return;
     const sCol = Number(customCols.skuCol);
@@ -841,11 +716,11 @@ export default function AdminPanel() {
         sku &&
         name &&
         price > 0 &&
-        !['CODIGO', 'CÓDIGO', 'SKU', 'ART', 'ARTICULO'].includes(sku.toUpperCase())
+        !['CODIGO', 'CÓDIGO', 'SKU', 'ART', 'ARTICULO', 'ARTÍCULO - CÓD. GENÉRICO'].includes(sku.toUpperCase())
       ) {
-        const cat = customCols.fixedCategory.trim() === 'Auto'
+        const cat = customCols.fixedCategory.trim() === 'Auto' || customCols.fixedCategory.trim() === 'General'
           ? detectCategoryFromName(name)
-          : (customCols.fixedCategory.trim() || 'General');
+          : (customCols.fixedCategory.trim() || detectCategoryFromName(name));
         const brd = customCols.fixedBrand.trim() === 'Auto'
           ? extractBrandFromText(name)
           : (customCols.fixedBrand.trim() || 'Multimarca');
@@ -881,8 +756,7 @@ export default function AdminPanel() {
             Descripcion: item.description || ''
           }))
         : [
-            { Codigo: 'TC-8203', Nombre: 'OPTICA ALFA ROMEO 33 IMP (ALFA ROMEO 33)', Precio: 981571.5, Stock: 1, Categoria: 'Ópticas', Marca: 'Alfa Romeo', Descripcion: '' },
-            { Codigo: 'WG-4372', Nombre: 'ANTENA DE TECHO ALUMI 38 CM KS37334', Precio: 15226.59, Stock: 1, Categoria: 'Accesorios', Marca: 'Multimarca', Descripcion: '' }
+            { Codigo: 'TC-8203', Nombre: 'OPTICA ALFA ROMEO 33 IMP (ALFA ROMEO 33)', Precio: 981571.5, Stock: 1, Categoria: 'Ópticas', Marca: 'Alfa Romeo', Descripcion: '' }
           ];
 
       const worksheet = XLSX.utils.json_to_sheet(dataToExport);
@@ -916,6 +790,7 @@ export default function AdminPanel() {
       const firstMatrix = XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: '' });
       setRawSheetMatrix(firstMatrix);
 
+      const fileNameUpper = file.name.toUpperCase();
       const flatSampleText = firstMatrix.slice(0, 55).map(r => r.join(' ')).join(' ').toUpperCase();
 
       let parsedRows = [];
@@ -923,9 +798,43 @@ export default function AdminPanel() {
       let defaultPrefix = '';
 
       // -----------------------------------------------------------------------
-      // 1. ESPEJOS FB (Hoja 'LISTA' consolida los 1.878 productos de las 10 hojas)
+      // 1. HERRAJES FRAGATA S.A. (LISTA FRAGATA.xls - 17 hojas por marca de auto)
+      // ¡Debe ir ANTES que Wargom porque tiene 17 hojas!
       // -----------------------------------------------------------------------
-      if (sheetNames.includes('LISTA') && sheetNames.includes('ESPEJOS') && sheetNames.includes('LUNAS')) {
+      if (flatSampleText.includes('HERRAJES FRAGATA') || flatSampleText.includes('HERRAJESFRAGATA') || fileNameUpper.includes('FRAGATA')) {
+        supplierLabel = `Herrajes Fragata S.A. (${sheetNames.length} marcas)`;
+        defaultPrefix = 'FR-';
+
+        sheetNames.forEach(sName => {
+          const ws = workbook.Sheets[sName];
+          const mat = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+          const sheetBrand = extractBrandFromText(sName);
+
+          mat.forEach(row => {
+            const sku = String(row[0] ?? '').replace(/\.0$/, '').trim();
+            const fabBrand = String(row[1] ?? '').trim();
+            const desc = String(row[2] ?? '').replace(/\s+/g, ' ').trim();
+            const price = parsePriceNumber(row[3]);
+
+            if (sku && desc && price > 0 && !['ART', 'CODIGO', 'CÓDIGO'].includes(sku.toUpperCase())) {
+              const detectedVehicleBrand = sheetBrand !== 'Multimarca' ? sheetBrand : extractBrandFromText(desc);
+              parsedRows.push({
+                sku_code: sku,
+                name: `${desc}${detectedVehicleBrand !== 'Multimarca' && !desc.toUpperCase().includes(detectedVehicleBrand.toUpperCase()) ? ` (${detectedVehicleBrand})` : ''}`,
+                price,
+                stock: 1,
+                categoryName: detectCategoryFromName(desc),
+                brandName: detectedVehicleBrand,
+                description: fabBrand ? `Fabricante: ${fabBrand}` : ''
+              });
+            }
+          });
+        });
+      }
+      // -----------------------------------------------------------------------
+      // 2. ESPEJOS FB
+      // -----------------------------------------------------------------------
+      else if (sheetNames.includes('LISTA') && sheetNames.includes('ESPEJOS') && sheetNames.includes('LUNAS')) {
         supplierLabel = 'Espejos FB (Espejos, Lunas, Frentes y Tapas)';
         defaultPrefix = 'FB-';
         let currentCat = 'Espejos y Lunas';
@@ -937,14 +846,13 @@ export default function AdminPanel() {
 
           if (col0 && !col1 && price === 0 && !['CODIGO', 'CÓDIGO'].includes(col0.toUpperCase())) {
             const secUpper = col0.toUpperCase();
-            if (secUpper.includes('TAPA')) currentCat = 'Tapas de Combustible y Radiador';
+            if (secUpper.includes('TAPA')) currentCat = 'Refrigeración y Tanque';
             else if (secUpper.includes('ESPEJO') || secUpper.includes('FRENTE') || secUpper.includes('LUNA') || secUpper.includes('BRAZO')) currentCat = 'Espejos y Lunas';
-            else currentCat = 'Accesorios Varios';
+            else currentCat = 'Accesorios y Repuestos Varios';
             return;
           }
 
           if (col0 && col1 && price > 0 && !['CODIGO', 'CÓDIGO'].includes(col0.toUpperCase())) {
-            // Limpiamos si la descripción repite el código al principio (ej: "450 d - Gol 99/2005")
             const cleanDesc = col1.replace(/^[0-9a-zA-Z\s]+\s-\s/, '').trim();
             parsedRows.push({
               sku_code: col0,
@@ -959,13 +867,13 @@ export default function AdminPanel() {
         });
       }
       // -----------------------------------------------------------------------
-      // 2. RGL AUTOPARTES (Col 1=CODIGO, Col 3=Nombre/Rubro, Col 4=PRECIO)
+      // 3. RGL AUTOPARTES
       // -----------------------------------------------------------------------
       else if (flatSampleText.includes('RGL AUTOPARTES') || flatSampleText.includes('RGL-AUTOPARTES')) {
         supplierLabel = 'RGL Autopartes S.R.L.';
         defaultPrefix = 'RGL-';
         let currentBrand = 'Multimarca';
-        let currentCat = 'Cerrajería y Levanta Cristales';
+        let currentRawCat = '';
 
         firstMatrix.forEach(row => {
           const col1 = String(row[1] ?? '').trim();
@@ -978,7 +886,7 @@ export default function AdminPanel() {
             return;
           }
           if (col1.toUpperCase() === 'CODIGO' && col3) {
-            currentCat = col3.charAt(0).toUpperCase() + col3.slice(1).toLowerCase();
+            currentRawCat = col3;
             return;
           }
           if (col1 && col3 && price > 0 && col1.toUpperCase() !== 'CODIGO') {
@@ -987,7 +895,7 @@ export default function AdminPanel() {
               name: col3.replace(/\s+/g, ' '),
               price,
               stock: 1,
-              categoryName: currentCat,
+              categoryName: detectCategoryFromName(col3, currentRawCat),
               brandName: currentBrand !== 'Multimarca' ? currentBrand : extractBrandFromText(col3),
               description: col2 ? `OEM: ${col2}` : ''
             });
@@ -995,7 +903,7 @@ export default function AdminPanel() {
         });
       }
       // -----------------------------------------------------------------------
-      // 3. LISTA AUTOCONS (Hoja 'Listado de Precios por Cliente', Col 0=Cod, Col 1=Desc, Col 5=Precio)
+      // 4. LISTA AUTOCONS
       // -----------------------------------------------------------------------
       else if (sheetNames.includes('Listado de Precios por Cliente') || flatSampleText.includes('LISTADO DE PRECIOS POR CLIENTE')) {
         supplierLabel = 'Autocons (Motores, Calefactores y Levanta Cristales)';
@@ -1019,7 +927,7 @@ export default function AdminPanel() {
               name: `${col1} ${currentBrand !== 'Multimarca' ? `(${currentBrand})` : ''}`.trim(),
               price,
               stock: 1,
-              categoryName: 'Cerrajería y Levanta Cristales',
+              categoryName: detectCategoryFromName(col1),
               brandName: currentBrand !== 'Multimarca' ? currentBrand : extractBrandFromText(col1),
               description: ''
             });
@@ -1027,15 +935,14 @@ export default function AdminPanel() {
         });
       }
       // -----------------------------------------------------------------------
-      // 4. WARGOM (Múltiples hojas, ej: 32 pestañas por rubro)
+      // 5. WARGOM S.R.L.
       // -----------------------------------------------------------------------
-      else if (flatSampleText.includes('WARGOM') || sheetNames.length >= 10) {
+      else if (flatSampleText.includes('WARGOM') || fileNameUpper.includes('WARGOM') || sheetNames.length >= 10) {
         supplierLabel = `Wargom S.R.L. (${sheetNames.length} rubros)`;
         defaultPrefix = 'WG-';
         sheetNames.forEach(sName => {
           const ws = workbook.Sheets[sName];
           const mat = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
-          const cleanCategory = sName.trim().charAt(0).toUpperCase() + sName.trim().slice(1).toLowerCase();
           let currentSubBrand = 'Multimarca';
 
           mat.forEach((row, idx) => {
@@ -1058,7 +965,7 @@ export default function AdminPanel() {
                 name: col2.replace(/\s+/g, ' ').trim(),
                 price,
                 stock: 1,
-                categoryName: cleanCategory,
+                categoryName: detectCategoryFromName(col2, sName),
                 brandName: detectedB !== 'Multimarca' ? detectedB : currentSubBrand,
                 description: ''
               });
@@ -1067,23 +974,30 @@ export default function AdminPanel() {
         });
       }
       // -----------------------------------------------------------------------
-      // 5. CRISTEM LISTA GENERAL
+      // 6. CRISTEM LISTA GENERAL (CRISTEM (LISTA NUEVA).xls)
       // -----------------------------------------------------------------------
-      else if (flatSampleText.includes('GRUPO DE  PIEZA') || flatSampleText.includes('GRUPO DE PIEZA')) {
+      else if (flatSampleText.includes('GRUPO DE  PIEZA') || flatSampleText.includes('GRUPO DE PIEZA') || fileNameUpper.includes('CRISTEM')) {
         supplierLabel = 'Cristem (Lista General Cristales)';
         defaultPrefix = 'CR-';
+        const skuCountMap = new Map();
+
         firstMatrix.slice(1).forEach(row => {
           const brand = String(row[0] ?? '').trim();
           const model = String(row[1] ?? '').trim();
           const pieceCode = String(row[2] ?? '').trim();
-          const sku = String(row[3] ?? '').trim();
+          const rawSku = String(row[3] ?? '').trim();
           const group = String(row[4] ?? '').trim() || 'Cristales';
           const price = parsePriceNumber(row[7]);
           const obs = String(row[8] ?? '').trim();
 
-          if (sku && price > 0) {
+          if (rawSku && price > 0) {
+            // Si dos modelos comparten el mismo código de cristal, evitamos perder filas
+            const prevCount = skuCountMap.get(rawSku) || 0;
+            skuCountMap.set(rawSku, prevCount + 1);
+            const uniqueSku = prevCount === 0 ? rawSku : `${rawSku}-${prevCount + 1}`;
+
             parsedRows.push({
-              sku_code: sku,
+              sku_code: uniqueSku,
               name: `${group} ${brand} ${model} (${pieceCode})`.replace(/\s+/g, ' ').trim(),
               price,
               stock: 1,
@@ -1095,7 +1009,7 @@ export default function AdminPanel() {
         });
       }
       // -----------------------------------------------------------------------
-      // 6. CRISTEM OFERTAS
+      // 7. CRISTEM OFERTAS
       // -----------------------------------------------------------------------
       else if (sheetNames.includes('Parabrisas') && sheetNames.includes('Lunetas')) {
         supplierLabel = 'Cristem (Ofertas Parabrisas / Laterales / Lunetas)';
@@ -1122,7 +1036,7 @@ export default function AdminPanel() {
         });
       }
       // -----------------------------------------------------------------------
-      // 7. AUTOCLIP / VAER
+      // 8. AUTOCLIP / VAER
       // -----------------------------------------------------------------------
       else if (flatSampleText.includes('VAER.COM.AR') || (firstMatrix[8] && String(firstMatrix[8][4] || '').toUpperCase().includes('DESCRIPCION') && String(firstMatrix[8][16] || '').toUpperCase().includes('PRECIO'))) {
         supplierLabel = 'Autoclip / Vaer';
@@ -1138,7 +1052,7 @@ export default function AdminPanel() {
               name: name.replace(/\s+/g, ' '),
               price,
               stock: 1,
-              categoryName: 'Fijaciones y Grampas',
+              categoryName: 'Fijaciones, Grampas y Bulonería',
               brandName: extractBrandFromText(name),
               description: pack ? `Envase: ${pack} u.` : ''
             });
@@ -1146,26 +1060,44 @@ export default function AdminPanel() {
         });
       }
       // -----------------------------------------------------------------------
-      // 8. RIDAC / ANGELETTI
+      // 9. RIDAC / ANGELETTI (RIDAC.xls - Hojas ALFABETICA / NUMERICA de 3 columnas)
       // -----------------------------------------------------------------------
-      else if (flatSampleText.includes('ANGELETTI') || sheetNames.some(s => s.includes('LISTA NAC'))) {
+      else if (
+        flatSampleText.includes('RIDAC') ||
+        flatSampleText.includes('ANGELETTI') ||
+        fileNameUpper.includes('RIDAC') ||
+        sheetNames.some(s => s.toUpperCase().includes('LISTA NAC') || s.toUpperCase() === 'NUMERICA')
+      ) {
         supplierLabel = 'Ridac (Angeletti H. e Hijos)';
         defaultPrefix = 'RD-';
-        sheetNames.forEach(sName => {
-          if (sName.toUpperCase().includes('ALFA')) return;
+        // Si tiene ALFABETICA y NUMERICA, leemos solo una para no duplicar los 6.216 artículos
+        const targetSheets = sheetNames.length > 1 && sheetNames.some(s => s.toUpperCase().includes('NUMERICA'))
+          ? sheetNames.filter(s => s.toUpperCase().includes('NUMERICA'))
+          : sheetNames;
+
+        targetSheets.forEach(sName => {
           const ws = workbook.Sheets[sName];
           const mat = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
           mat.forEach(row => {
-            const name = String(row[0] ?? '').trim();
-            const sku = String(row[2] || row[1] || '').trim();
-            const price = parsePriceNumber(row[3]);
-            if (name && sku && price > 0 && !['DETALLE', 'DESCRIPCION'].includes(name.toUpperCase())) {
+            const name = String(row[0] ?? '').replace(/\s+/g, ' ').trim();
+            // En RIDAC.xls de 3 columnas: Col 0 = Detalle, Col 1 = Código RIDAC, Col 2 = Precio Lista
+            const hasFourCols = row.length >= 4 && row[3] !== '' && row[3] !== undefined;
+            const sku = String(hasFourCols ? (row[2] || row[1] || '') : (row[1] ?? '')).replace(/\.0$/, '').trim();
+            const price = parsePriceNumber(hasFourCols ? row[3] : row[2]);
+
+            if (
+              name &&
+              sku &&
+              price > 0 &&
+              !name.toUpperCase().includes('DETALLE') &&
+              !['RIDAC', 'CODIGO', 'CÓDIGO'].includes(sku.toUpperCase())
+            ) {
               parsedRows.push({
                 sku_code: sku,
-                name: name.replace(/\s+/g, ' '),
+                name,
                 price,
                 stock: 1,
-                categoryName: 'Accesorios y Repuestos Varios',
+                categoryName: detectCategoryFromName(name),
                 brandName: extractBrandFromText(name),
                 description: ''
               });
@@ -1174,12 +1106,12 @@ export default function AdminPanel() {
         });
       }
       // -----------------------------------------------------------------------
-      // 9. RETOV / TOVLENT
+      // 10. RETOV / TOVLENT (Lista de Precios Retov Agosto 2026.xlsx)
       // -----------------------------------------------------------------------
-      else if (flatSampleText.includes('TOVLENT') || flatSampleText.includes('RETOV')) {
+      else if (flatSampleText.includes('TOVLENT') || flatSampleText.includes('RETOV') || fileNameUpper.includes('RETOV')) {
         supplierLabel = 'Retov (Tovlent S.A.)';
         defaultPrefix = 'RT-';
-        let currentCat = 'Tazas y Plásticos';
+        let isTazasSection = true;
         let currentBrand = 'Multimarca';
 
         firstMatrix.forEach(row => {
@@ -1189,22 +1121,30 @@ export default function AdminPanel() {
           const price = parsePriceNumber(row[4]);
 
           if (col0 && col0 !== '*' && !col1) {
-            if (col0.toUpperCase().includes('ADAPTABLE')) {
+            const upper0 = col0.toUpperCase();
+            if (upper0 === 'TAZAS') {
+              isTazasSection = true;
+            } else if (upper0.includes('REPUESTOS') || upper0.includes('PARRILLAS') || upper0.includes('ESTRIBERAS') || upper0.includes('TOPES')) {
+              isTazasSection = false;
+            } else if (upper0.includes('UNIVERSAL')) {
+              currentBrand = 'Multimarca';
+            } else if (upper0.includes('ADAPTABLE')) {
               currentBrand = extractBrandFromText(col0);
-            } else {
-              currentCat = col0.charAt(0).toUpperCase() + col0.slice(1).toLowerCase();
             }
             return;
           }
 
           if (col1 && col2 && price > 0 && col1.toUpperCase() !== 'COD. ART.') {
-            const prefixItem = currentCat.toUpperCase().includes('TAZA') ? 'Taza de Rueda' : currentCat;
+            const itemName = isTazasSection
+              ? `Taza de Rueda ${currentBrand !== 'Multimarca' ? currentBrand : ''} ${col2}`.replace(/\s+/g, ' ').trim()
+              : `${col2} ${currentBrand !== 'Multimarca' && !col2.toUpperCase().includes(currentBrand.toUpperCase()) ? `(${currentBrand})` : ''}`.replace(/\s+/g, ' ').trim();
+
             parsedRows.push({
               sku_code: col1,
-              name: `${prefixItem} ${currentBrand !== 'Multimarca' ? currentBrand : ''} ${col2}`.replace(/\s+/g, ' ').trim(),
+              name: itemName,
               price,
               stock: 1,
-              categoryName: currentCat,
+              categoryName: isTazasSection ? 'Tazas e Insignias' : detectCategoryFromName(col2, 'Paragolpes, Parrillas y Molduras'),
               brandName: currentBrand !== 'Multimarca' ? currentBrand : extractBrandFromText(col2),
               description: ''
             });
@@ -1212,7 +1152,37 @@ export default function AdminPanel() {
         });
       }
       // -----------------------------------------------------------------------
-      // 10. VARPEN / VAPREN
+      // 11. ÓPTICAS LAM (OPTICAS LAM (2).xlsx)
+      // -----------------------------------------------------------------------
+      else if (
+        fileNameUpper.includes('OPTICAS LAM') ||
+        flatSampleText.includes('DESCRIPCION AMPLIADA') ||
+        flatSampleText.includes('CÓD. GENÉRICO') ||
+        flatSampleText.includes('COD. GENERICO')
+      ) {
+        supplierLabel = 'Ópticas LAM (Iluminación, Ópticas, Faros y Cables)';
+        defaultPrefix = 'LAM-';
+
+        firstMatrix.slice(1).forEach(row => {
+          const sku = String(row[0] ?? '').replace(/\.0$/, '').trim();
+          const name = String(row[1] ?? '').replace(/\s+/g, ' ').trim();
+          const price = parsePriceNumber(row[2]);
+
+          if (sku && name && price > 0 && !sku.toUpperCase().includes('ARTÍCULO') && !sku.toUpperCase().includes('ARTICULO')) {
+            parsedRows.push({
+              sku_code: sku,
+              name,
+              price,
+              stock: 1,
+              categoryName: detectCategoryFromName(name),
+              brandName: extractBrandFromText(name),
+              description: ''
+            });
+          }
+        });
+      }
+      // -----------------------------------------------------------------------
+      // 12. VARPEN / VAPREN
       // -----------------------------------------------------------------------
       else if (firstMatrix.slice(0, 12).some(r => ['HABITACULOS', 'BAULES'].includes(String(r[0] || '').trim().toUpperCase()))) {
         supplierLabel = 'Varpen (Cubre Alfombras)';
@@ -1242,7 +1212,7 @@ export default function AdminPanel() {
               name: `${currentSection} ${currentBrand} - ${modelDesc}`.replace(/\s+/g, ' ').trim(),
               price,
               stock: 1,
-              categoryName: 'Alfombras',
+              categoryName: 'Alfombras e Interior',
               brandName: currentBrand,
               description: ''
             });
@@ -1250,9 +1220,13 @@ export default function AdminPanel() {
         });
       }
       // -----------------------------------------------------------------------
-      // 11. TECNOCHAPA (LISTA SEP TECNO)
+      // 13. TECNOCHAPA (LISTA 01 10 26 TECNO.xlsx y listas mensuales Tecno)
       // -----------------------------------------------------------------------
-      else if (flatSampleText.includes('LISTA TECNO')) {
+      else if (
+        flatSampleText.includes('LISTA TECNO') ||
+        fileNameUpper.includes('TECNO') ||
+        (sheetNames.includes('LISTA') && flatSampleText.includes('PRECIOS MAS IVA'))
+      ) {
         supplierLabel = 'TecnoChapa (Ópticas, Faros, Paragolpes y Chapas)';
         defaultPrefix = 'TC-';
         firstMatrix
@@ -1269,19 +1243,21 @@ export default function AdminPanel() {
             const fullName = cleanVeh && !['VARIOS', 'DUALES'].includes(cleanVeh.toUpperCase()) ? `${rawName} (${cleanVeh})` : rawName;
             const price = parsePriceNumber(row[4]);
 
-            parsedRows.push({
-              sku_code: sku,
-              name: fullName,
-              price,
-              stock: 1,
-              categoryName: detectCategoryFromName(rawName),
-              brandName: extractBrandFromText(rawVehicle),
-              description: ''
-            });
+            if (price > 0) {
+              parsedRows.push({
+                sku_code: sku,
+                name: fullName,
+                price,
+                stock: 1,
+                categoryName: detectCategoryFromName(rawName),
+                brandName: extractBrandFromText(rawVehicle),
+                description: ''
+              });
+            }
           });
       }
       // -----------------------------------------------------------------------
-      // 12. PLANTILLAS ESTÁNDAR (DAPA / EMPRETIENDA / TIENDANUBE)
+      // 14. PLANTILLAS ESTÁNDAR (DAPA / GENERAL)
       // -----------------------------------------------------------------------
       else {
         supplierLabel = 'Plantilla Estándar / Personalizada';
@@ -1289,7 +1265,7 @@ export default function AdminPanel() {
         let headerRowIndex = -1;
         for (let i = 0; i < Math.min(20, firstMatrix.length); i++) {
           const rowNorm = firstMatrix[i].map(c => normalizeKey(c));
-          if (rowNorm.some(c => ['nombre', 'producto', 'descripcion', 'titulo'].includes(c))) {
+          if (rowNorm.some(c => c.includes('nombre') || c.includes('producto') || c.includes('descripcion') || c.includes('detalle') || c.includes('titulo'))) {
             headerRowIndex = i;
             break;
           }
@@ -1300,21 +1276,21 @@ export default function AdminPanel() {
           firstMatrix.slice(headerRowIndex + 1).forEach((rowArray, idx) => {
             const rowObj = {};
             headers.forEach((h, cIdx) => { if (h) rowObj[h] = rowArray[cIdx]; });
-            const name = String(rowObj.nombre || rowObj.producto || rowObj.descripcion || '').trim();
+            const name = String(rowObj.nombre || rowObj.producto || rowObj.descripcion || rowObj['descripcion ampliada'] || rowObj.detalle || '').trim();
             if (!name) return;
-            const sku = String(rowObj.codigo ?? rowObj.sku ?? rowObj.sku_code ?? rowObj['cod. art.'] ?? `SKU-${Date.now()}-${idx}`).replace(/\.0$/, '').trim();
+            const sku = String(rowObj.codigo ?? rowObj.sku ?? rowObj.sku_code ?? rowObj.art ?? rowObj['cod. art.'] ?? rowObj['articulo - cod. generico'] ?? `SKU-${Date.now()}-${idx}`).replace(/\.0$/, '').trim();
             const price = parsePriceNumber(rowObj.precio ?? rowObj.price ?? rowObj.neto ?? rowObj['precio lista'] ?? rowObj['precio unitario'] ?? 0);
             if (price <= 0) return;
             const rawStock = String(rowObj.stock ?? rowObj.cantidad ?? '1').replace(/[^0-9]/g, '');
             const stock = rawStock !== '' ? parseInt(rawStock, 10) : 1;
-            const categoryName = String(rowObj.categoria || rowObj.categorias || rowObj.rubro || 'General').trim() || 'General';
+            const rawCat = String(rowObj.categoria || rowObj.categorias || rowObj.rubro || '').trim();
+            const categoryName = detectCategoryFromName(name, rawCat);
             const brandName = String(rowObj.marca || '').trim() || extractBrandFromText(name);
             const description = String(rowObj.descripcion || rowObj.observaciones || '').trim();
 
             parsedRows.push({ sku_code: sku, name, price, stock, categoryName, brandName, description });
           });
         } else {
-          // Si es un Excel totalmente nuevo sin encabezados conocidos, activamos el selector manual
           setManualMappingMode(true);
         }
       }
@@ -1339,8 +1315,10 @@ export default function AdminPanel() {
   };
 
   // =======================================================================
-  // FUNCIONES DE CATEGORÍAS, MARCAS, PEDIDOS Y VENTA MANUAL (POS)
+  // FUNCIONES DE CATEGORÍAS (CREAR, ELIMINAR CON PRODUCTOS Y UNIFICAR)
   // =======================================================================
+  const [selectedCatIds, setSelectedCatIds] = useState([]);
+
   const handleAddCategory = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -1349,7 +1327,6 @@ export default function AdminPanel() {
       showNotification("Error al crear categoría: " + error.message, 'error');
     } else {
       showNotification("Categoría agregada con éxito", 'success');
-      setIsCategoryModalOpen(false);
       setNewCategoryName('');
       setNewCategoryDesc('');
       fetchData();
@@ -1357,124 +1334,43 @@ export default function AdminPanel() {
     setIsSubmitting(false);
   };
 
-  // =======================================================================
-  // UNIFICAR CATEGORÍAS: reasigna productos a categorías canónicas por lotes y borra las huérfanas
-  // =======================================================================
-  const handleUnificarCategorias = async () => {
-    if (isUnifying) return;
-    setConfirmUnify(false);
-    setIsUnifying(true);
+  // Eliminar una o varias categorías junto con TODOS sus productos
+  const handleDeleteCategoriesWithProducts = async (catIdsToDelete) => {
+    if (!catIdsToDelete || catIdsToDelete.length === 0) return;
+
+    const affectedProdsCount = products.filter(p => catIdsToDelete.includes(p.category_id)).length;
+    const confirmMsg = `⚠️ ATENCIÓN: Vas a eliminar ${catIdsToDelete.length} categoría(s) y SE BORRARÁN ${affectedProdsCount} PRODUCTO(S) asociados de forma permanente.\n\n¿Confirmás la eliminación?`;
+
+    if (!window.confirm(confirmMsg)) return;
+
+    setIsSubmitting(true);
     try {
-      // a) Leer todas las categorías y productos actuales
-      setUnifyProgress('Leyendo categorías y productos...');
-      const { data: allCats, error: catsErr } = await supabase.from('categories').select('id, name');
-      if (catsErr) throw catsErr;
-
-      const allProds = [];
-      let from = 0;
-      const step = 1000;
-      while (true) {
-        const { data: batch, error: prodErr } = await supabase
+      // 1. Borrar en lotes los productos de esas categorías (por si son miles)
+      const chunk = 50;
+      for (let i = 0; i < catIdsToDelete.length; i += chunk) {
+        const sliceIds = catIdsToDelete.slice(i, i + chunk);
+        const { error: prodErr } = await supabase
           .from('products')
-          .select('id, name, category_id')
-          .order('id', { ascending: true })
-          .range(from, from + step - 1);
+          .delete()
+          .in('category_id', sliceIds);
         if (prodErr) throw prodErr;
-        if (!batch || batch.length === 0) break;
-        allProds.push(...batch);
-        setUnifyProgress(`Leyendo productos: ${allProds.length.toLocaleString('es-AR')}...`);
-        if (batch.length < step) break;
-        from += step;
+
+        const { error: catErr } = await supabase
+          .from('categories')
+          .delete()
+          .in('id', sliceIds);
+        if (catErr) throw catErr;
       }
 
-      if (!allCats || allCats.length === 0 || allProds.length === 0) {
-        showNotification('No hay categorías o productos para unificar', 'error');
-        return;
-      }
+      setProducts(prev => prev.filter(p => !catIdsToDelete.includes(p.category_id)));
+      setCategories(prev => prev.filter(c => !catIdsToDelete.includes(c.id)));
+      setSelectedCatIds(prev => prev.filter(id => !catIdsToDelete.includes(id)));
 
-      // b) Categoría canónica de cada producto
-      setUnifyProgress('Calculando categorías canónicas...');
-      const catNameById = new Map(allCats.map(c => [c.id, c.name]));
-      const knownNames = allCats.map(c => c.name);
-      const targetNames = new Map(); // key normalizada -> nombre final
-      const assignments = [];
-      allProds.forEach(p => {
-        const currentName = catNameById.get(p.category_id) || '';
-        const target = normalizeCategoryName(currentName, p.name, knownNames);
-        const key = normalizeKey(target);
-        if (!targetNames.has(key)) {
-          targetNames.set(key, target);
-          if (!knownNames.some(n => normalizeKey(n) === key)) knownNames.push(target);
-        }
-        assignments.push({ id: p.id, currentCatId: p.category_id, key });
-      });
-
-      // c) Crear las categorías canónicas que todavía no existen
-      const catIdByKey = new Map(allCats.map(c => [normalizeKey(c.name), c.id]));
-      const toCreate = [...targetNames.entries()]
-        .filter(([key]) => !catIdByKey.has(key))
-        .map(([, name]) => ({ name, is_active: true }));
-
-      if (toCreate.length > 0) {
-        setUnifyProgress(`Creando ${toCreate.length} categorías canónicas...`);
-        const { data: inserted, error: insErr } = await supabase.from('categories').insert(toCreate).select('id, name');
-        if (insErr) throw insErr;
-        (inserted || []).forEach(c => catIdByKey.set(normalizeKey(c.name), c.id));
-      }
-
-      // d) Agrupar por categoría destino y actualizar por lotes
-      const groups = new Map(); // targetCategoryId -> [productIds a mover]
-      const usedCatIds = new Set();
-      assignments.forEach(a => {
-        const targetId = catIdByKey.get(a.key);
-        usedCatIds.add(targetId);
-        if (a.currentCatId !== targetId) {
-          if (!groups.has(targetId)) groups.set(targetId, []);
-          groups.get(targetId).push(a.id);
-        }
-      });
-
-      const totalToMove = [...groups.values()].reduce((acc, ids) => acc + ids.length, 0);
-      const batchSize = 200;
-      let moved = 0;
-      for (const [targetCategoryId, ids] of groups.entries()) {
-        for (let i = 0; i < ids.length; i += batchSize) {
-          const productIdsBatch = ids.slice(i, i + batchSize);
-          const { error: updErr } = await supabase
-            .from('products')
-            .update({ category_id: targetCategoryId })
-            .in('id', productIdsBatch);
-          if (updErr) throw updErr;
-          moved += productIdsBatch.length;
-          setUnifyProgress(`Reasignando productos: ${moved.toLocaleString('es-AR')} de ${totalToMove.toLocaleString('es-AR')}...`);
-        }
-      }
-
-      // e) Eliminar las categorías que quedaron sin productos
-      const orphanIds = allCats.map(c => c.id).filter(id => !usedCatIds.has(id));
-      let deleted = 0;
-      for (let i = 0; i < orphanIds.length; i += 100) {
-        setUnifyProgress(`Eliminando categorías vacías: ${deleted} de ${orphanIds.length}...`);
-        const idsBatch = orphanIds.slice(i, i + 100);
-        const { error: delErr } = await supabase.from('categories').delete().in('id', idsBatch);
-        if (delErr) throw delErr;
-        deleted += idsBatch.length;
-      }
-
-      // f) Recargar datos
-      setUnifyProgress('Actualizando panel...');
-      await fetchData();
-      showNotification(
-        `Categorías unificadas: ${totalToMove.toLocaleString('es-AR')} productos reasignados, ${toCreate.length} creadas y ${deleted} eliminadas.`,
-        'success'
-      );
+      showNotification(`Se eliminaron ${catIdsToDelete.length} categoría(s) y ${affectedProdsCount} producto(s)`, 'success');
     } catch (err) {
-      console.error('Error al unificar categorías:', err);
-      showNotification('Error al unificar categorías: ' + (err.message || err), 'error');
-      fetchData();
+      showNotification('Error al eliminar categoría(s): ' + err.message, 'error');
     } finally {
-      setIsUnifying(false);
-      setUnifyProgress('');
+      setIsSubmitting(false);
     }
   };
 
@@ -1768,9 +1664,9 @@ export default function AdminPanel() {
   if (!session || !isAuthorizedAdmin) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 font-montserrat">
-        <div className="bg-slate-800 p-8 rounded-none shadow-2xl w-full max-w-md border border-slate-700 animate-in fade-in zoom-in duration-500">
+        <div className="bg-slate-800 p-8 rounded-3xl shadow-2xl w-full max-w-md border border-slate-700 animate-in fade-in zoom-in duration-500">
           <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-blue-900/50 rounded-none flex items-center justify-center mx-auto mb-4 border border-blue-500/30">
+            <div className="w-16 h-16 bg-blue-900/50 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-500/30">
               <Lock className="w-8 h-8 text-blue-400" />
             </div>
             <h1 className="text-2xl font-bold font-michroma text-white tracking-widest uppercase">D.A.P.A</h1>
@@ -1779,10 +1675,10 @@ export default function AdminPanel() {
 
           {session && !isAuthorizedAdmin ? (
             <div className="text-center space-y-4">
-              <p className="text-red-400 text-xs font-bold bg-red-900/20 p-4 rounded-none border border-red-800">
+              <p className="text-red-400 text-xs font-bold bg-red-900/20 p-4 rounded-xl border border-red-800">
                 La cuenta actual ({session.user.email}) es de cliente y no tiene permisos de administrador.
               </p>
-              <button onClick={handleLogout} className="w-full bg-red-600 hover:bg-red-500 text-white font-bold uppercase tracking-widest py-3 rounded-none transition-colors text-xs">
+              <button onClick={handleLogout} className="w-full bg-red-600 hover:bg-red-500 text-white font-bold uppercase tracking-widest py-3 rounded-xl transition-colors text-xs">
                 Cerrar sesión actual
               </button>
             </div>
@@ -1790,14 +1686,14 @@ export default function AdminPanel() {
             <form onSubmit={handleLogin} className="space-y-5">
               <div className="space-y-2">
                 <label className="text-xs font-bold uppercase tracking-widest text-slate-400">Correo Electrónico</label>
-                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full bg-slate-900 border border-slate-700 px-4 py-3 rounded-none text-white outline-none focus:border-blue-500 transition-colors" placeholder="admin@dapa.com" />
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full bg-slate-900 border border-slate-700 px-4 py-3 rounded-xl text-white outline-none focus:border-blue-500 transition-colors" placeholder="admin@dapa.com" />
               </div>
               <div className="space-y-2">
                 <label className="text-xs font-bold uppercase tracking-widest text-slate-400">Contraseña</label>
-                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full bg-slate-900 border border-slate-700 px-4 py-3 rounded-none text-white outline-none focus:border-blue-500 transition-colors" placeholder="••••••••" />
+                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full bg-slate-900 border border-slate-700 px-4 py-3 rounded-xl text-white outline-none focus:border-blue-500 transition-colors" placeholder="••••••••" />
               </div>
-              {loginError && <p className="text-red-400 text-xs font-bold text-center bg-red-900/20 p-2 rounded-none border border-red-900">{loginError}</p>}
-              <button type="submit" disabled={isLoggingIn} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold uppercase tracking-widest py-4 rounded-none transition-colors mt-4 shadow-lg focus:outline-none disabled:opacity-50">
+              {loginError && <p className="text-red-400 text-xs font-bold text-center bg-red-900/20 p-2 rounded-lg border border-red-900">{loginError}</p>}
+              <button type="submit" disabled={isLoggingIn} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold uppercase tracking-widest py-4 rounded-xl transition-colors mt-4 shadow-lg focus:outline-none disabled:opacity-50">
                 {isLoggingIn ? 'Verificando...' : 'Ingresar al Panel'}
               </button>
             </form>
@@ -1814,7 +1710,7 @@ export default function AdminPanel() {
   return (
     <div className="min-h-screen flex bg-slate-100 dark:bg-slate-900 font-montserrat">
       {notification && (
-        <div className={`fixed top-6 right-6 px-6 py-3.5 rounded-none shadow-2xl z-[250] flex items-center gap-3 animate-in slide-in-from-top-10 border text-white font-bold text-xs uppercase tracking-wider ${
+        <div className={`fixed top-6 right-6 px-6 py-3.5 rounded-2xl shadow-2xl z-[250] flex items-center gap-3 animate-in slide-in-from-top-10 border text-white font-bold text-xs uppercase tracking-wider ${
           notification.type === 'error' 
             ? 'bg-red-600 border-red-400 shadow-red-600/30' 
             : 'bg-green-600 border-green-400 shadow-green-600/30'
@@ -1831,29 +1727,29 @@ export default function AdminPanel() {
           <span className="text-[10px] font-bold tracking-[0.2em] uppercase text-blue-500 font-exo">Admin Panel</span>
         </div>
         <div className="flex-1 py-6 px-4 space-y-2">
-          <button onClick={() => setActiveTab('productos')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-none transition-colors font-semibold text-sm ${activeTab === 'productos' ? 'bg-blue-600 text-white' : 'hover:bg-slate-800 hover:text-white'}`}>
+          <button onClick={() => setActiveTab('productos')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors font-semibold text-sm ${activeTab === 'productos' ? 'bg-blue-600 text-white' : 'hover:bg-slate-800 hover:text-white'}`}>
             <Tags className="w-5 h-5" /> Repuestos
           </button>
-          <button onClick={() => setActiveTab('pedidos')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-none transition-colors font-semibold text-sm ${activeTab === 'pedidos' ? 'bg-blue-600 text-white' : 'hover:bg-slate-800 hover:text-white'}`}>
+          <button onClick={() => setActiveTab('pedidos')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors font-semibold text-sm ${activeTab === 'pedidos' ? 'bg-blue-600 text-white' : 'hover:bg-slate-800 hover:text-white'}`}>
             <ClipboardList className="w-5 h-5" /> Pedidos
             {pendingOrdersCount > 0 && (
-              <span className="ml-auto bg-red-500 text-white text-[10px] px-2 py-1 rounded-none">{pendingOrdersCount}</span>
+              <span className="ml-auto bg-red-500 text-white text-[10px] px-2 py-1 rounded-full">{pendingOrdersCount}</span>
             )}
           </button>
-          <button onClick={() => setActiveTab('estadisticas')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-none transition-colors font-semibold text-sm ${activeTab === 'estadisticas' ? 'bg-blue-600 text-white' : 'hover:bg-slate-800 hover:text-white'}`}>
+          <button onClick={() => setActiveTab('estadisticas')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors font-semibold text-sm ${activeTab === 'estadisticas' ? 'bg-blue-600 text-white' : 'hover:bg-slate-800 hover:text-white'}`}>
             <BarChart3 className="w-5 h-5" /> Estadísticas
             {stats.outOfStockProducts.length > 0 && (
-              <span className="ml-auto bg-amber-500 text-slate-900 font-bold text-[10px] px-2 py-0.5 rounded-none">
+              <span className="ml-auto bg-amber-500 text-slate-900 font-bold text-[10px] px-2 py-0.5 rounded-full">
                 {stats.outOfStockProducts.length}
               </span>
             )}
           </button>
         </div>
         <div className="p-4 border-t border-slate-800 space-y-2">
-          <button onClick={() => navigate('/')} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-none bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors text-xs uppercase tracking-widest font-bold">
+          <button onClick={() => navigate('/')} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors text-xs uppercase tracking-widest font-bold">
             <ArrowLeft className="w-4 h-4" /> Ver Tienda
           </button>
-          <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-none bg-red-900/30 hover:bg-red-600 text-red-400 hover:text-white transition-colors text-xs uppercase tracking-widest font-bold">
+          <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-red-900/30 hover:bg-red-600 text-red-400 hover:text-white transition-colors text-xs uppercase tracking-widest font-bold">
             <LogOut className="w-4 h-4" /> Cerrar Sesión
           </button>
         </div>
@@ -1865,7 +1761,7 @@ export default function AdminPanel() {
             {activeTab === 'productos' ? 'Gestión de Inventario' : activeTab === 'pedidos' ? 'Bandeja de Pedidos' : 'Estadísticas y Stock'}
           </h1>
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-blue-100 text-blue-600 rounded-none flex items-center justify-center font-bold">A</div>
+            <div className="w-8 h-8 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold">A</div>
             <span className="text-sm font-semibold text-slate-600 dark:text-slate-300">{session.user.email}</span>
           </div>
         </header>
@@ -1876,7 +1772,7 @@ export default function AdminPanel() {
           {/* VISTA 1: PRODUCTOS E INVENTARIO */}
           {/* =============================================================== */}
           {activeTab === 'productos' && (
-            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-none shadow-sm flex flex-col h-full overflow-hidden">
+            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm flex flex-col h-full overflow-hidden">
               
               {/* FILA SUPERIOR: TÍTULO, BUSCADOR Y BOTONES DE ACCIÓN */}
               <div className="p-5 border-b border-slate-200 dark:border-slate-700 flex flex-col gap-4">
@@ -1895,7 +1791,7 @@ export default function AdminPanel() {
                       value={searchTerm} 
                       onChange={(e) => setSearchTerm(e.target.value)} 
                       placeholder="Buscar por código, nombre o marca..." 
-                      className="w-full pl-10 pr-8 py-2 rounded-none border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs text-slate-800 dark:text-white outline-none focus:border-blue-500"
+                      className="w-full pl-10 pr-8 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs text-slate-800 dark:text-white outline-none focus:border-blue-500"
                     />
                     {searchTerm && (
                       <button onClick={() => setSearchTerm('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white">
@@ -1906,32 +1802,24 @@ export default function AdminPanel() {
                   
                   <div className="flex flex-wrap gap-2">
                     <button onClick={() => setIsCategoryModalOpen(true)} className="bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-3 py-2 rounded-none font-bold uppercase tracking-widest text-[11px] flex items-center gap-1.5 transition-colors focus:outline-none">
-                      <ListPlus className="w-4 h-4" /> + Categoría
+                      <ListPlus className="w-4 h-4" /> Categorías ({categories.length})
                     </button>
-                    <button
-                      onClick={() => setConfirmUnify(true)}
-                      disabled={isUnifying}
-                      title="Agrupa las categorías repetidas o similares en categorías principales"
-                      className="bg-amber-500 hover:bg-amber-400 text-slate-950 px-3 py-2 rounded-none font-bold uppercase tracking-widest text-[11px] flex items-center gap-1.5 shadow-lg shadow-amber-500/20 transition-colors focus:outline-none disabled:opacity-60"
-                    >
-                      <RefreshCw className={`w-4 h-4 ${isUnifying ? 'animate-spin' : ''}`} /> Unificar Categorías
-                    </button>
-                    <button onClick={() => setIsBrandModalOpen(true)} className="bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-3 py-2 rounded-none font-bold uppercase tracking-widest text-[11px] flex items-center gap-1.5 transition-colors focus:outline-none">
+                    <button onClick={() => setIsBrandModalOpen(true)} className="bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-3 py-2 rounded-xl font-bold uppercase tracking-widest text-[11px] flex items-center gap-1.5 transition-colors focus:outline-none">
                       <Tag className="w-4 h-4" /> + Marca
                     </button>
                     <button 
                       onClick={() => setIsBulkPriceModalOpen(true)} 
-                      className="bg-purple-600 hover:bg-purple-500 text-white px-3.5 py-2 rounded-none font-bold uppercase tracking-widest text-[11px] flex items-center gap-1.5 shadow-lg shadow-purple-600/20 transition-colors focus:outline-none"
+                      className="bg-purple-600 hover:bg-purple-500 text-white px-3.5 py-2 rounded-xl font-bold uppercase tracking-widest text-[11px] flex items-center gap-1.5 shadow-lg shadow-purple-600/20 transition-colors focus:outline-none"
                     >
                       <Percent className="w-4 h-4" /> Actualizar %
                     </button>
                     <button 
                       onClick={() => { setExcelPreview([]); setExcelFileName(''); setIsExcelModalOpen(true); }} 
-                      className="bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-2 rounded-none font-bold uppercase tracking-widest text-[11px] flex items-center gap-1.5 shadow-lg shadow-emerald-600/20 transition-colors focus:outline-none"
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-2 rounded-xl font-bold uppercase tracking-widest text-[11px] flex items-center gap-1.5 shadow-lg shadow-emerald-600/20 transition-colors focus:outline-none"
                     >
                       <FileSpreadsheet className="w-4 h-4" /> Importar Excel
                     </button>
-                    <button onClick={openAddProductModal} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-none font-bold uppercase tracking-widest text-[11px] flex items-center gap-1.5 shadow-lg shadow-blue-600/20 transition-colors focus:outline-none">
+                    <button onClick={openAddProductModal} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl font-bold uppercase tracking-widest text-[11px] flex items-center gap-1.5 shadow-lg shadow-blue-600/20 transition-colors focus:outline-none">
                       <Plus className="w-4 h-4" /> Nuevo Repuesto
                     </button>
                   </div>
@@ -1947,7 +1835,7 @@ export default function AdminPanel() {
                   <select
                     value={filterCategory}
                     onChange={(e) => setFilterCategory(e.target.value)}
-                    className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs rounded-none px-3 py-2 outline-none focus:border-blue-500 font-medium"
+                    className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs rounded-xl px-3 py-2 outline-none focus:border-blue-500 font-medium"
                   >
                     <option value="todas">Todas las Categorías ({categories.length})</option>
                     {categories.map(cat => (
@@ -1959,7 +1847,7 @@ export default function AdminPanel() {
                   <select
                     value={filterBrand}
                     onChange={(e) => setFilterBrand(e.target.value)}
-                    className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs rounded-none px-3 py-2 outline-none focus:border-blue-500 font-medium"
+                    className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs rounded-xl px-3 py-2 outline-none focus:border-blue-500 font-medium"
                   >
                     <option value="todas">Todas las Marcas ({brands.length})</option>
                     {brands.map(b => (
@@ -1971,7 +1859,7 @@ export default function AdminPanel() {
                   <select
                     value={filterStock}
                     onChange={(e) => setFilterStock(e.target.value)}
-                    className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs rounded-none px-3 py-2 outline-none focus:border-blue-500 font-medium"
+                    className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs rounded-xl px-3 py-2 outline-none focus:border-blue-500 font-medium"
                   >
                     <option value="todos">Stock: Todos</option>
                     <option value="con_stock">✅ Con Stock (&gt; 0)</option>
@@ -1983,7 +1871,7 @@ export default function AdminPanel() {
                   <select
                     value={sortBy}
                     onChange={(e) => setSortBy(e.target.value)}
-                    className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs rounded-none px-3 py-2 outline-none focus:border-blue-500 font-medium"
+                    className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs rounded-xl px-3 py-2 outline-none focus:border-blue-500 font-medium"
                   >
                     <option value="recientes">Orden: Más recientes</option>
                     <option value="nombre_asc">Orden: Nombre (A - Z)</option>
@@ -2012,7 +1900,7 @@ export default function AdminPanel() {
                     <Package className="w-16 h-16 text-slate-300 mb-4" />
                     <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Sin resultados para estos filtros</h3>
                     {hasActiveProductFilters && (
-                      <button onClick={clearAllProductFilters} className="mt-2 px-4 py-2 rounded-none bg-blue-600 text-white text-xs font-bold uppercase tracking-wider">
+                      <button onClick={clearAllProductFilters} className="mt-2 px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold uppercase tracking-wider">
                         Ver todos los repuestos
                       </button>
                     )}
@@ -2035,9 +1923,9 @@ export default function AdminPanel() {
                         <tr key={prod.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                           <td className="p-3.5 text-center">
                             {prod.image_url ? (
-                              <img src={prod.image_url} alt={prod.name} className="w-10 h-10 object-cover rounded-none border border-slate-200" />
+                              <img src={prod.image_url} alt={prod.name} className="w-10 h-10 object-cover rounded-lg border border-slate-200" />
                             ) : (
-                              <div className="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded-none flex items-center justify-center border border-slate-200 dark:border-slate-700">
+                              <div className="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center justify-center border border-slate-200 dark:border-slate-700">
                                 <ImageIcon className="w-4 h-4 text-slate-400" />
                               </div>
                             )}
@@ -2062,13 +1950,13 @@ export default function AdminPanel() {
                                   if (e.key === 'Enter') saveInlineEdit(prod);
                                   if (e.key === 'Escape') setInlineEdit({ id: null, field: null, value: '' });
                                 }}
-                                className="w-28 text-right px-2 py-1 rounded-none border border-blue-500 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm font-bold outline-none"
+                                className="w-28 text-right px-2 py-1 rounded-lg border border-blue-500 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm font-bold outline-none"
                               />
                             ) : (
                               <button
                                 onClick={() => startInlineEdit(prod, 'price')}
                                 title="Clic para editar precio rápidamente"
-                                className="text-sm font-bold text-slate-800 dark:text-white hover:text-blue-500 dark:hover:text-blue-400 px-2 py-1 rounded-none hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors"
+                                className="text-sm font-bold text-slate-800 dark:text-white hover:text-blue-500 dark:hover:text-blue-400 px-2 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors"
                               >
                                 ${Number(prod.price).toLocaleString('es-AR')}
                               </button>
@@ -2088,13 +1976,13 @@ export default function AdminPanel() {
                                   if (e.key === 'Enter') saveInlineEdit(prod);
                                   if (e.key === 'Escape') setInlineEdit({ id: null, field: null, value: '' });
                                 }}
-                                className="w-20 text-center px-2 py-1 rounded-none border border-blue-500 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs font-bold outline-none"
+                                className="w-20 text-center px-2 py-1 rounded-lg border border-blue-500 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs font-bold outline-none"
                               />
                             ) : (
                               <button
                                 onClick={() => startInlineEdit(prod, 'stock')}
                                 title="Clic para editar stock rápidamente"
-                                className={`px-3 py-1 rounded-none text-xs font-bold transition-transform hover:scale-105 ${
+                                className={`px-3 py-1 rounded-full text-xs font-bold transition-transform hover:scale-105 ${
                                   prod.stock > 2
                                     ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400'
                                     : prod.stock > 0
@@ -2109,10 +1997,10 @@ export default function AdminPanel() {
 
                           <td className="p-3.5 text-center">
                             <div className="flex items-center justify-center gap-2">
-                              <button onClick={() => openEditProductModal(prod)} className="p-2 text-blue-600 hover:bg-blue-100 dark:hover:bg-slate-700 rounded-none transition-colors focus:outline-none" title="Editar ficha completa">
+                              <button onClick={() => openEditProductModal(prod)} className="p-2 text-blue-600 hover:bg-blue-100 dark:hover:bg-slate-700 rounded-lg transition-colors focus:outline-none" title="Editar ficha completa">
                                 <Edit className="w-4 h-4" />
                               </button>
-                              <button onClick={() => setProductToDelete(prod)} className="p-2 text-red-500 hover:bg-red-100 dark:hover:bg-slate-700 rounded-none transition-colors focus:outline-none" title="Eliminar">
+                              <button onClick={() => setProductToDelete(prod)} className="p-2 text-red-500 hover:bg-red-100 dark:hover:bg-slate-700 rounded-lg transition-colors focus:outline-none" title="Eliminar">
                                 <Trash2 className="w-4 h-4" />
                               </button>
                             </div>
@@ -2134,14 +2022,14 @@ export default function AdminPanel() {
                     <button
                       disabled={currentPage === 1}
                       onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                      className="px-3 py-1.5 rounded-none border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 disabled:opacity-40 flex items-center gap-1 font-bold"
+                      className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 disabled:opacity-40 flex items-center gap-1 font-bold"
                     >
                       <ChevronLeft className="w-4 h-4" /> Anterior
                     </button>
                     <button
                       disabled={currentPage === totalProductPages}
                       onClick={() => setCurrentPage(p => Math.min(totalProductPages, p + 1))}
-                      className="px-3 py-1.5 rounded-none border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 disabled:opacity-40 flex items-center gap-1 font-bold"
+                      className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 disabled:opacity-40 flex items-center gap-1 font-bold"
                     >
                       Siguiente <ChevronRight className="w-4 h-4" />
                     </button>
@@ -2156,7 +2044,7 @@ export default function AdminPanel() {
           {/* =============================================================== */}
           {activeTab === 'pedidos' && (
             <div className="space-y-6">
-              <div className="bg-white dark:bg-slate-800 p-4 rounded-none border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row justify-between items-center gap-4 shadow-sm">
+              <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row justify-between items-center gap-4 shadow-sm">
                 <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                   {[
                     { id: 'todos', label: `Todos (${orders.length})` },
@@ -2167,7 +2055,7 @@ export default function AdminPanel() {
                     <button
                       key={tab.id}
                       onClick={() => setOrderFilter(tab.id)}
-                      className={`px-4 py-2 rounded-none text-xs font-bold uppercase tracking-wider transition-colors ${
+                      className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors ${
                         orderFilter === tab.id
                           ? 'bg-blue-600 text-white shadow-sm'
                           : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
@@ -2181,7 +2069,7 @@ export default function AdminPanel() {
                 <div className="flex flex-wrap gap-2 w-full sm:w-auto justify-end">
                   <button
                     onClick={() => setIsPosModalOpen(true)}
-                    className="px-4 py-2 rounded-none bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 transition-colors"
+                    className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 transition-colors"
                   >
                     <ShoppingBag className="w-4 h-4" /> Nueva Venta Manual
                   </button>
@@ -2189,7 +2077,7 @@ export default function AdminPanel() {
                   {completedOrdersCount > 0 && (
                     <button
                       onClick={() => setConfirmClearCompleted(true)}
-                      className="px-4 py-2 rounded-none bg-red-50 dark:bg-red-900/20 hover:bg-red-600 text-red-600 dark:text-red-400 hover:text-white border border-red-200 dark:border-red-800 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors"
+                      className="px-4 py-2 rounded-xl bg-red-50 dark:bg-red-900/20 hover:bg-red-600 text-red-600 dark:text-red-400 hover:text-white border border-red-200 dark:border-red-800 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors"
                     >
                       <Trash2 className="w-4 h-4" /> Limpiar Finalizados ({completedOrdersCount})
                     </button>
@@ -2200,14 +2088,14 @@ export default function AdminPanel() {
               {isLoading ? (
                 <div className="p-10 text-center text-slate-500">Cargando pedidos...</div>
               ) : filteredOrders.length === 0 ? (
-                <div className="bg-white dark:bg-slate-800 rounded-none p-20 text-center border border-slate-200 dark:border-slate-700">
+                <div className="bg-white dark:bg-slate-800 rounded-2xl p-20 text-center border border-slate-200 dark:border-slate-700">
                   <ClipboardList className="w-16 h-16 text-slate-300 mx-auto mb-4" />
                   <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">No hay pedidos en esta vista</h3>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
                   {filteredOrders.map(order => (
-                    <div key={order.id} className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-none shadow-sm overflow-hidden flex flex-col">
+                    <div key={order.id} className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm overflow-hidden flex flex-col">
                       <div className="p-5 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 flex justify-between items-start gap-3">
                         <div>
                           <span className="text-xs font-bold tracking-widest uppercase text-blue-600 block mb-1">Pedido #{order.id}</span>
@@ -2220,7 +2108,7 @@ export default function AdminPanel() {
                           <select 
                             value={order.status} 
                             onChange={(e) => updateOrderStatus(order.id, e.target.value)} 
-                            className={`text-xs font-bold uppercase tracking-wider px-3 py-1.5 rounded-none outline-none cursor-pointer border ${
+                            className={`text-xs font-bold uppercase tracking-wider px-3 py-1.5 rounded-lg outline-none cursor-pointer border ${
                               isOrderPending(order.status) 
                                 ? 'bg-orange-100 text-orange-700 border-orange-200' 
                                 : order.status === 'Facturado' 
@@ -2232,6 +2120,7 @@ export default function AdminPanel() {
                           >
                             <option value="Pendiente">Pendiente</option>
                             <option value="Pendiente (Vía Web)">Pendiente (Vía Web)</option>
+                            <option value="Pendiente (Pagado MP)">✅ Pagado MP (Por despachar)</option>
                             <option value="Pendiente (Vía WhatsApp)">Pendiente (Vía WhatsApp)</option>
                             <option value="Cotización Web">Cotización Web</option>
                             <option value="Revisado">Revisado</option>
@@ -2242,7 +2131,7 @@ export default function AdminPanel() {
                           <button
                             onClick={() => setOrderToDelete(order)}
                             title="Eliminar pedido"
-                            className="p-2 rounded-none text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors focus:outline-none"
+                            className="p-2 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors focus:outline-none"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -2250,7 +2139,7 @@ export default function AdminPanel() {
                       </div>
 
                       <div className="p-5 flex-1 flex flex-col">
-                        <div className="grid grid-cols-2 gap-4 mb-5 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-none border border-slate-100 dark:border-slate-700">
+                        <div className="grid grid-cols-2 gap-4 mb-5 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-100 dark:border-slate-700">
                           <div>
                             <div className="flex items-center gap-1.5 text-xs text-slate-400 font-bold uppercase tracking-widest mb-1">
                               <UserIcon className="w-3 h-3"/> Cliente
@@ -2305,7 +2194,7 @@ export default function AdminPanel() {
 
                           return (
                             <div className="mt-auto space-y-3">
-                              <div className="bg-blue-50/50 dark:bg-slate-900/60 border border-blue-100 dark:border-slate-700 rounded-none p-4">
+                              <div className="bg-blue-50/50 dark:bg-slate-900/60 border border-blue-100 dark:border-slate-700 rounded-xl p-4">
                                 <h5 className="text-[10px] font-bold uppercase tracking-widest text-blue-600 dark:text-blue-400 mb-2">
                                   Datos de Envío / Especificaciones
                                 </h5>
@@ -2315,7 +2204,7 @@ export default function AdminPanel() {
                               </div>
 
                               {imageLinks.length > 0 && (
-                                <div className="bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-700 rounded-none p-3">
+                                <div className="bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-700 rounded-xl p-3">
                                   <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">
                                     Fotos adjuntas por el cliente ({imageLinks.length})
                                   </span>
@@ -2326,7 +2215,7 @@ export default function AdminPanel() {
                                         href={imgUrl}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="group relative w-20 h-20 rounded-none overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 flex items-center justify-center shadow-sm hover:border-blue-500 transition-all"
+                                        className="group relative w-20 h-20 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 flex items-center justify-center shadow-sm hover:border-blue-500 transition-all"
                                       >
                                         <img src={imgUrl} alt={`Adjunto ${imgIdx + 1}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                                         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-[10px] font-bold">
@@ -2362,7 +2251,7 @@ export default function AdminPanel() {
             <div className="space-y-8">
               {/* Tarjetas de Resumen Comercial */}
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
-                <div className="bg-white dark:bg-slate-800 p-6 rounded-none border border-slate-200 dark:border-slate-700 shadow-sm">
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
                   <span className="text-xs font-bold uppercase tracking-widest text-slate-400 block mb-2">Facturación del Mes</span>
                   <p className="text-3xl font-bold font-exo text-emerald-600 dark:text-emerald-400">
                     ${stats.monthlyRevenue.toLocaleString('es-AR')}
@@ -2370,7 +2259,7 @@ export default function AdminPanel() {
                   <span className="text-xs text-slate-500 mt-2 block">{stats.monthlyBilledCount} ventas cerradas este mes</span>
                 </div>
 
-                <div className="bg-white dark:bg-slate-800 p-6 rounded-none border border-slate-200 dark:border-slate-700 shadow-sm">
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
                   <span className="text-xs font-bold uppercase tracking-widest text-slate-400 block mb-2">Facturación Histórica</span>
                   <p className="text-3xl font-bold font-exo text-slate-900 dark:text-white">
                     ${stats.totalRevenue.toLocaleString('es-AR')}
@@ -2378,7 +2267,7 @@ export default function AdminPanel() {
                   <span className="text-xs text-slate-500 mt-2 block">{stats.billedCount} ventas totales • Ticket prom: ${stats.avgTicket.toLocaleString('es-AR')}</span>
                 </div>
 
-                <div className="bg-white dark:bg-slate-800 p-6 rounded-none border border-slate-200 dark:border-slate-700 shadow-sm">
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
                   <span className="text-xs font-bold uppercase tracking-widest text-slate-400 block mb-2">Capital en Mercadería</span>
                   <p className="text-3xl font-bold font-exo text-blue-600 dark:text-blue-400">
                     ${stats.totalInventoryValue.toLocaleString('es-AR')}
@@ -2386,7 +2275,7 @@ export default function AdminPanel() {
                   <span className="text-xs text-slate-500 mt-2 block">{products.length} artículos activos en catálogo</span>
                 </div>
 
-                <div className="bg-white dark:bg-slate-800 p-6 rounded-none border border-slate-200 dark:border-slate-700 shadow-sm">
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
                   <span className="text-xs font-bold uppercase tracking-widest text-slate-400 block mb-2">Alertas de Reposición</span>
                   <p className="text-3xl font-bold font-exo text-amber-500">
                     {stats.outOfStockProducts.length + stats.lowStockProducts.length}
@@ -2398,7 +2287,7 @@ export default function AdminPanel() {
               </div>
 
               {/* Tabla de Repuestos sin Stock o con Stock Crítico */}
-              <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-none shadow-sm overflow-hidden">
+              <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm overflow-hidden">
                 <div className="p-6 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
                   <div>
                     <h3 className="font-bold text-base text-slate-800 dark:text-white uppercase tracking-wider">
@@ -2437,7 +2326,7 @@ export default function AdminPanel() {
                             <td className="p-4 text-slate-900 dark:text-white font-medium">{prod.name}</td>
                             <td className="p-4 text-slate-500 text-xs uppercase">{prod.brand?.name || '-'}</td>
                             <td className="p-4 text-center">
-                              <span className={`px-3 py-1 rounded-none text-xs font-bold ${
+                              <span className={`px-3 py-1 rounded-full text-xs font-bold ${
                                 prod.stock <= 0 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
                               }`}>
                                 {prod.stock <= 0 ? 'Agotado (0)' : `${prod.stock} u.`}
@@ -2455,7 +2344,7 @@ export default function AdminPanel() {
                                       showNotification(`Se sumaron +${addQty} u. a ${prod.sku_code}`, 'success');
                                     }
                                   }}
-                                  className="px-2.5 py-1 rounded-none bg-blue-50 dark:bg-slate-700 hover:bg-blue-600 text-blue-600 dark:text-blue-300 hover:text-white text-xs font-bold transition-colors"
+                                  className="px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-slate-700 hover:bg-blue-600 text-blue-600 dark:text-blue-300 hover:text-white text-xs font-bold transition-colors"
                                 >
                                   +{addQty}
                                 </button>
@@ -2479,10 +2368,10 @@ export default function AdminPanel() {
       {/* ==================================================================== */}
       {isBulkPriceModalOpen && (
         <div className="fixed inset-0 bg-slate-900/70 z-[210] flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-800 rounded-none shadow-2xl w-full max-w-lg overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 border border-slate-200 dark:border-slate-700">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 border border-slate-200 dark:border-slate-700">
             <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-900/50">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-none bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400">
+                <div className="p-2.5 rounded-xl bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400">
                   <Percent className="w-5 h-5" />
                 </div>
                 <div>
@@ -2510,7 +2399,7 @@ export default function AdminPanel() {
                       type="button"
                       key={opt.id}
                       onClick={() => setBulkScope(opt.id)}
-                      className={`py-2.5 px-3 rounded-none text-xs font-bold uppercase tracking-wider border transition-colors ${
+                      className={`py-2.5 px-3 rounded-xl text-xs font-bold uppercase tracking-wider border transition-colors ${
                         bulkScope === opt.id
                           ? 'bg-purple-600 text-white border-purple-600'
                           : 'bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
@@ -2529,7 +2418,7 @@ export default function AdminPanel() {
                     required
                     value={bulkCategoryId}
                     onChange={(e) => setBulkCategoryId(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-none text-sm text-slate-900 dark:text-white outline-none focus:border-purple-500"
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:border-purple-500"
                   >
                     <option value="">Elegir categoría...</option>
                     {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -2544,7 +2433,7 @@ export default function AdminPanel() {
                     required
                     value={bulkBrandId}
                     onChange={(e) => setBulkBrandId(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-none text-sm text-slate-900 dark:text-white outline-none focus:border-purple-500"
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:border-purple-500"
                   >
                     <option value="">Elegir marca...</option>
                     {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
@@ -2562,7 +2451,7 @@ export default function AdminPanel() {
                     placeholder="Ej: 15 (o -10 p/ descuento)"
                     value={bulkPercentage}
                     onChange={(e) => setBulkPercentage(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-none text-sm text-slate-900 dark:text-white outline-none focus:border-purple-500 font-bold"
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:border-purple-500 font-bold"
                   />
                 </div>
 
@@ -2571,7 +2460,7 @@ export default function AdminPanel() {
                   <select
                     value={bulkRounding}
                     onChange={(e) => setBulkRounding(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-none text-sm text-slate-900 dark:text-white outline-none focus:border-purple-500"
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:border-purple-500"
                   >
                     <option value="1">Sin redondeo ($1)</option>
                     <option value="10">Múltiplos de $10</option>
@@ -2582,7 +2471,7 @@ export default function AdminPanel() {
                 </div>
               </div>
 
-              <div className="bg-purple-50/60 dark:bg-slate-900/70 border border-purple-200 dark:border-slate-700 rounded-none p-4 text-xs text-slate-600 dark:text-slate-300 space-y-1">
+              <div className="bg-purple-50/60 dark:bg-slate-900/70 border border-purple-200 dark:border-slate-700 rounded-xl p-4 text-xs text-slate-600 dark:text-slate-300 space-y-1">
                 <p className="font-bold text-slate-800 dark:text-white">
                   Se modificarán <strong>{targetBulkProducts.length}</strong> repuestos.
                 </p>
@@ -2600,14 +2489,14 @@ export default function AdminPanel() {
                 <button
                   type="button"
                   onClick={() => setIsBulkPriceModalOpen(false)}
-                  className="px-5 py-2.5 rounded-none text-xs font-bold uppercase text-slate-500 hover:bg-slate-100"
+                  className="px-5 py-2.5 rounded-xl text-xs font-bold uppercase text-slate-500 hover:bg-slate-100"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting || targetBulkProducts.length === 0}
-                  className="px-6 py-2.5 rounded-none bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold uppercase tracking-widest shadow-lg shadow-purple-600/30 disabled:opacity-50"
+                  className="px-6 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold uppercase tracking-widest shadow-lg shadow-purple-600/30 disabled:opacity-50"
                 >
                   {isSubmitting ? 'Actualizando...' : 'Aplicar Aumento / Descuento'}
                 </button>
@@ -2622,10 +2511,10 @@ export default function AdminPanel() {
       {/* ==================================================================== */}
       {isPosModalOpen && (
         <div className="fixed inset-0 bg-slate-900/70 z-[210] flex items-center justify-center p-4 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-white dark:bg-slate-800 rounded-none shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 max-h-[92vh]">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 max-h-[92vh]">
             <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-900/50">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-none bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400">
+                <div className="p-2.5 rounded-xl bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400">
                   <ShoppingBag className="w-5 h-5" />
                 </div>
                 <div>
@@ -2649,7 +2538,7 @@ export default function AdminPanel() {
                     required
                     value={posCustomerName}
                     onChange={(e) => setPosCustomerName(e.target.value)}
-                    className="w-full mt-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2.5 rounded-none text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500"
+                    className="w-full mt-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2.5 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500"
                   />
                 </div>
                 <div>
@@ -2659,7 +2548,7 @@ export default function AdminPanel() {
                     value={posCustomerPhone}
                     onChange={(e) => setPosCustomerPhone(e.target.value)}
                     placeholder="Ej: 2478..."
-                    className="w-full mt-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2.5 rounded-none text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500"
+                    className="w-full mt-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2.5 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500"
                   />
                 </div>
                 <div>
@@ -2667,7 +2556,7 @@ export default function AdminPanel() {
                   <select
                     value={posPaymentMethod}
                     onChange={(e) => setPosPaymentMethod(e.target.value)}
-                    className="w-full mt-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2.5 rounded-none text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500"
+                    className="w-full mt-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2.5 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500"
                   >
                     <option value="Efectivo">Efectivo</option>
                     <option value="Transferencia">Transferencia</option>
@@ -2688,11 +2577,11 @@ export default function AdminPanel() {
                     value={posSearch}
                     onChange={(e) => setPosSearch(e.target.value)}
                     placeholder="Escribí el código SKU o nombre del repuesto..."
-                    className="w-full pl-10 pr-4 py-2.5 rounded-none border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500"
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500"
                   />
                 </div>
                 {posSuggestions.length > 0 && (
-                  <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-none shadow-xl z-30 max-h-56 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-700">
+                  <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-30 max-h-56 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-700">
                     {posSuggestions.map(prod => (
                       <button
                         type="button"
@@ -2713,7 +2602,7 @@ export default function AdminPanel() {
               </div>
 
               {/* Lista de ítems cargados */}
-              <div className="border border-slate-200 dark:border-slate-700 rounded-none overflow-hidden">
+              <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
                 {posItems.length === 0 ? (
                   <div className="p-8 text-center text-xs text-slate-400">
                     Todavía no agregaste repuestos a esta venta.
@@ -2744,7 +2633,7 @@ export default function AdminPanel() {
                                 const q = Math.max(1, parseInt(e.target.value, 10) || 1);
                                 setPosItems(prev => prev.map((it, i) => i === idx ? { ...it, quantity: q } : it));
                               }}
-                              className="w-16 text-center py-1 rounded-none border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-bold"
+                              className="w-16 text-center py-1 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-bold"
                             />
                           </td>
                           <td className="p-3 text-right font-bold text-slate-900 dark:text-white">
@@ -2772,7 +2661,7 @@ export default function AdminPanel() {
                     type="checkbox"
                     checked={posDiscountStock}
                     onChange={(e) => setPosDiscountStock(e.target.checked)}
-                    className="w-4 h-4 rounded-none text-blue-600"
+                    className="w-4 h-4 rounded text-blue-600"
                   />
                   Marcar como Facturado y descontar stock automáticamente
                 </label>
@@ -2789,14 +2678,14 @@ export default function AdminPanel() {
                 <button
                   type="button"
                   onClick={() => setIsPosModalOpen(false)}
-                  className="px-5 py-2.5 rounded-none text-xs font-bold uppercase text-slate-500 hover:bg-slate-100"
+                  className="px-5 py-2.5 rounded-xl text-xs font-bold uppercase text-slate-500 hover:bg-slate-100"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting || posItems.length === 0}
-                  className="px-6 py-2.5 rounded-none bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase tracking-widest shadow-lg shadow-blue-600/30 disabled:opacity-50"
+                  className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase tracking-widest shadow-lg shadow-blue-600/30 disabled:opacity-50"
                 >
                   {isSubmitting ? 'Registrando...' : 'Confirmar Venta'}
                 </button>
@@ -2811,10 +2700,10 @@ export default function AdminPanel() {
       {/* ==================================================================== */}
       {isExcelModalOpen && (
         <div className="fixed inset-0 bg-slate-900/70 z-[210] flex items-center justify-center p-4 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-white dark:bg-slate-800 rounded-none shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 max-h-[90vh]">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 max-h-[90vh]">
             <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-900/50">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-none bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400">
+                <div className="p-2.5 rounded-xl bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400">
                   <FileSpreadsheet className="w-6 h-6" />
                 </div>
                 <div>
@@ -2830,7 +2719,7 @@ export default function AdminPanel() {
             </div>
 
             <div className="p-6 overflow-y-auto space-y-6 flex-1">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-slate-50 dark:bg-slate-900/60 p-4 rounded-none border border-slate-200 dark:border-slate-700">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-slate-50 dark:bg-slate-900/60 p-4 rounded-2xl border border-slate-200 dark:border-slate-700">
                 <div className="text-xs text-slate-600 dark:text-slate-300 space-y-1">
                   <p className="font-bold text-slate-800 dark:text-white uppercase tracking-wider">Columnas reconocidas:</p>
                   <p><strong>Codigo</strong> (SKU), <strong>Nombre</strong>, <strong>Precio</strong>, <strong>Stock</strong>, <strong>Categoria</strong>, <strong>Marca</strong>, <strong>Descripcion</strong>.</p>
@@ -2839,13 +2728,13 @@ export default function AdminPanel() {
                 <button
                   type="button"
                   onClick={handleDownloadTemplate}
-                  className="flex-shrink-0 px-4 py-2.5 rounded-none bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:border-emerald-500 text-xs font-bold uppercase tracking-wider flex items-center gap-2 shadow-sm transition-colors"
+                  className="flex-shrink-0 px-4 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:border-emerald-500 text-xs font-bold uppercase tracking-wider flex items-center gap-2 shadow-sm transition-colors"
                 >
                   <Download className="w-4 h-4 text-emerald-600" /> Descargar Plantilla
                 </button>
               </div>
 
-              <div className="relative border-2 border-dashed border-emerald-400/70 dark:border-emerald-600/60 rounded-none p-8 text-center bg-emerald-50/20 dark:bg-emerald-950/10 hover:bg-emerald-50/40 transition-colors cursor-pointer">
+              <div className="relative border-2 border-dashed border-emerald-400/70 dark:border-emerald-600/60 rounded-2xl p-8 text-center bg-emerald-50/20 dark:bg-emerald-950/10 hover:bg-emerald-50/40 transition-colors cursor-pointer">
                 <input
                   type="file"
                   accept=".xlsx,.xls,.csv"
@@ -2866,7 +2755,7 @@ export default function AdminPanel() {
               )}
 
               {excelPreview.length > 0 && (
-                <div className="bg-emerald-50/60 dark:bg-slate-900/80 border border-emerald-200 dark:border-slate-700 rounded-none p-4 grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
+                <div className="bg-emerald-50/60 dark:bg-slate-900/80 border border-emerald-200 dark:border-slate-700 rounded-2xl p-4 grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
                   <div>
                     <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-600 dark:text-emerald-400 block">
                       Proveedor Detectado
@@ -2886,7 +2775,7 @@ export default function AdminPanel() {
                     setExcelPreview(prev => enrichWithExistingSkus(prev, newPrefix));
                   }}
                   placeholder="Ej: TC- o WG-"
-                  className="mt-1 w-full px-3 py-1.5 rounded-none border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs font-mono font-bold text-slate-900 dark:text-white"
+                  className="mt-1 w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs font-mono font-bold text-slate-900 dark:text-white"
                 />
                     <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">
                       Sumar % (Ej: 21 por IVA)
@@ -2897,11 +2786,11 @@ export default function AdminPanel() {
                       value={importMarkupPct}
                       onChange={(e) => setImportMarkupPct(e.target.value)}
                       placeholder="0"
-                      className="mt-1 w-full px-3 py-1.5 rounded-none border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
+                      className="mt-1 w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
                     />
                   </div>
                   {rawSheetMatrix.length > 0 && (
-                <div className="bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700 rounded-none p-4 space-y-3">
+                <div className="bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
                       ¿Subiste un Excel de un proveedor nuevo con otro diseño?
@@ -2931,7 +2820,7 @@ export default function AdminPanel() {
                               setManualCols(next);
                               applyManualColumnMapping(next);
                             }}
-                            className="mt-1 w-full px-2.5 py-1.5 rounded-none border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
+                            className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
                           >
                             {['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S'].map((letter, idx) => (
                               <option key={letter} value={idx}>Columna {letter}</option>
@@ -2951,7 +2840,7 @@ export default function AdminPanel() {
                             applyManualColumnMapping(next);
                           }}
                           placeholder="Ej: Chapas o Auto"
-                          className="mt-1 w-full px-2.5 py-1.5 rounded-none border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white"
+                          className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white"
                         />
                       </div>
 
@@ -2959,7 +2848,7 @@ export default function AdminPanel() {
                         <button
                           type="button"
                           onClick={() => applyManualColumnMapping(manualCols)}
-                          className="w-full py-1.5 px-3 rounded-none bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase"
+                          className="w-full py-1.5 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase"
                         >
                           Aplicar Mapeo
                         </button>
@@ -2988,7 +2877,7 @@ export default function AdminPanel() {
                     </div>
                   </div>
 
-                  <div className="max-h-64 overflow-y-auto border border-slate-200 dark:border-slate-700 rounded-none">
+                  <div className="max-h-64 overflow-y-auto border border-slate-200 dark:border-slate-700 rounded-xl">
                     <table className="w-full text-left border-collapse text-xs">
                       <thead className="bg-slate-100 dark:bg-slate-900 sticky top-0">
                         <tr>
@@ -3004,7 +2893,7 @@ export default function AdminPanel() {
                         {excelPreview.slice(0, 100).map((item, idx) => (
                           <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
                             <td className="p-2.5">
-                              <span className={`px-2 py-0.5 rounded-none text-[10px] font-bold uppercase ${
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
                                 item.isUpdate
                                   ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
                                   : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
@@ -3014,7 +2903,7 @@ export default function AdminPanel() {
                             </td>
                             <td className="p-2.5 font-mono font-bold text-slate-700 dark:text-slate-300">{item.sku_code}</td>
                             <td className="p-2.5 text-slate-900 dark:text-white truncate max-w-[220px]">{item.name}</td>
-                            <td className="p-2.5 text-slate-500">{normalizeCategoryName(item.categoryName, item.name)} / {item.brandName}</td>
+                            <td className="p-2.5 text-slate-500">{item.categoryName} / {item.brandName}</td>
                             <td className="p-2.5 text-right font-bold text-slate-900 dark:text-white">${item.price.toLocaleString('es-AR')}</td>
                             <td className="p-2.5 text-center font-bold">{item.stock}</td>
                           </tr>
@@ -3035,7 +2924,7 @@ export default function AdminPanel() {
                   type="button"
                   disabled={isSubmitting}
                   onClick={() => setIsExcelModalOpen(false)}
-                  className="px-5 py-2.5 rounded-none text-xs font-bold uppercase text-slate-500 hover:bg-slate-200/60 transition-colors"
+                  className="px-5 py-2.5 rounded-xl text-xs font-bold uppercase text-slate-500 hover:bg-slate-200/60 transition-colors"
                 >
                   Cancelar
                 </button>
@@ -3043,7 +2932,7 @@ export default function AdminPanel() {
                   type="button"
                   disabled={isSubmitting || excelPreview.length === 0}
                   onClick={handleConfirmExcelImport}
-                  className="px-6 py-2.5 rounded-none bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold uppercase tracking-widest shadow-lg shadow-emerald-600/30 disabled:opacity-50 flex items-center gap-2 transition-colors"
+                  className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold uppercase tracking-widest shadow-lg shadow-emerald-600/30 disabled:opacity-50 flex items-center gap-2 transition-colors"
                 >
                   {isSubmitting ? 'Importando...' : `Confirmar Importación (${excelPreview.length})`}
                 </button>
@@ -3056,8 +2945,8 @@ export default function AdminPanel() {
       {/* MODAL DE CONFIRMACIÓN PARA ELIMINAR REPUESTO */}
       {productToDelete && (
         <div className="fixed inset-0 bg-slate-900/70 z-[220] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-800 rounded-none shadow-2xl w-full max-w-md p-6 border border-slate-200 dark:border-slate-700 animate-in zoom-in-95 duration-200 text-center">
-            <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-none flex items-center justify-center mx-auto mb-4">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-md p-6 border border-slate-200 dark:border-slate-700 animate-in zoom-in-95 duration-200 text-center">
+            <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-full flex items-center justify-center mx-auto mb-4">
               <Trash2 className="w-8 h-8" />
             </div>
             <h3 className="text-lg font-bold text-slate-900 dark:text-white uppercase tracking-widest mb-2">
@@ -3071,7 +2960,7 @@ export default function AdminPanel() {
                 type="button" 
                 disabled={isSubmitting}
                 onClick={() => setProductToDelete(null)} 
-                className="flex-1 py-3 rounded-none font-bold uppercase tracking-widest text-xs bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                className="flex-1 py-3 rounded-xl font-bold uppercase tracking-widest text-xs bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
               >
                 Cancelar
               </button>
@@ -3079,7 +2968,7 @@ export default function AdminPanel() {
                 type="button" 
                 disabled={isSubmitting}
                 onClick={confirmDeleteProduct} 
-                className="flex-1 py-3 rounded-none font-bold uppercase tracking-widest text-xs bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/30 transition-colors disabled:opacity-60"
+                className="flex-1 py-3 rounded-xl font-bold uppercase tracking-widest text-xs bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/30 transition-colors disabled:opacity-60"
               >
                 {isSubmitting ? 'Eliminando...' : 'Sí, Eliminar'}
               </button>
@@ -3091,8 +2980,8 @@ export default function AdminPanel() {
       {/* MODAL DE CONFIRMACIÓN PARA ELIMINAR UN PEDIDO */}
       {orderToDelete && (
         <div className="fixed inset-0 bg-slate-900/70 z-[220] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-800 rounded-none shadow-2xl w-full max-w-md p-6 border border-slate-200 dark:border-slate-700 animate-in zoom-in-95 duration-200 text-center">
-            <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-none flex items-center justify-center mx-auto mb-4">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-md p-6 border border-slate-200 dark:border-slate-700 animate-in zoom-in-95 duration-200 text-center">
+            <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-full flex items-center justify-center mx-auto mb-4">
               <Trash2 className="w-8 h-8" />
             </div>
             <h3 className="text-lg font-bold text-slate-900 dark:text-white uppercase tracking-widest mb-2">
@@ -3106,7 +2995,7 @@ export default function AdminPanel() {
                 type="button" 
                 disabled={isSubmitting}
                 onClick={() => setOrderToDelete(null)} 
-                className="flex-1 py-3 rounded-none font-bold uppercase tracking-widest text-xs bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 transition-colors"
+                className="flex-1 py-3 rounded-xl font-bold uppercase tracking-widest text-xs bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 transition-colors"
               >
                 Cancelar
               </button>
@@ -3114,7 +3003,7 @@ export default function AdminPanel() {
                 type="button" 
                 disabled={isSubmitting}
                 onClick={confirmDeleteOrder} 
-                className="flex-1 py-3 rounded-none font-bold uppercase tracking-widest text-xs bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/30 transition-colors disabled:opacity-60"
+                className="flex-1 py-3 rounded-xl font-bold uppercase tracking-widest text-xs bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/30 transition-colors disabled:opacity-60"
               >
                 {isSubmitting ? 'Borrando...' : 'Sí, Eliminar'}
               </button>
@@ -3126,8 +3015,8 @@ export default function AdminPanel() {
       {/* MODAL DE CONFIRMACIÓN PARA LIMPIAR TODOS LOS PEDIDOS FINALIZADOS */}
       {confirmClearCompleted && (
         <div className="fixed inset-0 bg-slate-900/70 z-[220] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-800 rounded-none shadow-2xl w-full max-w-md p-6 border border-slate-200 dark:border-slate-700 animate-in zoom-in-95 duration-200 text-center">
-            <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-none flex items-center justify-center mx-auto mb-4">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-md p-6 border border-slate-200 dark:border-slate-700 animate-in zoom-in-95 duration-200 text-center">
+            <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-full flex items-center justify-center mx-auto mb-4">
               <Trash2 className="w-8 h-8" />
             </div>
             <h3 className="text-lg font-bold text-slate-900 dark:text-white uppercase tracking-widest mb-2">
@@ -3141,7 +3030,7 @@ export default function AdminPanel() {
                 type="button" 
                 disabled={isSubmitting}
                 onClick={() => setConfirmClearCompleted(false)} 
-                className="flex-1 py-3 rounded-none font-bold uppercase tracking-widest text-xs bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 transition-colors"
+                className="flex-1 py-3 rounded-xl font-bold uppercase tracking-widest text-xs bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 transition-colors"
               >
                 Cancelar
               </button>
@@ -3149,7 +3038,7 @@ export default function AdminPanel() {
                 type="button" 
                 disabled={isSubmitting}
                 onClick={handleClearCompletedOrders} 
-                className="flex-1 py-3 rounded-none font-bold uppercase tracking-widest text-xs bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/30 transition-colors disabled:opacity-60"
+                className="flex-1 py-3 rounded-xl font-bold uppercase tracking-widest text-xs bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/30 transition-colors disabled:opacity-60"
               >
                 {isSubmitting ? 'Limpiando...' : 'Sí, Limpiar Todo'}
               </button>
@@ -3158,57 +3047,10 @@ export default function AdminPanel() {
         </div>
       )}
 
-      {/* MODAL DE CONFIRMACIÓN PARA UNIFICAR CATEGORÍAS */}
-      {confirmUnify && (
-        <div className="fixed inset-0 bg-slate-900/70 z-[220] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-800 rounded-none shadow-2xl w-full max-w-md p-6 border border-slate-200 dark:border-slate-700 animate-in zoom-in-95 duration-200 text-center">
-            <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-none flex items-center justify-center mx-auto mb-4">
-              <RefreshCw className="w-8 h-8" />
-            </div>
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white uppercase tracking-widest mb-2">
-              ¿Unificar Categorías?
-            </h3>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
-              Se agruparán las <strong className="text-slate-800 dark:text-white">{categories.length} categorías</strong> actuales en categorías principales (Cerraduras, Espejos, Frenos, etc.), se reasignarán los productos y se eliminarán las categorías que queden vacías. Esta acción no se puede deshacer.
-            </p>
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={() => setConfirmUnify(false)}
-                className="flex-1 py-3 rounded-none font-bold uppercase tracking-widest text-xs bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleUnificarCategorias}
-                className="flex-1 py-3 rounded-none font-bold uppercase tracking-widest text-xs bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/30 transition-colors"
-              >
-                Sí, Unificar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* PROGRESO DE UNIFICACIÓN DE CATEGORÍAS */}
-      {isUnifying && (
-        <div className="fixed inset-0 bg-slate-900/80 z-[230] flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-800 rounded-none shadow-2xl w-full max-w-sm p-6 border border-slate-200 dark:border-slate-700 text-center">
-            <RefreshCw className="w-10 h-10 text-blue-600 dark:text-blue-400 mx-auto mb-4 animate-spin" />
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-widest mb-2">
-              Unificando categorías
-            </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">{unifyProgress || 'Procesando...'}</p>
-            <p className="text-[11px] text-slate-400 mt-3">No cierres esta pestaña hasta que termine.</p>
-          </div>
-        </div>
-      )}
-
       {/* MODAL: PRODUCTO (Crear / Editar) */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-white dark:bg-slate-800 rounded-none shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 my-8">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 my-8">
             <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-900/50">
               <h2 className="text-xl font-bold uppercase tracking-widest text-slate-800 dark:text-white">
                 {editingProductId ? 'Editar Repuesto' : 'Nuevo Repuesto'}
@@ -3220,7 +3062,7 @@ export default function AdminPanel() {
             <form onSubmit={handleSubmitProduct} className="p-6 md:p-8 flex flex-col md:flex-row gap-8">
               <div className="w-full md:w-1/3 flex flex-col gap-4">
                 <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Foto del Repuesto</label>
-                <div className="relative border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-none h-48 md:h-full min-h-[200px] flex items-center justify-center bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 transition-colors overflow-hidden group">
+                <div className="relative border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-2xl h-48 md:h-full min-h-[200px] flex items-center justify-center bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 transition-colors overflow-hidden group">
                   <input type="file" accept="image/*" onChange={handleImageChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
                   {imagePreview ? (
                     <img src={imagePreview} alt="Vista previa" className="w-full h-full object-contain p-2" />
@@ -3237,24 +3079,24 @@ export default function AdminPanel() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Código (SKU) *</label>
-                    <input required name="sku_code" value={formData.sku_code} onChange={handleInputChange} type="text" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-none text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500" />
+                    <input required name="sku_code" value={formData.sku_code} onChange={handleInputChange} type="text" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500" />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Nombre del Repuesto *</label>
-                    <input required name="name" value={formData.name} onChange={handleInputChange} type="text" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-none text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500" />
+                    <input required name="name" value={formData.name} onChange={handleInputChange} type="text" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500" />
                   </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Categoría *</label>
-                    <select required name="category_id" value={formData.category_id} onChange={handleInputChange} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-none text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500">
+                    <select required name="category_id" value={formData.category_id} onChange={handleInputChange} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500">
                       <option value="">Seleccionar...</option>
                       {categories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
                     </select>
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Marca *</label>
-                    <select required name="brand_id" value={formData.brand_id} onChange={handleInputChange} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-none text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500">
+                    <select required name="brand_id" value={formData.brand_id} onChange={handleInputChange} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500">
                       <option value="">Seleccionar...</option>
                       {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                     </select>
@@ -3263,22 +3105,22 @@ export default function AdminPanel() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Precio (ARS) *</label>
-                    <input required name="price" value={formData.price} onChange={handleInputChange} type="number" step="0.01" min="0" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-none text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500" />
+                    <input required name="price" value={formData.price} onChange={handleInputChange} type="number" step="0.01" min="0" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500" />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Stock *</label>
-                    <input required name="stock" value={formData.stock} onChange={handleInputChange} type="number" min="0" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-none text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500" />
+                    <input required name="stock" value={formData.stock} onChange={handleInputChange} type="number" min="0" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500" />
                   </div>
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Descripción / Compatibilidad (Opcional)</label>
-                  <textarea name="description" value={formData.description} onChange={handleInputChange} rows="2" placeholder="Ej: Aplicable a motores 1.6 8v..." className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-none text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500 resize-none" />
+                  <textarea name="description" value={formData.description} onChange={handleInputChange} rows="2" placeholder="Ej: Aplicable a motores 1.6 8v..." className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500 resize-none" />
                 </div>
                 <div className="pt-2 flex justify-end gap-4 mt-auto">
-                  <button type="button" onClick={() => setIsModalOpen(false)} className="px-6 py-3 rounded-none font-bold uppercase text-xs text-slate-500 hover:bg-slate-100 transition-colors">
+                  <button type="button" onClick={() => setIsModalOpen(false)} className="px-6 py-3 rounded-xl font-bold uppercase text-xs text-slate-500 hover:bg-slate-100 transition-colors">
                     Cancelar
                   </button>
-                  <button type="submit" disabled={isSubmitting} className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-3 rounded-none font-bold uppercase text-xs flex items-center gap-2 shadow-lg disabled:opacity-70">
+                  <button type="submit" disabled={isSubmitting} className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-3 rounded-xl font-bold uppercase text-xs flex items-center gap-2 shadow-lg disabled:opacity-70">
                     {isSubmitting ? 'Guardando...' : <><Save className="w-4 h-4" /> {editingProductId ? 'Actualizar' : 'Guardar'}</>}
                   </button>
                 </div>
@@ -3288,27 +3130,126 @@ export default function AdminPanel() {
         </div>
       )}
 
-      {/* MODAL: NUEVA CATEGORÍA */}
+   {/* MODAL: GESTIONAR Y ELIMINAR CATEGORÍAS + PRODUCTOS */}
       {isCategoryModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 z-[110] flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-800 rounded-none shadow-2xl w-full max-w-sm overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+          <div className="bg-white dark:bg-slate-800 rounded-none shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 max-h-[90vh]">
             <div className="p-5 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-900/50">
-              <h2 className="text-sm font-bold uppercase tracking-widest text-slate-800 dark:text-white">Nueva Categoría</h2>
-              <button onClick={() => setIsCategoryModalOpen(false)}><X className="w-5 h-5 text-slate-400" /></button>
-            </div>
-            <form onSubmit={handleAddCategory} className="p-6 space-y-4">
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Nombre (Ej: Suspensión)</label>
-                <input required value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} type="text" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-none text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500" />
+              <div>
+                <h2 className="text-sm font-bold uppercase tracking-widest text-slate-800 dark:text-white">
+                  Gestionar Categorías ({categories.length})
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Creá categorías o eliminá las repetidas junto con sus productos
+                </p>
               </div>
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Descripción (Opcional)</label>
-                <input value={newCategoryDesc} onChange={(e) => setNewCategoryDesc(e.target.value)} type="text" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-none text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500" />
-              </div>
-              <button type="submit" disabled={isSubmitting} className="w-full bg-blue-600 text-white py-3 rounded-none font-bold uppercase text-xs mt-2 disabled:opacity-70">
-                Guardar
+              <button onClick={() => setIsCategoryModalOpen(false)}>
+                <X className="w-5 h-5 text-slate-400 hover:text-slate-700" />
               </button>
-            </form>
+            </div>
+
+            <div className="p-6 overflow-y-auto space-y-6 flex-1">
+              {/* Formulario para crear nueva categoría */}
+              <form onSubmit={handleAddCategory} className="bg-slate-50 dark:bg-slate-900/60 p-4 border border-slate-200 dark:border-slate-700 space-y-3">
+                <span className="text-xs font-bold uppercase tracking-widest text-slate-500 block">
+                  Agregar Nueva Categoría
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <input
+                    required
+                    placeholder="Nombre (Ej: Ópticas)"
+                    value={newCategoryName}
+                    onChange={(e) => setNewCategoryName(e.target.value)}
+                    type="text"
+                    className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-none text-xs text-slate-900 dark:text-white outline-none focus:border-blue-500"
+                  />
+                  <input
+                    placeholder="Descripción (Opcional)"
+                    value={newCategoryDesc}
+                    onChange={(e) => setNewCategoryDesc(e.target.value)}
+                    type="text"
+                    className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-none text-xs text-slate-900 dark:text-white outline-none focus:border-blue-500"
+                  />
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="bg-blue-600 hover:bg-blue-500 text-white py-2 px-4 rounded-none font-bold uppercase text-xs disabled:opacity-70"
+                  >
+                    + Crear Categoría
+                  </button>
+                </div>
+              </form>
+
+              {/* Barra de acciones masivas para borrar categorías y sus productos */}
+              <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200 dark:border-slate-700">
+                <label className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={categories.length > 0 && selectedCatIds.length === categories.length}
+                    onChange={(e) => {
+                      if (e.target.checked) setSelectedCatIds(categories.map(c => c.id));
+                      else setSelectedCatIds([]);
+                    }}
+                    className="w-4 h-4"
+                  />
+                  Seleccionar todas ({selectedCatIds.length} seleccionadas)
+                </label>
+
+                {selectedCatIds.length > 0 && (
+                  <button
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={() => handleDeleteCategoriesWithProducts(selectedCatIds)}
+                    className="bg-red-600 hover:bg-red-500 text-white px-3.5 py-2 rounded-none text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+                  >
+                    <Trash2 className="w-4 h-4" /> Eliminar Seleccionadas ({selectedCatIds.length}) y sus Productos
+                  </button>
+                )}
+              </div>
+
+              {/* Lista de categorías con contador y botón de borrado individual */}
+              <div className="max-h-80 overflow-y-auto border border-slate-200 dark:border-slate-700 divide-y divide-slate-100 dark:divide-slate-800">
+                {categories.length === 0 ? (
+                  <div className="p-8 text-center text-xs text-slate-400">
+                    No hay categorías cargadas actualmente.
+                  </div>
+                ) : (
+                  categories.map(cat => {
+                    const count = products.filter(p => p.category_id === cat.id).length;
+                    const isChecked = selectedCatIds.includes(cat.id);
+                    return (
+                      <div key={cat.id} className="p-3 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                        <label className="flex items-center gap-3 cursor-pointer flex-1">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              if (e.target.checked) setSelectedCatIds(prev => [...prev, cat.id]);
+                              else setSelectedCatIds(prev => prev.filter(id => id !== cat.id));
+                            }}
+                            className="w-4 h-4"
+                          />
+                          <div>
+                            <span className="text-xs font-bold text-slate-800 dark:text-white block">{cat.name}</span>
+                            <span className="text-[11px] text-slate-400">{count} producto(s) asociado(s)</span>
+                          </div>
+                        </label>
+
+                        <button
+                          type="button"
+                          disabled={isSubmitting}
+                          onClick={() => handleDeleteCategoriesWithProducts([cat.id])}
+                          title="Eliminar esta categoría y todos sus productos"
+                          className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-none transition-colors flex items-center gap-1 text-xs font-bold"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -3316,7 +3257,7 @@ export default function AdminPanel() {
       {/* MODAL: NUEVA MARCA */}
       {isBrandModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 z-[110] flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-800 rounded-none shadow-2xl w-full max-w-sm overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
             <div className="p-5 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-900/50">
               <h2 className="text-sm font-bold uppercase tracking-widest text-slate-800 dark:text-white">Nueva Marca</h2>
               <button onClick={() => setIsBrandModalOpen(false)}><X className="w-5 h-5 text-slate-400" /></button>
@@ -3324,9 +3265,9 @@ export default function AdminPanel() {
             <form onSubmit={handleAddBrand} className="p-6 space-y-4">
               <div className="space-y-2">
                 <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Nombre de la Marca (Ej: NGK)</label>
-                <input required value={newBrandName} onChange={(e) => setNewBrandName(e.target.value)} type="text" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-none text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500" />
+                <input required value={newBrandName} onChange={(e) => setNewBrandName(e.target.value)} type="text" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500" />
               </div>
-              <button type="submit" disabled={isSubmitting} className="w-full bg-blue-600 text-white py-3 rounded-none font-bold uppercase text-xs mt-2 disabled:opacity-70">
+              <button type="submit" disabled={isSubmitting} className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold uppercase text-xs mt-2 disabled:opacity-70">
                 Guardar
               </button>
             </form>
