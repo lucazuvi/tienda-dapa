@@ -1583,6 +1583,8 @@ function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenCart, on
   const [hoveredMegaCatId, setHoveredMegaCatId] = useState(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef(null);
+  const closeDropdownTimerRef = useRef(null);
+  const catHoverTimerRef = useRef(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [suggestions, setSuggestions] = useState([]);
 
@@ -1590,6 +1592,13 @@ function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenCart, on
     const handleScroll = () => setIsScrolled(window.scrollY > 50);
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (closeDropdownTimerRef.current) clearTimeout(closeDropdownTimerRef.current);
+      if (catHoverTimerRef.current) clearTimeout(catHoverTimerRef.current);
+    };
   }, []);
 
   useEffect(() => {
@@ -1606,27 +1615,91 @@ function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenCart, on
     };
   }, []);
 
-  const isNavbarSolid = isScrolled || activePage !== 'inicio' || mobileMenuOpen || activeDropdown === 'catalog';
+  const isNavbarCompact = isScrolled || activePage !== 'inicio' || mobileMenuOpen;
+  const isNavbarSolid = isNavbarCompact || activeDropdown === 'catalog';
 
-  const handleNavClick = (page, section) => { navigateTo(page, section); setMobileMenuOpen(false); setActiveDropdown(null); };
-  const handleCategoryClick = (cat) => { onOpenCategory(cat); setActiveDropdown(null); setMobileMenuOpen(false); };
+  const clearCatalogTimers = useCallback(() => {
+    if (closeDropdownTimerRef.current) {
+      clearTimeout(closeDropdownTimerRef.current);
+      closeDropdownTimerRef.current = null;
+    }
+    if (catHoverTimerRef.current) {
+      clearTimeout(catHoverTimerRef.current);
+      catHoverTimerRef.current = null;
+    }
+  }, []);
+
+  const handleCatalogMouseEnter = useCallback(() => {
+    if (closeDropdownTimerRef.current) {
+      clearTimeout(closeDropdownTimerRef.current);
+      closeDropdownTimerRef.current = null;
+    }
+    setActiveDropdown('catalog');
+    if (!hoveredMegaCatId && categories.length > 0) {
+      setHoveredMegaCatId(categories[0].id);
+    }
+  }, [hoveredMegaCatId, categories]);
+
+  const handleCatalogMouseLeave = useCallback(() => {
+    if (catHoverTimerRef.current) {
+      clearTimeout(catHoverTimerRef.current);
+      catHoverTimerRef.current = null;
+    }
+    if (closeDropdownTimerRef.current) {
+      clearTimeout(closeDropdownTimerRef.current);
+    }
+    closeDropdownTimerRef.current = setTimeout(() => {
+      setActiveDropdown(null);
+    }, 280);
+  }, []);
+
+  const handleMegaCategoryHover = useCallback((catId) => {
+    if (catHoverTimerRef.current) {
+      clearTimeout(catHoverTimerRef.current);
+    }
+    catHoverTimerRef.current = setTimeout(() => {
+      setHoveredMegaCatId(catId);
+    }, 110);
+  }, []);
+
+  const handleMegaCategoryLeave = useCallback(() => {
+    if (catHoverTimerRef.current) {
+      clearTimeout(catHoverTimerRef.current);
+      catHoverTimerRef.current = null;
+    }
+  }, []);
+
+  const handleNavClick = (page, section) => { clearCatalogTimers(); navigateTo(page, section); setMobileMenuOpen(false); setActiveDropdown(null); };
+  const handleCategoryClick = (cat) => { clearCatalogTimers(); onOpenCategory(cat); setActiveDropdown(null); setMobileMenuOpen(false); };
 
   const activeMegaCat = useMemo(() => {
     if (!categories || categories.length === 0) return null;
     return categories.find(c => c.id === hoveredMegaCatId) || categories[0];
   }, [categories, hoveredMegaCatId]);
 
-  const activeMegaCatProducts = useMemo(() => {
-    if (!activeMegaCat || !allProducts) return [];
-    const list = [];
+  const megaProductsByCategory = useMemo(() => {
+    const map = new Map();
+    if (!allProducts) return map;
     for (let i = 0; i < allProducts.length; i++) {
-      if (allProducts[i].category_id === activeMegaCat.id) {
-        list.push(allProducts[i]);
-        if (list.length >= 6) break;
+      const p = allProducts[i];
+      const catId = p.category_id;
+      if (!catId) continue;
+      let list = map.get(catId);
+      if (!list) {
+        list = [];
+        map.set(catId, list);
+      }
+      if (list.length < 6) {
+        list.push(p);
       }
     }
-    return list;
-  }, [activeMegaCat, allProducts]);
+    return map;
+  }, [allProducts]);
+
+  const activeMegaCatProducts = useMemo(() => {
+    if (!activeMegaCat) return [];
+    return megaProductsByCategory.get(activeMegaCat.id) || [];
+  }, [activeMegaCat, megaProductsByCategory]);
 
   const handleSearchChange = (e) => {
     const value = e.target.value;
@@ -1646,12 +1719,12 @@ function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenCart, on
     }
   };
 
-  const handleSuggestionClick = (prod) => { setSearchTerm(''); setSuggestions([]); setMobileMenuOpen(false); setActiveDropdown(null); onProductSearchSelect(prod); };
+  const handleSuggestionClick = (prod) => { clearCatalogTimers(); setSearchTerm(''); setSuggestions([]); setMobileMenuOpen(false); setActiveDropdown(null); onProductSearchSelect(prod); };
 
   const chamferClipSm = 'polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px)';
 
   return (
-    <nav className={`fixed w-full z-[100] transition-all duration-300 ${isNavbarSolid ? "bg-white/95 dark:bg-slate-900/95 backdrop-blur-md shadow-sm py-3.5 border-b border-slate-100 dark:border-slate-800" : "bg-transparent py-5"}`}>
+    <nav className={`fixed w-full z-[100] transition-colors duration-200 ${isNavbarCompact ? 'py-3.5' : 'py-5'} ${isNavbarSolid ? "bg-white/95 dark:bg-slate-900/95 backdrop-blur-md shadow-sm border-b border-slate-100 dark:border-slate-800" : "bg-transparent"}`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center gap-4">
         
         <button onClick={() => handleNavClick('inicio', 'inicio')} className="flex flex-col items-start group text-left focus:outline-none flex-shrink-0">
@@ -1660,22 +1733,17 @@ function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenCart, on
         </button>
         
         <div className="hidden lg:flex items-center space-x-1">
-          <button onClick={() => handleNavClick('inicio', 'inicio')} className={`px-4 py-2 text-xs font-bold uppercase tracking-widest transition-all hover:text-blue-600 ${isNavbarSolid ? 'text-slate-700 dark:text-slate-200' : 'text-white'}`}>Inicio</button>
+          <button onClick={() => handleNavClick('inicio', 'inicio')} className={`px-4 py-2 text-xs font-bold uppercase tracking-widest transition-colors hover:text-blue-600 ${isNavbarSolid ? 'text-slate-700 dark:text-slate-200' : 'text-white'}`}>Inicio</button>
           
           {/* ITEM CATÁLOGO CON MEGA-MENÚ A PANTALLA COMPLETA AL PASAR EL MOUSE */}
           <div
             className="static"
-            onMouseEnter={() => {
-              setActiveDropdown('catalog');
-              if (!hoveredMegaCatId && categories.length > 0) {
-                setHoveredMegaCatId(categories[0].id);
-              }
-            }}
-            onMouseLeave={() => setActiveDropdown(null)}
+            onMouseEnter={handleCatalogMouseEnter}
+            onMouseLeave={handleCatalogMouseLeave}
           >
             <button
               onClick={() => handleNavClick('inicio', 'catálogo')}
-              className={`px-5 py-2 text-xs font-extrabold uppercase tracking-widest transition-all flex items-center gap-1.5 ${
+              className={`px-5 py-2 text-xs font-extrabold uppercase tracking-widest transition-colors flex items-center gap-1.5 ${
                 activeDropdown === 'catalog'
                   ? 'bg-amber-400 text-slate-950 -skew-x-12 shadow-md'
                   : isNavbarSolid
@@ -1684,156 +1752,176 @@ function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenCart, on
               }`}
             >
               <span className={`flex items-center gap-1.5 ${activeDropdown === 'catalog' ? 'skew-x-12' : ''}`}>
-                Catálogo <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-300 ${activeDropdown === 'catalog' ? 'rotate-180' : ''}`} />
+                Catálogo <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${activeDropdown === 'catalog' ? 'rotate-180' : ''}`} />
               </span>
             </button>
 
-            {/* MEGA-MENÚ EXPANDIDO EN TODA LA PANTALLA (Estilo imagen 2) */}
+            {/* MEGA-MENÚ EXPANDIDO EN TODA LA PANTALLA (Optimizado para notebooks y compatible con Windows 7) */}
             <div
-              className={`absolute top-full left-0 w-full bg-[#070b14]/98 backdrop-blur-xl text-white border-t-2 border-amber-400 shadow-[0_35px_70px_rgba(0,0,0,0.85)] transition-all duration-300 origin-top before:content-[''] before:absolute before:-top-6 before:left-0 before:w-full before:h-6 ${
+              onMouseEnter={handleCatalogMouseEnter}
+              onMouseLeave={handleCatalogMouseLeave}
+              className={`absolute top-full left-0 w-full z-[105] transition-[opacity,transform,visibility] duration-150 ease-out origin-top will-change-[opacity,transform] ${
                 activeDropdown === 'catalog'
                   ? 'opacity-100 visible translate-y-0 pointer-events-auto'
-                  : 'opacity-0 invisible -translate-y-2 pointer-events-none'
+                  : 'opacity-0 invisible -translate-y-1.5 pointer-events-none'
               }`}
-              style={{ clipPath: 'polygon(0 0, 100% 0, 100% calc(100% - 18px), calc(100% - 18px) 100%, 18px 100%, 0 calc(100% - 18px))' }}
             >
-              {/* Detalle geométrico amarillo superior derecho */}
+              {/* Puente invisible superior sin recortar para evitar que el menú se cierre en el trayecto hacia los productos */}
+              <div className="absolute -top-6 left-0 w-full h-6 bg-transparent" aria-hidden="true" />
+
               <div
-                className="hidden md:block absolute top-0 right-0 w-16 h-10 bg-amber-400 pointer-events-none"
-                style={{ clipPath: 'polygon(35% 0, 100% 0, 100% 100%, 0 100%)' }}
-              ></div>
+                className="w-full bg-[#070b14] text-white border-t-2 border-amber-400 shadow-2xl relative"
+                style={{
+                  backgroundColor: '#070b14',
+                  clipPath: 'polygon(0 0, 100% 0, 100% calc(100% - 18px), calc(100% - 18px) 100%, 18px 100%, 0 calc(100% - 18px))'
+                }}
+              >
+                {/* Detalle geométrico amarillo superior derecho */}
+                <div
+                  className="hidden md:block absolute top-0 right-0 w-16 h-10 bg-amber-400 pointer-events-none"
+                  style={{ clipPath: 'polygon(35% 0, 100% 0, 100% 100%, 0 100%)' }}
+                ></div>
 
-              <div className="max-w-7xl mx-auto px-6 lg:px-10 py-8">
-                <div className="grid grid-cols-12 gap-8 min-h-[340px]">
-                  
-                  {/* COLUMNA IZQUIERDA: LISTA DE CATEGORÍAS + BOTÓN VER TODOS */}
-                  <div className="col-span-4 lg:col-span-3 border-r border-slate-800/90 pr-4 flex flex-col justify-between">
-                    <div className="max-h-[44vh] overflow-y-auto pr-2 space-y-1 custom-scrollbar">
-                      {categories.map((cat) => {
-                        const isCatActive = activeMegaCat?.id === cat.id;
-                        return (
-                          <button
-                            key={cat.id}
-                            onMouseEnter={() => setHoveredMegaCatId(cat.id)}
-                            onClick={() => handleCategoryClick(cat)}
-                            className={`w-full text-left px-4 py-2.5 text-xs uppercase tracking-wider font-exo transition-all flex items-center justify-between ${
-                              isCatActive
-                                ? 'bg-amber-400 text-slate-950 font-black shadow-sm'
-                                : 'text-slate-200 hover:text-amber-400 font-bold hover:bg-white/5'
-                            }`}
-                            style={isCatActive ? { clipPath: 'polygon(0 0, 100% 0, 95% 100%, 0 100%)' } : undefined}
-                          >
-                            <span className="truncate pr-2">{cat.name}</span>
-                            <ChevronRight className={`w-3.5 h-3.5 flex-shrink-0 transition-transform ${isCatActive ? 'translate-x-0 opacity-100' : '-translate-x-1 opacity-0'}`} />
-                          </button>
-                        );
-                      })}
-                      {categories.length === 0 && (
-                        <div className="text-xs p-4 text-slate-400">Cargando categorías...</div>
-                      )}
+                <div className="max-w-7xl mx-auto px-6 lg:px-10 py-8">
+                  <div className="grid grid-cols-12 gap-8 min-h-[340px]">
+                    
+                    {/* COLUMNA IZQUIERDA: LISTA DE CATEGORÍAS + BOTÓN VER TODOS */}
+                    <div className="col-span-4 lg:col-span-3 border-r border-slate-800 pr-4 flex flex-col justify-between">
+                      <div className="max-h-[44vh] overflow-y-auto pr-2 space-y-1 custom-scrollbar">
+                        {categories.map((cat) => {
+                          const isCatActive = activeMegaCat?.id === cat.id;
+                          return (
+                            <button
+                              key={cat.id}
+                              onMouseEnter={() => handleMegaCategoryHover(cat.id)}
+                              onMouseLeave={handleMegaCategoryLeave}
+                              onFocus={() => setHoveredMegaCatId(cat.id)}
+                              onClick={() => handleCategoryClick(cat)}
+                              className={`w-full text-left px-4 py-2.5 text-xs uppercase tracking-wider font-exo transition-colors flex items-center justify-between ${
+                                isCatActive
+                                  ? 'bg-amber-400 text-slate-950 font-black shadow-sm'
+                                  : 'text-slate-200 hover:text-amber-400 font-bold hover:bg-slate-900'
+                              }`}
+                              style={isCatActive ? { clipPath: 'polygon(0 0, 100% 0, 95% 100%, 0 100%)' } : undefined}
+                            >
+                              <span className="truncate pr-2">{cat.name}</span>
+                              <ChevronRight className={`w-3.5 h-3.5 flex-shrink-0 transition-transform ${isCatActive ? 'translate-x-0 opacity-100' : '-translate-x-1 opacity-0'}`} />
+                            </button>
+                          );
+                        })}
+                        {categories.length === 0 && (
+                          <div className="text-xs p-4 text-slate-400">Cargando categorías...</div>
+                        )}
+                      </div>
+
+                      <div className="pt-5 mt-4 border-t border-slate-800">
+                        <button
+                          onClick={() => handleNavClick('inicio', 'catálogo')}
+                          className="w-full bg-amber-400 hover:bg-amber-300 text-slate-950 font-black uppercase tracking-wider text-[11px] py-3.5 px-5 text-center transition-colors shadow-md"
+                          style={{ clipPath: 'polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px)' }}
+                        >
+                          Ver todos los productos
+                        </button>
+                      </div>
                     </div>
 
-                    <div className="pt-5 mt-4 border-t border-slate-800/90">
-                      <button
-                        onClick={() => handleNavClick('inicio', 'catálogo')}
-                        className="w-full bg-amber-400 hover:bg-amber-300 text-slate-950 font-black uppercase tracking-wider text-[11px] py-3.5 px-5 text-center transition-colors shadow-md"
-                        style={{ clipPath: 'polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px)' }}
-                      >
-                        Ver todos los productos
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* COLUMNA DERECHA: DETALLE DE LA CATEGORÍA SELECCIONADA Y VISTA PREVIA */}
-                  <div className="col-span-8 lg:col-span-9 pl-2 flex flex-col justify-between">
-                    {activeMegaCat ? (
-                      <>
-                        <div>
-                          <div className="flex flex-wrap items-baseline justify-between gap-4 border-b border-slate-800/80 pb-4 mb-6">
-                            <div>
-                              <h3 className="text-2xl lg:text-3xl font-black font-exo uppercase tracking-wider text-white">
-                                {activeMegaCat.name}
-                              </h3>
-                              <button
-                                onClick={() => handleCategoryClick(activeMegaCat)}
-                                className="text-amber-400 hover:text-amber-300 text-xs font-bold inline-flex items-center gap-1.5 mt-1.5 group/ver transition-colors"
-                              >
-                                Ver todo <span className="group-hover/ver:translate-x-1 transition-transform">→</span>
-                              </button>
-                            </div>
-                            {activeMegaCat.description && (
-                              <p className="text-xs text-slate-400 font-light max-w-md">
-                                {activeMegaCat.description}
-                              </p>
-                            )}
-                          </div>
-
-                          <div className="grid grid-cols-12 gap-6 items-stretch">
-                            {/* Lista rápida de productos destacados de esta categoría */}
-                            <div className="col-span-7 grid grid-cols-2 gap-3 content-start">
-                              {activeMegaCatProducts.length > 0 ? (
-                                activeMegaCatProducts.map((prod) => (
-                                  <button
-                                    key={prod.sku_code}
-                                    onClick={() => handleSuggestionClick(prod)}
-                                    className="text-left p-3 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-slate-800 hover:border-amber-400/50 transition-all group/mprod flex items-center gap-3"
-                                  >
-                                    <div className="w-11 h-11 rounded-lg bg-slate-950 border border-slate-800 overflow-hidden flex-shrink-0 flex items-center justify-center">
-                                      <ProductImage sku={prod.sku_code} imageUrl={prod.image_url} alt={prod.name} className="w-full h-full object-cover" />
-                                    </div>
-                                    <div className="min-w-0 flex-1">
-                                      <div className="text-[9px] font-bold text-amber-400 uppercase tracking-wider truncate">
-                                        {prod.brand?.name || 'Multimarca'} • {prod.sku_code}
-                                      </div>
-                                      <div className="text-xs font-semibold text-slate-200 group-hover/mprod:text-white truncate">
-                                        {prod.name}
-                                      </div>
-                                    </div>
-                                  </button>
-                                ))
-                              ) : (
-                                <div className="col-span-2 p-6 rounded-2xl bg-slate-900/50 border border-slate-800/80 text-slate-400 text-xs">
-                                  Explorá todos los repuestos disponibles en <strong className="text-white">{activeMegaCat.name}</strong> haciendo clic en &ldquo;Ver todo&rdquo;.
-                                </div>
+                    {/* COLUMNA DERECHA: DETALLE DE LA CATEGORÍA SELECCIONADA Y VISTA PREVIA */}
+                    <div className="col-span-8 lg:col-span-9 pl-2 flex flex-col justify-between">
+                      {activeMegaCat ? (
+                        <>
+                          <div>
+                            <div className="flex flex-wrap items-baseline justify-between gap-4 border-b border-slate-800 pb-4 mb-6">
+                              <div>
+                                <h3 className="text-2xl lg:text-3xl font-black font-exo uppercase tracking-wider text-white">
+                                  {activeMegaCat.name}
+                                </h3>
+                                <button
+                                  onClick={() => handleCategoryClick(activeMegaCat)}
+                                  className="text-amber-400 hover:text-amber-300 text-xs font-bold inline-flex items-center gap-1.5 mt-1.5 group/ver transition-colors"
+                                >
+                                  Ver todo <span className="group-hover/ver:translate-x-1 transition-transform">→</span>
+                                </button>
+                              </div>
+                              {activeMegaCat.description && (
+                                <p className="text-xs text-slate-400 font-light max-w-md">
+                                  {activeMegaCat.description}
+                                </p>
                               )}
                             </div>
 
-                            {/* Tarjeta visual representativa de la categoría */}
-                            <div
-                              onClick={() => handleCategoryClick(activeMegaCat)}
-                              className="col-span-5 relative rounded-2xl overflow-hidden cursor-pointer group/catbanner border border-blue-500/30 min-h-[210px] flex items-center justify-center"
-                            >
-                              <img
-                                src={getCategoryVisualImage(activeMegaCat)}
-                                alt={activeMegaCat.name}
-                                className="absolute inset-0 w-full h-full object-cover group-hover/catbanner:scale-110 transition-transform duration-700"
-                              />
-                              <div className="absolute inset-0 bg-gradient-to-t from-[#030917]/95 via-[#07193d]/65 to-[#040d21]/75" />
-                              <div className="relative z-10 text-center p-5">
-                                <span className="inline-block bg-amber-400 text-slate-950 text-[9px] font-black uppercase tracking-widest px-2.5 py-0.5 -skew-x-12 mb-2">
-                                  <span className="inline-block skew-x-12">Categoría</span>
-                                </span>
-                                <h4 className="text-xl font-black font-exo uppercase tracking-wider text-white drop-shadow-md">
-                                  {activeMegaCat.name}
-                                </h4>
-                                <span className="mt-3 inline-flex items-center gap-1 text-[11px] font-bold text-cyan-300 group-hover/catbanner:text-amber-400 transition-colors">
-                                  Ingresar a la sección <ChevronRight className="w-3.5 h-3.5" />
-                                </span>
+                            <div className="grid grid-cols-12 gap-6 items-stretch">
+                              {/* Lista rápida de productos destacados de esta categoría */}
+                              <div className="col-span-7 grid grid-cols-2 gap-3 content-start">
+                                {activeMegaCatProducts.length > 0 ? (
+                                  activeMegaCatProducts.map((prod) => (
+                                    <button
+                                      key={prod.sku_code}
+                                      type="button"
+                                      onClick={() => handleSuggestionClick(prod)}
+                                      className="text-left p-3 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-amber-400 transition-colors group/mprod flex items-center gap-3 cursor-pointer"
+                                      style={{ backgroundColor: '#0f172a' }}
+                                    >
+                                      <div className="w-11 h-11 rounded-lg bg-slate-950 border border-slate-800 overflow-hidden flex-shrink-0 flex items-center justify-center" style={{ backgroundColor: '#020617' }}>
+                                        <ProductImage sku={prod.sku_code} imageUrl={prod.image_url} alt={prod.name} className="w-full h-full object-cover" />
+                                      </div>
+                                      <div className="min-w-0 flex-1">
+                                        <div className="text-[9px] font-bold text-amber-400 uppercase tracking-wider truncate">
+                                          {prod.brand?.name || 'Multimarca'} • {prod.sku_code}
+                                        </div>
+                                        <div className="text-xs font-semibold text-slate-200 group-hover/mprod:text-white truncate">
+                                          {prod.name}
+                                        </div>
+                                      </div>
+                                    </button>
+                                  ))
+                                ) : (
+                                  <div className="col-span-2 p-6 rounded-2xl bg-slate-900 border border-slate-800 text-slate-400 text-xs" style={{ backgroundColor: '#0f172a' }}>
+                                    Explorá todos los repuestos disponibles en <strong className="text-white">{activeMegaCat.name}</strong> haciendo clic en &ldquo;Ver todo&rdquo;.
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Tarjeta visual representativa de la categoría */}
+                              <div
+                                onClick={() => handleCategoryClick(activeMegaCat)}
+                                className="col-span-5 relative rounded-2xl overflow-hidden cursor-pointer group/catbanner border border-blue-500/30 min-h-[210px] flex items-center justify-center bg-[#030917]"
+                                style={{ backgroundColor: '#030917' }}
+                              >
+                                <img
+                                  src={getCategoryVisualImage(activeMegaCat)}
+                                  alt={activeMegaCat.name}
+                                  className="absolute inset-0 w-full h-full object-cover group-hover/catbanner:scale-105 transition-transform duration-500"
+                                />
+                                <div
+                                  className="absolute inset-0"
+                                  style={{ background: 'linear-gradient(to top, rgba(3, 9, 23, 0.95) 0%, rgba(7, 25, 61, 0.65) 50%, rgba(4, 13, 33, 0.75) 100%)' }}
+                                />
+                                <div className="relative z-10 text-center p-5">
+                                  <span className="inline-block bg-amber-400 text-slate-950 text-[9px] font-black uppercase tracking-widest px-2.5 py-0.5 -skew-x-12 mb-2">
+                                    <span className="inline-block skew-x-12">Categoría</span>
+                                  </span>
+                                  <h4 className="text-xl font-black font-exo uppercase tracking-wider text-white drop-shadow-md">
+                                    {activeMegaCat.name}
+                                  </h4>
+                                  <span className="mt-3 inline-flex items-center gap-1 text-[11px] font-bold text-cyan-300 group-hover/catbanner:text-amber-400 transition-colors">
+                                    Ingresar a la sección <ChevronRight className="w-3.5 h-3.5" />
+                                  </span>
+                                </div>
                               </div>
                             </div>
                           </div>
-                        </div>
-                      </>
-                    ) : null}
-                  </div>
+                        </>
+                      ) : null}
+                    </div>
 
+                  </div>
                 </div>
               </div>
             </div>
           </div>
 
-          <button onClick={() => handleNavClick('nosotros')} className={`px-4 py-2 text-xs font-bold uppercase tracking-widest transition-all hover:text-blue-600 ${isNavbarSolid ? 'text-slate-700 dark:text-slate-200' : 'text-white'}`}>Nosotros</button>
-          <button onClick={() => handleNavClick('inicio', 'contacto')} className={`px-4 py-2 text-xs font-bold uppercase tracking-widest transition-all hover:text-blue-600 ${isNavbarSolid ? 'text-slate-700 dark:text-slate-200' : 'text-white'}`}>Contacto</button>      
+          <button onClick={() => handleNavClick('nosotros')} className={`px-4 py-2 text-xs font-bold uppercase tracking-widest transition-colors hover:text-blue-600 ${isNavbarSolid ? 'text-slate-700 dark:text-slate-200' : 'text-white'}`}>Nosotros</button>
+          <button onClick={() => handleNavClick('inicio', 'contacto')} className={`px-4 py-2 text-xs font-bold uppercase tracking-widest transition-colors hover:text-blue-600 ${isNavbarSolid ? 'text-slate-700 dark:text-slate-200' : 'text-white'}`}>Contacto</button>      
         </div>
 
         <div className="flex items-center gap-2 md:gap-3 flex-grow justify-end relative z-50">
@@ -2103,7 +2191,7 @@ function TrustBadges() {
   const trackItems = [...badges, ...badges];
 
   return (
-    <div className="bg-[#0b1120] text-white py-3.5 relative z-20 overflow-hidden pause-on-hover select-none">
+    <div className="bg-[#0b1120] text-white py-3.5 relative z-20 overflow-hidden pause-on-hover select-none border-b-[3px] border-blue-600">
       <div className="marquee-container animate-marquee-left">
         {[0, 1].map((copyIndex) => (
           <div
@@ -2590,6 +2678,10 @@ function MediaShowcaseSection({ navigateTo }) {
 function CatalogSection({ categories, allProducts, onOpenCategory, onProductSearchSelect }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [suggestions, setSuggestions] = useState([]);
+  const [isCatalogExpanded, setIsCatalogExpanded] = useState(false);
+
+  const INITIAL_VISIBLE_CATEGORIES = 6;
+  const visibleCategories = isCatalogExpanded ? categories : categories.slice(0, INITIAL_VISIBLE_CATEGORIES);
 
   const handleSearchChange = (e) => {
     const value = e.target.value;
@@ -2614,15 +2706,7 @@ function CatalogSection({ categories, allProducts, onOpenCategory, onProductSear
   const chamferClipLg = 'polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px)';
 
   return (
-    <section id="catálogo" className="pt-20 pb-16 md:pt-28 md:pb-24 bg-white dark:bg-slate-900 relative z-20 transition-colors duration-300">
-      {/* Divisor diagonal superior desde la barra de beneficios */}
-      <div className="absolute top-0 left-0 w-full overflow-hidden leading-none pointer-events-none z-10 -mt-[1px]">
-        <svg viewBox="0 0 1440 70" preserveAspectRatio="none" className="w-full h-7 sm:h-10 md:h-14 block">
-          <polygon points="0,0 1440,0 0,70" className="fill-[#0b1120]" />
-          <polygon points="0,62 1440,0 0,70" className="fill-blue-600/80" />
-        </svg>
-      </div>
-
+    <section id="catálogo" className="pt-16 pb-16 md:pt-24 md:pb-24 bg-white dark:bg-slate-900 relative z-20 transition-colors duration-300">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center mb-10 md:mb-16 relative z-30">
         <RevealOnScroll>
           <PremiumTitle dark={true} className="text-2xl sm:text-3xl md:text-4xl font-bold mb-2 uppercase tracking-widest">Nuestro Catálogo</PremiumTitle>
@@ -2698,11 +2782,12 @@ function CatalogSection({ categories, allProducts, onOpenCategory, onProductSear
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* TARJETAS DE CATEGORÍAS CON IMAGEN REPRESENTATIVA DE FONDO (Estilo Imagen 5) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
-            {categories.map((cat, idx) => (
+            {visibleCategories.map((cat, idx) => (
               <RevealOnScroll key={cat.id} delay={`delay-${(idx % 3) * 100}`}>
                 <article 
                   onClick={() => onOpenCategory(cat)} 
                   className="relative h-72 sm:h-80 md:h-[380px] rounded-xl overflow-hidden border border-slate-900/15 dark:border-blue-500/25 shadow-lg hover:shadow-[0_20px_45px_rgba(13,45,108,0.45)] hover:-translate-y-2 transition-all duration-500 cursor-pointer group flex items-center justify-center text-center bg-[#030917]"
+                  style={{ backgroundColor: '#030917' }}
                 >
                   {/* Imagen de fondo representativa de la categoría */}
                   <img
@@ -2713,7 +2798,10 @@ function CatalogSection({ categories, allProducts, onOpenCategory, onProductSear
                   />
 
                   {/* Filtro oscuro azulado profundo estilo estudio automotriz */}
-                  <div className="absolute inset-0 bg-gradient-to-b from-[#040e24]/80 via-[#071c47]/55 to-[#020714]/90 group-hover:via-[#071c47]/35 transition-all duration-500" />
+                  <div
+                    className="absolute inset-0 transition-opacity duration-500"
+                    style={{ background: 'linear-gradient(to bottom, rgba(4, 14, 36, 0.8) 0%, rgba(7, 28, 71, 0.55) 50%, rgba(2, 7, 20, 0.9) 100%)' }}
+                  />
 
                   {/* Líneas geométricas azules neón en la esquina superior izquierda (como en la Imagen 5) */}
                   <svg
@@ -2757,6 +2845,38 @@ function CatalogSection({ categories, allProducts, onOpenCategory, onProductSear
               </RevealOnScroll>
             ))}
           </div>
+
+          {categories.length > INITIAL_VISIBLE_CATEGORIES && (
+            <div className="mt-10 md:mt-12 flex justify-center">
+              <button
+                type="button"
+                onClick={() => {
+                  if (isCatalogExpanded) {
+                    setIsCatalogExpanded(false);
+                    const catalogEl = document.getElementById('catálogo');
+                    if (catalogEl) {
+                      catalogEl.scrollIntoView({ behavior: 'smooth' });
+                    }
+                  } else {
+                    setIsCatalogExpanded(true);
+                  }
+                }}
+                className="group inline-flex items-center gap-3 bg-slate-900 hover:bg-blue-600 dark:bg-amber-400 dark:hover:bg-amber-300 text-white dark:text-slate-950 font-black uppercase tracking-widest text-xs sm:text-sm px-8 py-4 transition-all duration-300 shadow-lg hover:shadow-xl focus:outline-none cursor-pointer"
+                style={{ clipPath: 'polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px)' }}
+              >
+                <span>
+                  {isCatalogExpanded
+                    ? 'Plegar catálogo'
+                    : `Ver todas las categorías (+${categories.length - INITIAL_VISIBLE_CATEGORIES})`}
+                </span>
+                <ChevronDown
+                  className={`w-4 h-4 sm:w-5 sm:h-5 transition-transform duration-300 ${
+                    isCatalogExpanded ? 'rotate-180' : 'group-hover:translate-y-0.5'
+                  }`}
+                />
+              </button>
+            </div>
+          )}
         </div>
       )}
     </section>
