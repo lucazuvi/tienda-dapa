@@ -145,36 +145,33 @@ function TiltCard({ children, className = "" }) {
 /* ==========================================================================
    COMPONENTES DE PRODUCTO Y MODALES (Tienda Pública)
    ========================================================================== */
-function ProductImage({ sku, imageUrl, alt, className = "" }) {
+function ProductImage({ sku, imageUrl, alt, categoryName = "", className = "" }) {
   const [imgError, setImgError] = useState(false);
 
   useEffect(() => {
     setImgError(false);
   }, [imageUrl, sku]);
 
-  if (!imageUrl || imgError) {
-    return (
-      <div className={`flex flex-col items-center justify-center bg-slate-100 dark:bg-slate-900 text-slate-400 dark:text-slate-600 p-4 select-none ${className}`}>
-        <Package className="w-12 h-12 mb-1.5 opacity-60 stroke-[1.5]" />
-        <span className="text-[9px] font-bold uppercase tracking-widest opacity-75 font-exo text-center">
-          {sku || 'D.A.P.A'}
-        </span>
-      </div>
-    );
-  }
+  // Si el producto tiene foto propia y no dio error de carga, usamos esa;
+  // de lo contrario, asignamos automáticamente la imagen genérica según su categoría o nombre
+  const fallbackCategoryImg = getCategoryVisualImage({
+    name: `${categoryName || ''} ${alt || ''}`
+  });
+
+  const finalSrc = !imageUrl || imgError ? fallbackCategoryImg : imageUrl;
 
   return (
     <img
-      src={imageUrl}
+      src={finalSrc}
       alt={alt || sku || 'Repuesto'}
-      onError={() => setImgError(true)}
+      onError={() => {
+        if (!imgError) setImgError(true);
+      }}
       className={className}
       loading="lazy"
     />
   );
 }
-   
-
 
 function QuickViewModal({ product, categoryName, isOpen, onClose, onAddToCart }) {
   if (!isOpen || !product) return null;
@@ -190,12 +187,16 @@ function QuickViewModal({ product, categoryName, isOpen, onClose, onAddToCart })
         </button>
 
         <div className="w-full md:w-1/2 bg-slate-50 dark:bg-slate-900 h-48 md:h-auto relative flex items-center justify-center border-b md:border-b-0 md:border-r border-slate-200 dark:border-slate-700">
-           {product.image_url ? (
-             <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
-           ) : (
-             <Package className="w-16 h-16 text-slate-300 dark:text-slate-700" />
-           )}
-           <span className="absolute bottom-4 left-4 text-xs font-bold tracking-widest uppercase text-white bg-slate-900/70 backdrop-blur-sm px-3 py-1.5 rounded-none font-exo">Cód: {product.sku_code}</span>
+          <ProductImage
+            sku={product.sku_code}
+            imageUrl={product.image_url}
+            alt={product.name}
+            categoryName={resolvedCategory}
+            className="w-full h-full object-cover"
+          />
+          <span className="absolute bottom-4 left-4 text-xs font-bold tracking-widest uppercase text-white bg-slate-900/70 backdrop-blur-sm px-3 py-1.5 rounded-none font-exo">
+            Cód: {product.sku_code}
+          </span>
         </div>
 
         <div className="w-full md:w-1/2 p-6 md:p-8 flex flex-col">
@@ -1681,41 +1682,49 @@ function matchesProductQuery(prod, rawQuery) {
    ========================================================================== */
 function getCategoryVisualImage(category) {
   if (category?.image_url) return category.image_url;
-  const rawName = (category?.name || '')
+  const rawName = (typeof category === 'string' ? category : (category?.name || ''))
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '');
 
-  if (rawName.includes('cristal')) {
-    return 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=900&q=80';
-  }
-  if (rawName.includes('parabrisa') || rawName.includes('vidrio') || rawName.includes('luneta')) {
+  // 1. Cristales, Parabrisas y Lunetas
+  if (rawName.includes('cristal') || rawName.includes('parabrisa') || rawName.includes('luneta') || rawName.includes('puerta delantera') || rawName.includes('puerta trasera') || rawName.includes('aleta')) {
     return 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=900&q=80';
   }
-  if (rawName.includes('optica') || rawName.includes('faro') || rawName.includes('iluminacion') || rawName.includes('led') || rawName.includes('luz')) {
+  // 2. Ópticas, Faros e Iluminación
+  if (rawName.includes('optica') || rawName.includes('lente') || rawName.includes('faro') || rawName.includes('iluminacion') || rawName.includes('lampara') || rawName.includes('led') || rawName.includes('luz')) {
     return 'https://images.unsplash.com/photo-1544829099-b9a0c07fad1a?auto=format&fit=crop&w=900&q=80';
   }
-  if (rawName.includes('freno') || rawName.includes('pastilla') || rawName.includes('disco') || rawName.includes('embrague')) {
-    return 'https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=900&q=80';
-  }
-  if (rawName.includes('chapa') || rawName.includes('carroceria') || rawName.includes('paragolpe') || rawName.includes('capot') || rawName.includes('guardabarro')) {
-    return 'https://images.unsplash.com/photo-1618843479313-40f8afb4b4d8?auto=format&fit=crop&w=900&q=80';
-  }
-  if (rawName.includes('espejo') || rawName.includes('retrovisor')) {
+  // 3. Espejos y Lunas
+  if (rawName.includes('espejo') || rawName.includes('retrovisor') || rawName.includes('luna') || rawName.includes('cacha')) {
     return 'https://images.unsplash.com/photo-1502877338535-766e1452684a?auto=format&fit=crop&w=900&q=80';
   }
-  if (rawName.includes('cerrajeria') || rawName.includes('cerradura') || rawName.includes('manija') || rawName.includes('llave')) {
+  // 4. Cerraduras, Cerrajería, Manijas y Alzacristales
+  if (rawName.includes('cerraj') || rawName.includes('cerradur') || rawName.includes('cilindro') || rawName.includes('manij') || rawName.includes('tirador') || rawName.includes('alzacristal') || rawName.includes('levantavidrio') || rawName.includes('maquina') || rawName.includes('coliza')) {
     return 'https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?auto=format&fit=crop&w=900&q=80';
   }
-  if (rawName.includes('accesorio') || rawName.includes('alfombra') || rawName.includes('interior')) {
+  // 5. Paragolpes, Parrillas, Molduras, Chapas y Carrocería
+  if (rawName.includes('chapa') || rawName.includes('carroceria') || rawName.includes('parag') || rawName.includes('parrill') || rawName.includes('capot') || rawName.includes('guardabarro') || rawName.includes('guard.') || rawName.includes('frente') || rawName.includes('moldura') || rawName.includes('pasarr')) {
+    return 'https://images.unsplash.com/photo-1618843479313-40f8afb4b4d8?auto=format&fit=crop&w=900&q=80';
+  }
+  // 6. Tazas de Rueda, Insignias y Emblemas
+  if (rawName.includes('taza') || rawName.includes('insigni') || rawName.includes('emblem') || rawName.includes('llanta')) {
+    return 'https://images.unsplash.com/photo-1611859266238-4b98091d9d9b?auto=format&fit=crop&w=900&q=80';
+  }
+  // 7. Alfombras, Tapicería e Interior
+  if (rawName.includes('alfombr') || rawName.includes('interior') || rawName.includes('habitaculo') || rawName.includes('cubre baul') || rawName.includes('tapiz') || rawName.includes('cofia') || rawName.includes('pomo')) {
     return 'https://images.unsplash.com/photo-1511919884226-fd3cad34687c?auto=format&fit=crop&w=900&q=80';
   }
-  if (rawName.includes('toxic') || rawName.includes('shine') || rawName.includes('cosmetica') || rawName.includes('limpieza') || rawName.includes('estetica')) {
+  // 8. Refrigeración, Motor, Frenos, Suspensión y Fijaciones
+  if (rawName.includes('radiador') || rawName.includes('refrigeracion') || rawName.includes('motor') || rawName.includes('freno') || rawName.includes('amortiguador') || rawName.includes('bisagr') || rawName.includes('grampa') || rawName.includes('abrazadera') || rawName.includes('cable')) {
+    return 'https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=900&q=80';
+  }
+  // 9. Estética, Limpiaparabrisas y Burletes
+  if (rawName.includes('toxic') || rawName.includes('shine') || rawName.includes('limpia') || rawName.includes('escobill') || rawName.includes('burlet') || rawName.includes('goma')) {
     return 'https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?auto=format&fit=crop&w=900&q=80';
   }
-  if (rawName.includes('motor') || rawName.includes('distribucion') || rawName.includes('bateria') || rawName.includes('encendido') || rawName.includes('filtro')) {
-    return 'https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?auto=format&fit=crop&w=900&q=80';
-  }
+
+  // Fallback general automotriz
   return 'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=900&q=80';
 }
 
