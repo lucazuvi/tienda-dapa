@@ -401,17 +401,17 @@ function QuickViewModal({ product, categoryName, isOpen, onClose, onAddToCart })
             </ul>
           </div>
 
-          <div className="mb-4 p-3 rounded-none bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 text-[11px] text-slate-700 dark:text-slate-300 leading-snug space-y-1.5">
+          <div className="mb-4 p-3 rounded-none bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800/60 text-[11px] text-slate-700 dark:text-slate-200 leading-snug space-y-1.5">
             <div className="flex items-start gap-2">
               <Clock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
               <span>
-                <strong>Aviso de encargue:</strong> La mayoría de los repuestos se piden a distribuidora y <strong>tu pedido puede tener demora</strong>. Te confirmamos el plazo exacto al procesarlo.
+                <strong className="text-amber-900 dark:text-amber-300">Aviso de encargue:</strong> La mayoría de los repuestos se piden a distribuidora y <strong>tu pedido puede tener demora</strong>. Te confirmamos el plazo exacto al procesarlo.
               </span>
             </div>
             <div className="flex items-start gap-2 pt-1 border-t border-amber-200/60 dark:border-amber-800/40">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
               <span>
-                <strong>Reintegro 100% garantizado:</strong> Si abonás con tarjeta o pago directo y decidís no esperar la demora, te reintegramos el total de tu dinero.
+                <strong className="text-emerald-800 dark:text-emerald-300">Reintegro 100% garantizado:</strong> Si abonás con tarjeta o pago directo y decidís no esperar la demora, te reintegramos el total de tu dinero.
               </span>
             </div>
           </div>
@@ -1155,7 +1155,7 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
           </div>
 
           {/* AVISO PERMANENTE DE DEMORA POR ENCARGUE Y GARANTÍA DE REINTEGRO */}
-          <div className="mb-6 p-4 rounded-none bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 text-xs text-slate-700 dark:text-slate-300 space-y-2">
+          <div className="mb-6 p-4 rounded-none bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800/60 text-xs text-slate-700 dark:text-slate-200 space-y-2">
             <div className="flex items-start gap-2.5">
               <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
               <span>
@@ -2379,7 +2379,7 @@ function CustomerOrdersModal({ isOpen, onClose, currentUser }) {
           ) : (
             /* LISTA PRINCIPAL DE PEDIDOS DEL USUARIO LOGUEADO */
             <>
-              <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 text-xs text-slate-700 dark:text-slate-300 space-y-1.5">
+              <div className="p-4 bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800/60 text-xs text-slate-700 dark:text-slate-200 space-y-1.5">
                 <p className="font-bold text-amber-900 dark:text-amber-300 uppercase tracking-wider flex items-center gap-2">
                   <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
                   Política de Encargue, Seguimiento y Reintegro 100%
@@ -4054,10 +4054,10 @@ function CatalogSection({ categories, allProducts, isLoadingData, onOpenCategory
           )}
 
           {/* AVISO CLARO DE PEDIDOS POR ENCARGUE Y REINTEGRO GARANTIZADO */}
-          <div className="max-w-3xl mx-auto bg-amber-50/80 dark:bg-amber-950/25 border border-amber-200 dark:border-amber-800/60 p-3.5 sm:p-4 rounded-none text-left flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="max-w-3xl mx-auto bg-amber-50/80 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800/60 p-3.5 sm:p-4 rounded-none text-left flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="flex items-start gap-2.5">
               <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
-              <p className="text-[11px] sm:text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
+              <p className="text-[11px] sm:text-xs text-slate-700 dark:text-slate-200 leading-relaxed">
                 <strong className="text-amber-900 dark:text-amber-300 uppercase">Importante sobre plazos de entrega:</strong> La mayoría de las piezas de nuestro catálogo se traen <strong>por encargue directo de fábrica/distribuidora</strong>, por lo que tu pedido puede tener demora. Si abonás con tarjeta o Mercado Pago y preferís no esperar el plazo informado, <strong>te reintegramos el 100% de tu dinero de inmediato</strong>.
               </p>
             </div>
@@ -4429,18 +4429,18 @@ function CategoryDetailSection({ category, allProducts, isLoadingData, onBack, o
                 </div>
 
                 <div className="mb-8 space-y-2.5">
-                  <div className="p-4 rounded-none bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 flex items-start gap-3">
+                  <div className="p-4 rounded-none bg-amber-50/80 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800/60 flex items-start gap-3">
                     <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
-                    <div className="text-xs leading-relaxed text-slate-700 dark:text-slate-300">
+                    <div className="text-xs leading-relaxed text-slate-700 dark:text-slate-200">
                       <span className="font-bold uppercase tracking-wider text-amber-800 dark:text-amber-300 block mb-0.5">
                         Aviso importante: Demora por encargue
                       </span>
                       La mayoría de los repuestos de nuestro catálogo se solicitan <strong>por encargue directo a distribuidora</strong>, por lo que tu pedido puede demorar unos días hábiles en llegar al local o despacharse. Nuestro equipo te confirmará el plazo exacto tras tu compra.
                     </div>
                   </div>
-                  <div className="p-3.5 rounded-none bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 flex items-start gap-3">
+                  <div className="p-3.5 rounded-none bg-emerald-50/80 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800/60 flex items-start gap-3">
                     <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
-                    <div className="text-xs leading-relaxed text-slate-700 dark:text-slate-300">
+                    <div className="text-xs leading-relaxed text-slate-700 dark:text-slate-200">
                       <span className="font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300 block mb-0.5">
                         Garantía de Reintegro 100%
                       </span>

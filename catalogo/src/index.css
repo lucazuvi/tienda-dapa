@@ -49,10 +49,15 @@ body {
 
   --color-emerald-50: #ecfdf5;
   --color-emerald-100: #d1fae5;
+  --color-emerald-200: #a7f3d0;
+  --color-emerald-300: #6ee7b7;
   --color-emerald-400: #34d399;
   --color-emerald-500: #10b981;
   --color-emerald-600: #059669;
   --color-emerald-700: #047857;
+  --color-emerald-800: #065f46;
+  --color-emerald-900: #064e3b;
+  --color-emerald-950: #022c22;
 
   --color-green-50: #f0fdf4;
   --color-green-100: #dcfce7;
@@ -61,6 +66,7 @@ body {
   --color-green-600: #16a34a;
   --color-green-700: #15803d;
   --color-green-800: #166534;
+  --color-green-900: #14532d;
 
   --color-pink-50: #fdf2f8;
   --color-pink-300: #f9a8d4;
@@ -98,9 +104,11 @@ body {
   --color-purple-50: #faf5ff;
   --color-purple-100: #f3e8ff;
   --color-purple-200: #e9d5ff;
+  --color-purple-300: #d8b4fe;
   --color-purple-400: #c084fc;
   --color-purple-500: #a855f7;
   --color-purple-600: #9333ea;
+  --color-purple-700: #7e22ce;
   --color-purple-900: #581c87;
 
   --color-yellow-400: #facc15;
@@ -140,6 +148,7 @@ body {
 .bg-black\/40 { background-color: rgba(0, 0, 0, 0.40) !important; }
 
 .bg-slate-50\/80 { background-color: rgba(248, 250, 252, 0.80) !important; }
+.bg-slate-50\/60 { background-color: rgba(248, 250, 252, 0.60) !important; }
 .bg-slate-50\/50 { background-color: rgba(248, 250, 252, 0.50) !important; }
 .bg-slate-50\/30 { background-color: rgba(248, 250, 252, 0.30) !important; }
 .bg-slate-700\/50 { background-color: rgba(51, 65, 85, 0.50) !important; }
@@ -155,10 +164,14 @@ body {
 .bg-slate-950\/30 { background-color: rgba(2, 6, 23, 0.30) !important; }
 .bg-slate-950\/25 { background-color: rgba(2, 6, 23, 0.25) !important; }
 
+.bg-blue-50\/50 { background-color: rgba(239, 246, 255, 0.50) !important; }
 .bg-blue-50\/40 { background-color: rgba(239, 246, 255, 0.40) !important; }
 .bg-blue-50\/30 { background-color: rgba(239, 246, 255, 0.30) !important; }
 .bg-amber-50\/80 { background-color: rgba(255, 251, 235, 0.80) !important; }
 .bg-amber-400\/90 { background-color: rgba(251, 191, 36, 0.90) !important; }
+.bg-emerald-50\/80 { background-color: rgba(236, 253, 245, 0.80) !important; }
+.bg-emerald-50\/60 { background-color: rgba(236, 253, 245, 0.60) !important; }
+.bg-emerald-50\/50 { background-color: rgba(236, 253, 245, 0.50) !important; }
 .bg-green-500\/10 { background-color: rgba(34, 197, 94, 0.10) !important; }
 
 .border-white\/50 { border-color: rgba(255, 255, 255, 0.50) !important; }
@@ -175,25 +188,54 @@ body {
 .border-blue-500\/30 { border-color: rgba(59, 130, 246, 0.30) !important; }
 .border-blue-400\/30 { border-color: rgba(96, 165, 250, 0.30) !important; }
 .border-green-500\/30 { border-color: rgba(34, 197, 94, 0.30) !important; }
+.border-amber-200\/80 { border-color: rgba(253, 230, 138, 0.80) !important; }
+.border-amber-200\/70 { border-color: rgba(253, 230, 138, 0.70) !important; }
+.border-amber-200\/60 { border-color: rgba(253, 230, 138, 0.60) !important; }
 .hover\:border-amber-400\/50:hover { border-color: rgba(251, 191, 36, 0.50) !important; }
 
 .fill-blue-600\/80 { fill: rgba(37, 99, 235, 0.80) !important; }
 .fill-blue-600\/70 { fill: rgba(37, 99, 235, 0.70) !important; }
 .text-blue-100\/90 { color: rgba(219, 234, 254, 0.90) !important; }
 
+.dark .dark\:bg-slate-900 { background-color: #0f172a !important; }
+.dark .dark\:bg-slate-800 { background-color: #1e293b !important; }
 .dark .dark\:bg-slate-900\/95 { background-color: rgba(15, 23, 42, 0.95) !important; }
 .dark .dark\:bg-slate-900\/80 { background-color: rgba(15, 23, 42, 0.80) !important; }
+.dark .dark\:bg-slate-900\/70 { background-color: rgba(15, 23, 42, 0.70) !important; }
 .dark .dark\:bg-slate-900\/60 { background-color: rgba(15, 23, 42, 0.60) !important; }
 .dark .dark\:bg-slate-900\/50 { background-color: rgba(15, 23, 42, 0.50) !important; }
 .dark .dark\:bg-slate-900\/30 { background-color: rgba(15, 23, 42, 0.30) !important; }
 .dark .dark\:bg-slate-800\/80 { background-color: rgba(30, 41, 59, 0.80) !important; }
+.dark .dark\:bg-slate-800\/70 { background-color: rgba(30, 41, 59, 0.70) !important; }
 .dark .dark\:bg-slate-800\/50 { background-color: rgba(30, 41, 59, 0.50) !important; }
+.dark .dark\:bg-slate-700\/70 { background-color: rgba(51, 65, 85, 0.70) !important; }
 .dark .dark\:bg-slate-700\/60 { background-color: rgba(51, 65, 85, 0.60) !important; }
 .dark .dark\:bg-slate-700\/50 { background-color: rgba(51, 65, 85, 0.50) !important; }
 .dark .dark\:bg-blue-900\/40 { background-color: rgba(30, 58, 138, 0.40) !important; }
 .dark .dark\:bg-blue-900\/30 { background-color: rgba(30, 58, 138, 0.30) !important; }
 .dark .dark\:bg-blue-900\/20 { background-color: rgba(30, 58, 138, 0.20) !important; }
+.dark .dark\:bg-amber-950\/50 { background-color: rgba(69, 26, 3, 0.50) !important; }
+.dark .dark\:bg-amber-950\/40 { background-color: rgba(69, 26, 3, 0.40) !important; }
+.dark .dark\:bg-amber-950\/30 { background-color: rgba(69, 26, 3, 0.30) !important; }
+.dark .dark\:bg-amber-950\/25 { background-color: rgba(69, 26, 3, 0.25) !important; }
+.dark .dark\:bg-amber-900\/40 { background-color: rgba(120, 53, 15, 0.40) !important; }
+.dark .dark\:bg-amber-900\/30 { background-color: rgba(120, 53, 15, 0.30) !important; }
+.dark .dark\:bg-emerald-950\/50 { background-color: rgba(2, 44, 34, 0.50) !important; }
+.dark .dark\:bg-emerald-950\/40 { background-color: rgba(2, 44, 34, 0.40) !important; }
+.dark .dark\:bg-emerald-950\/30 { background-color: rgba(2, 44, 34, 0.30) !important; }
+.dark .dark\:bg-emerald-900\/40 { background-color: rgba(6, 78, 59, 0.40) !important; }
+.dark .dark\:bg-green-900\/40 { background-color: rgba(20, 83, 45, 0.40) !important; }
+.dark .dark\:bg-red-900\/40 { background-color: rgba(127, 29, 29, 0.40) !important; }
+.dark .dark\:bg-red-900\/30 { background-color: rgba(127, 29, 29, 0.30) !important; }
+.dark .dark\:bg-red-900\/25 { background-color: rgba(127, 29, 29, 0.25) !important; }
+.dark .dark\:bg-red-900\/20 { background-color: rgba(127, 29, 29, 0.20) !important; }
+.dark .dark\:bg-purple-900\/40 { background-color: rgba(88, 28, 135, 0.40) !important; }
 .dark .dark\:border-blue-500\/25 { border-color: rgba(59, 130, 246, 0.25) !important; }
+.dark .dark\:border-amber-800\/60 { border-color: rgba(146, 64, 14, 0.60) !important; }
+.dark .dark\:border-amber-800\/50 { border-color: rgba(146, 64, 14, 0.50) !important; }
+.dark .dark\:border-amber-800\/40 { border-color: rgba(146, 64, 14, 0.40) !important; }
+.dark .dark\:border-emerald-800\/60 { border-color: rgba(6, 95, 70, 0.60) !important; }
+.dark .dark\:border-emerald-800\/50 { border-color: rgba(6, 95, 70, 0.50) !important; }
 
 /* ==========================================================================
    INTERFAZ RECTANGULAR EN TODA LA PÁGINA (PANEL WEB Y ADMINISTRADOR)

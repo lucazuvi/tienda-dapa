@@ -5,7 +5,7 @@ import {
   Calendar, User as UserIcon, Phone, FileText, Lock, LogOut, 
   Image as ImageIcon, Upload, Edit, Trash2, ListPlus, Tag, Search, 
   AlertTriangle, FileSpreadsheet, Download, RefreshCw, 
-  BarChart3, Percent, Filter, ShoppingBag, ChevronLeft, ChevronRight,
+  BarChart3, Percent, Filter, ShoppingBag, ChevronLeft, ChevronRight, ChevronDown,
   RotateCcw, Printer, MessageSquare, CreditCard, Truck, Send
 } from 'lucide-react';
 import { supabase } from './supabase';
@@ -261,8 +261,13 @@ export default function AdminPanel() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 100;
 
-  // Estado de Filtro de Pedidos
+  // Estado de Filtro de Pedidos y Expansión de Pedidos (compactados por defecto)
   const [orderFilter, setOrderFilter] = useState('todos');
+  const [expandedOrders, setExpandedOrders] = useState({});
+
+  const toggleOrderExpand = (orderId) => {
+    setExpandedOrders(prev => ({ ...prev, [orderId]: !prev[orderId] }));
+  };
 
   // Estados de Edición Rápida (Inline Editing)
   const [inlineEdit, setInlineEdit] = useState({ id: null, field: null, value: '' });
@@ -2744,15 +2749,17 @@ export default function AdminPanel() {
   // =======================================================================
   const isOrderPending = (status) => {
     if (!status) return false;
-    return status.startsWith('Pendiente') || status === 'Cotización Web' || status === 'En encargue';
+    return status.startsWith('Pendiente') || status === 'Cotización Web' || status === 'En encargue' || status === 'Revisado';
   };
 
   const pendingOrdersCount = orders.filter(o => isOrderPending(o.status)).length;
-  const completedOrdersCount = orders.filter(o => o.status === 'Facturado' || o.status === 'Cancelado').length;
+  const billedOrdersCount = orders.filter(o => o.status === 'Facturado').length;
   const refundedOrdersCount = orders.filter(o => o.status === 'Reintegrado').length;
+  const cancelledOrdersCount = orders.filter(o => o.status === 'Cancelado').length;
+  const completedOrdersCount = billedOrdersCount + cancelledOrdersCount;
 
   const filteredOrders = orders.filter(o => {
-    if (orderFilter === 'pendientes') return isOrderPending(o.status) || o.status === 'Revisado';
+    if (orderFilter === 'pendientes') return isOrderPending(o.status);
     if (orderFilter === 'facturados') return o.status === 'Facturado';
     if (orderFilter === 'reintegrados') return o.status === 'Reintegrado';
     if (orderFilter === 'cancelados') return o.status === 'Cancelado';
@@ -3227,9 +3234,9 @@ export default function AdminPanel() {
                   {[
                     { id: 'todos', label: `Todos (${orders.length})` },
                     { id: 'pendientes', label: `Pendientes (${pendingOrdersCount})` },
-                    { id: 'facturados', label: 'Facturados' },
+                    { id: 'facturados', label: `Facturados (${billedOrdersCount})` },
                     { id: 'reintegrados', label: `Reintegrados (${refundedOrdersCount})` },
-                    { id: 'cancelados', label: 'Cancelados' }
+                    { id: 'cancelados', label: `Cancelados (${cancelledOrdersCount})` }
                   ].map(tab => (
                     <button
                       key={tab.id}
@@ -3272,218 +3279,281 @@ export default function AdminPanel() {
                   <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">No hay pedidos en esta vista</h3>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                  {filteredOrders.map(order => (
-                    <div key={order.id} className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm overflow-hidden flex flex-col">
-                      <div className="p-5 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 flex justify-between items-start gap-3">
-                        <div>
-                          <span className="text-xs font-bold tracking-widest uppercase text-blue-600 block mb-1">Pedido #{order.id}</span>
-                          <div className="flex items-center gap-2 text-slate-500 text-xs mt-2">
-                            <Calendar className="w-3 h-3"/> {new Date(order.created_at).toLocaleString('es-AR')}
-                          </div>
-                        </div>
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
+                  {filteredOrders.map(order => {
+                    const isExpanded = Boolean(expandedOrders[order.id]);
+                    const totalItemsCount = (order.order_items || []).reduce((acc, it) => acc + Number(it.quantity || 1), 0);
+                    const chatMessagesCount = parseAdminChatMessages(order.notes).length;
 
-                        <div className="flex items-center gap-2">
-                          <select 
-                            value={order.status} 
-                            onChange={(e) => updateOrderStatus(order.id, e.target.value)} 
-                            className={`text-xs font-bold uppercase tracking-wider px-3 py-1.5 rounded-lg outline-none cursor-pointer border ${
-                              isOrderPending(order.status) 
-                                ? 'bg-orange-100 text-orange-700 border-orange-200' 
-                                : order.status === 'Facturado' 
-                                ? 'bg-green-100 text-green-700 border-green-200' 
-                                : order.status === 'Reintegrado'
-                                ? 'bg-purple-100 text-purple-700 border-purple-200'
-                                : order.status === 'Cancelado'
-                                ? 'bg-red-100 text-red-700 border-red-200'
-                                : 'bg-slate-100 text-slate-700 border-slate-200'
-                            }`}
-                          >
-                            <option value="Pendiente">Pendiente</option>
-                            <option value="Pendiente (Vía Web)">Pendiente (Vía Web)</option>
-                            <option value="Pendiente (Pagado MP)">✅ Pagado MP (Por despachar)</option>
-                            <option value="En encargue">⏳ En encargue (Proveedor)</option>
-                            <option value="Pendiente (Vía WhatsApp)">Pendiente (Vía WhatsApp)</option>
-                            <option value="Cotización Web">Cotización Web</option>
-                            <option value="Revisado">Revisado</option>
-                            <option value="Facturado">Facturado / Listo</option>
-                            <option value="Reintegrado">💸 Reintegrado</option>
-                            <option value="Cancelado">Cancelado</option>
-                          </select>
-
-                          <button
-                            onClick={() => setOrderToDelete(order)}
-                            title="Eliminar pedido"
-                            className="p-2 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors focus:outline-none"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="p-5 flex-1 flex flex-col">
-                        <div className="grid grid-cols-2 gap-4 mb-5 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-100 dark:border-slate-700">
-                          <div>
-                            <div className="flex items-center gap-1.5 text-xs text-slate-400 font-bold uppercase tracking-widest mb-1">
-                              <UserIcon className="w-3 h-3"/> Cliente
-                            </div>
-                            <p className="text-sm font-bold text-slate-800 dark:text-white">{order.customer_name}</p>
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-1.5 text-xs text-slate-400 font-bold uppercase tracking-widest mb-1">
-                              <Phone className="w-3 h-3"/> Teléfono
-                            </div>
-                            <a href={`https://wa.me/${(order.customer_phone || '').replace(/\D/g,'')}`} target="_blank" rel="noreferrer" className="text-sm font-bold text-blue-600 hover:underline">
-                              {order.customer_phone}
-                            </a>
-                          </div>
-                        </div>
-
-                        {order.order_items && order.order_items.length > 0 && (
-                          <div className="mb-5">
-                            <h4 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-3 flex items-center gap-2">
-                              <FileText className="w-3 h-3"/> Detalle de Repuestos
-                            </h4>
-                            <ul className="space-y-3">
-                              {order.order_items.map((item, idx) => (
-                                <li key={idx} className="flex justify-between items-start text-sm">
-                                  <div className="flex gap-2">
-                                    <span className="font-bold text-slate-800 dark:text-white">{item.quantity}x</span>
-                                    <div className="text-slate-600 dark:text-slate-300">
-                                      <span>{item.product?.name || 'Repuesto Eliminado'}</span>
-                                      <span className="block text-[10px] text-slate-400 uppercase font-exo">{item.product?.sku_code || 'N/A'}</span>
-                                    </div>
-                                  </div>
-                                  <span className="font-bold text-slate-800 dark:text-white">
-                                    ${(item.unit_price * item.quantity).toLocaleString('es-AR')}
+                    return (
+                      <div key={order.id} className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm overflow-hidden flex flex-col transition-all">
+                        <div
+                          onClick={() => toggleOrderExpand(order.id)}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              toggleOrderExpand(order.id);
+                            }
+                          }}
+                          className={`p-4 sm:p-5 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-100/80 dark:hover:bg-slate-800/80 cursor-pointer select-none transition-colors flex flex-col gap-3 ${
+                            isExpanded ? 'border-b border-slate-100 dark:border-slate-700' : ''
+                          }`}
+                        >
+                          <div className="flex justify-between items-start gap-3">
+                            <div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-xs font-bold tracking-widest uppercase text-blue-600 dark:text-blue-400">
+                                  Pedido #{order.id}
+                                </span>
+                                {chatMessagesCount > 0 && (
+                                  <span className="px-2 py-0.5 bg-emerald-600 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                                    <MessageSquare className="w-3 h-3" /> {chatMessagesCount} msj
                                   </span>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-
-                      {order.notes && (() => {
-                          // Extraemos URLs de imágenes de las notas automáticamente
-                          const urlRegex = /(https?:\/\/[^\s]+)/g;
-                          const matches = order.notes.match(urlRegex) || [];
-                          const imageLinks = matches.filter(url => /\.(jpg|jpeg|png|webp|avif)(\?.*)?$/i.test(url) || url.includes('supabase.co/storage'));
-                          
-                          // Limpiamos el texto de las notas para que no repita el link gigante ni el bloque interno de chat
-                          let cleanNotes = order.notes
-                            .replace(/\[\[CHAT_DAPA:[\s\S]*?\]\]/g, '')
-                            .replace(/\[DIM_CA:[^\]]+\]/gi, '')
-                            .replace(/\[PESO_CA:[^\]]+\]/gi, '')
-                            .replace(/\[ZONA_CA:[^\]]+\]/gi, '')
-                            .replace(/\[STOCK_DESCONTADO\]/gi, '');
-                          imageLinks.forEach(link => {
-                            cleanNotes = cleanNotes.replace(link, '').replace(/FOTO REPUESTO:\s*/gi, '').replace(/FOTO CÉDULA \/ CHASIS:\s*/gi, '');
-                          });
-
-                          return (
-                            <div className="mt-auto space-y-3">
-                              <div className="bg-blue-50/50 dark:bg-slate-900/60 border border-blue-100 dark:border-slate-700 rounded-xl p-4">
-                                <h5 className="text-[10px] font-bold uppercase tracking-widest text-blue-600 dark:text-blue-400 mb-2">
-                                  Datos de Envío / Especificaciones
-                                </h5>
-                                <p className="text-xs text-slate-700 dark:text-slate-300 whitespace-pre-line leading-relaxed font-mono">
-                                  {cleanNotes.trim()}
-                                </p>
+                                )}
                               </div>
+                              <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 text-xs mt-1.5">
+                                <Calendar className="w-3 h-3" /> {new Date(order.created_at).toLocaleString('es-AR')}
+                              </div>
+                            </div>
 
-                              {imageLinks.length > 0 && (
-                                <div className="bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-700 rounded-xl p-3">
-                                  <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">
-                                    Fotos adjuntas por el cliente ({imageLinks.length})
-                                  </span>
-                                  <div className="flex flex-wrap gap-2">
-                                    {imageLinks.map((imgUrl, imgIdx) => (
-                                      <a
-                                        key={imgIdx}
-                                        href={imgUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="group relative w-20 h-20 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 flex items-center justify-center shadow-sm hover:border-blue-500 transition-all"
-                                      >
-                                        <img src={imgUrl} alt={`Adjunto ${imgIdx + 1}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-[10px] font-bold">
-                                          Ver
-                                        </div>
-                                      </a>
-                                    ))}
-                                  </div>
-                                </div>
+                            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                              <select 
+                                value={order.status} 
+                                onChange={(e) => updateOrderStatus(order.id, e.target.value)} 
+                                className={`text-xs font-bold uppercase tracking-wider px-3 py-1.5 rounded-lg outline-none cursor-pointer border ${
+                                  isOrderPending(order.status) 
+                                    ? 'bg-orange-100 text-orange-700 border-orange-200' 
+                                    : order.status === 'Facturado' 
+                                    ? 'bg-green-100 text-green-700 border-green-200' 
+                                    : order.status === 'Reintegrado'
+                                    ? 'bg-purple-100 text-purple-700 border-purple-200'
+                                    : order.status === 'Cancelado'
+                                    ? 'bg-red-100 text-red-700 border-red-200'
+                                    : 'bg-slate-100 text-slate-700 border-slate-200'
+                                }`}
+                              >
+                                <option value="Pendiente">Pendiente</option>
+                                <option value="Pendiente (Vía Web)">Pendiente (Vía Web)</option>
+                                <option value="Pendiente (Pagado MP)">✅ Pagado MP (Por despachar)</option>
+                                <option value="En encargue">⏳ En encargue (Proveedor)</option>
+                                <option value="Pendiente (Vía WhatsApp)">Pendiente (Vía WhatsApp)</option>
+                                <option value="Cotización Web">Cotización Web</option>
+                                <option value="Revisado">Revisado</option>
+                                <option value="Facturado">Facturado / Listo</option>
+                                <option value="Reintegrado">💸 Reintegrado</option>
+                                <option value="Cancelado">Cancelado</option>
+                              </select>
+
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setOrderToDelete(order);
+                                }}
+                                title="Eliminar pedido"
+                                className="p-2 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors focus:outline-none"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Resumen compacto siempre visible */}
+                          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200/60 dark:border-slate-700/60 text-xs">
+                            <div className="flex flex-wrap items-center gap-3 text-slate-600 dark:text-slate-300">
+                              <span className="font-bold text-slate-800 dark:text-white flex items-center gap-1.5">
+                                <UserIcon className="w-3.5 h-3.5 text-slate-400" />
+                                {order.customer_name || 'Sin nombre'}
+                              </span>
+                              {totalItemsCount > 0 && (
+                                <span className="text-slate-400 dark:text-slate-500">
+                                  • {totalItemsCount} {totalItemsCount === 1 ? 'repuesto' : 'repuestos'}
+                                </span>
                               )}
                             </div>
-                          );
-                        })()}
-                      </div>
 
-                      <div className="px-5 py-3 bg-slate-100/70 dark:bg-slate-900/70 border-t border-slate-100 dark:border-slate-700 flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex flex-wrap gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => openShippingLabelModal(order)}
-                            className="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-sm transition-colors"
-                            title="Generar e imprimir etiqueta Correo Argentino (Formato Mercado Libre 2 hojas) y cargar código de seguimiento"
-                          >
-                            <Truck className="w-3.5 h-3.5" /> Etiqueta Correo
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => openSellerChatModal(order)}
-                            className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-sm transition-colors relative"
-                            title="Abrir chat directo con el comprador de este pedido"
-                          >
-                            <MessageSquare className="w-3.5 h-3.5" /> Chat Comprador
-                            {parseAdminChatMessages(order.notes).length > 0 && (
-                              <span className="ml-0.5 px-1.5 py-0.2 rounded-full bg-white text-emerald-700 font-black text-[9px]">
-                                {parseAdminChatMessages(order.notes).length}
+                            <div className="flex items-center gap-3 ml-auto">
+                              <span className="text-sm sm:text-base font-bold font-exo text-slate-900 dark:text-white">
+                                ${Number(order.total_estimated || 0).toLocaleString('es-AR')}
                               </span>
-                            )}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleSendOrderWhatsApp(order, 'encargue_delay')}
-                            className="px-2.5 py-1.5 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 transition-colors"
-                            title="Avisar por WhatsApp sobre demora por encargue y opción de reintegro"
-                          >
-                            <MessageSquare className="w-3.5 h-3.5" /> Avisar Encargue
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handlePrintOrder(order)}
-                            className="px-2.5 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 dark:bg-slate-700 dark:text-slate-200 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 transition-colors"
-                            title="Imprimir remito / comprobante del pedido"
-                          >
-                            <Printer className="w-3.5 h-3.5" /> Remito
-                          </button>
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-1 border border-blue-200 dark:border-blue-800/50">
+                                {isExpanded ? 'Ocultar' : 'Ver detalle'}
+                                <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+                              </span>
+                            </div>
+                          </div>
                         </div>
 
-                        {order.status !== 'Reintegrado' ? (
-                          <button
-                            type="button"
-                            onClick={() => openRefundModal(order)}
-                            className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 shadow-sm transition-colors"
-                            title="Reintegrar dinero (Mercado Pago / Tarjeta o Manual)"
-                          >
-                            <RotateCcw className="w-3.5 h-3.5" /> Reintegrar Dinero
-                          </button>
-                        ) : (
-                          <span className="px-2.5 py-1 rounded-lg bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
-                            <CheckCircle className="w-3.5 h-3.5" /> Dinero Reintegrado
-                          </span>
+                        {isExpanded && (
+                          <>
+                            <div className="p-5 flex-1 flex flex-col">
+                              <div className="grid grid-cols-2 gap-4 mb-5 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-100 dark:border-slate-700">
+                                <div>
+                                  <div className="flex items-center gap-1.5 text-xs text-slate-400 font-bold uppercase tracking-widest mb-1">
+                                    <UserIcon className="w-3 h-3"/> Cliente
+                                  </div>
+                                  <p className="text-sm font-bold text-slate-800 dark:text-white">{order.customer_name}</p>
+                                </div>
+                                <div>
+                                  <div className="flex items-center gap-1.5 text-xs text-slate-400 font-bold uppercase tracking-widest mb-1">
+                                    <Phone className="w-3 h-3"/> Teléfono
+                                  </div>
+                                  <a href={`https://wa.me/${(order.customer_phone || '').replace(/\D/g,'')}`} target="_blank" rel="noreferrer" className="text-sm font-bold text-blue-600 hover:underline">
+                                    {order.customer_phone}
+                                  </a>
+                                </div>
+                              </div>
+
+                              {order.order_items && order.order_items.length > 0 && (
+                                <div className="mb-5">
+                                  <h4 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-3 flex items-center gap-2">
+                                    <FileText className="w-3 h-3"/> Detalle de Repuestos
+                                  </h4>
+                                  <ul className="space-y-3">
+                                    {order.order_items.map((item, idx) => (
+                                      <li key={idx} className="flex justify-between items-start text-sm">
+                                        <div className="flex gap-2">
+                                          <span className="font-bold text-slate-800 dark:text-white">{item.quantity}x</span>
+                                          <div className="text-slate-600 dark:text-slate-300">
+                                            <span>{item.product?.name || 'Repuesto Eliminado'}</span>
+                                            <span className="block text-[10px] text-slate-400 uppercase font-exo">{item.product?.sku_code || 'N/A'}</span>
+                                          </div>
+                                        </div>
+                                        <span className="font-bold text-slate-800 dark:text-white">
+                                          ${(item.unit_price * item.quantity).toLocaleString('es-AR')}
+                                        </span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+
+                              {order.notes && (() => {
+                                // Extraemos URLs de imágenes de las notas automáticamente
+                                const urlRegex = /(https?:\/\/[^\s]+)/g;
+                                const matches = order.notes.match(urlRegex) || [];
+                                const imageLinks = matches.filter(url => /\.(jpg|jpeg|png|webp|avif)(\?.*)?$/i.test(url) || url.includes('supabase.co/storage'));
+                                
+                                // Limpiamos el texto de las notas para que no repita el link gigante ni el bloque interno de chat
+                                let cleanNotes = order.notes
+                                  .replace(/\[\[CHAT_DAPA:[\s\S]*?\]\]/g, '')
+                                  .replace(/\[DIM_CA:[^\]]+\]/gi, '')
+                                  .replace(/\[PESO_CA:[^\]]+\]/gi, '')
+                                  .replace(/\[ZONA_CA:[^\]]+\]/gi, '')
+                                  .replace(/\[STOCK_DESCONTADO\]/gi, '');
+                                imageLinks.forEach(link => {
+                                  cleanNotes = cleanNotes.replace(link, '').replace(/FOTO REPUESTO:\s*/gi, '').replace(/FOTO CÉDULA \/ CHASIS:\s*/gi, '');
+                                });
+
+                                return (
+                                  <div className="mt-auto space-y-3">
+                                    <div className="bg-blue-50/50 dark:bg-slate-900/60 border border-blue-100 dark:border-slate-700 rounded-xl p-4">
+                                      <h5 className="text-[10px] font-bold uppercase tracking-widest text-blue-600 dark:text-blue-400 mb-2">
+                                        Datos de Envío / Especificaciones
+                                      </h5>
+                                      <p className="text-xs text-slate-700 dark:text-slate-300 whitespace-pre-line leading-relaxed font-mono">
+                                        {cleanNotes.trim()}
+                                      </p>
+                                    </div>
+
+                                    {imageLinks.length > 0 && (
+                                      <div className="bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-700 rounded-xl p-3">
+                                        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">
+                                          Fotos adjuntas por el cliente ({imageLinks.length})
+                                        </span>
+                                        <div className="flex flex-wrap gap-2">
+                                          {imageLinks.map((imgUrl, imgIdx) => (
+                                            <a
+                                              key={imgIdx}
+                                              href={imgUrl}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="group relative w-20 h-20 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 flex items-center justify-center shadow-sm hover:border-blue-500 transition-all"
+                                            >
+                                              <img src={imgUrl} alt={`Adjunto ${imgIdx + 1}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-[10px] font-bold">
+                                                Ver
+                                              </div>
+                                            </a>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })()}
+                            </div>
+
+                            <div className="px-5 py-3 bg-slate-100/70 dark:bg-slate-900/70 border-t border-slate-100 dark:border-slate-700 flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex flex-wrap gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => openShippingLabelModal(order)}
+                                  className="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-sm transition-colors"
+                                  title="Generar e imprimir etiqueta Correo Argentino (Formato Mercado Libre 2 hojas) y cargar código de seguimiento"
+                                >
+                                  <Truck className="w-3.5 h-3.5" /> Etiqueta Correo
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => openSellerChatModal(order)}
+                                  className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-sm transition-colors relative"
+                                  title="Abrir chat directo con el comprador de este pedido"
+                                >
+                                  <MessageSquare className="w-3.5 h-3.5" /> Chat Comprador
+                                  {chatMessagesCount > 0 && (
+                                    <span className="ml-0.5 px-1.5 py-0.2 rounded-full bg-white text-emerald-700 font-black text-[9px]">
+                                      {chatMessagesCount}
+                                    </span>
+                                  )}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSendOrderWhatsApp(order, 'encargue_delay')}
+                                  className="px-2.5 py-1.5 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 transition-colors"
+                                  title="Avisar por WhatsApp sobre demora por encargue y opción de reintegro"
+                                >
+                                  <MessageSquare className="w-3.5 h-3.5" /> Avisar Encargue
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handlePrintOrder(order)}
+                                  className="px-2.5 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 dark:bg-slate-700 dark:text-slate-200 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 transition-colors"
+                                  title="Imprimir remito / comprobante del pedido"
+                                >
+                                  <Printer className="w-3.5 h-3.5" /> Remito
+                                </button>
+                              </div>
+
+                              {order.status !== 'Reintegrado' ? (
+                                <button
+                                  type="button"
+                                  onClick={() => openRefundModal(order)}
+                                  className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 shadow-sm transition-colors"
+                                  title="Reintegrar dinero (Mercado Pago / Tarjeta o Manual)"
+                                >
+                                  <RotateCcw className="w-3.5 h-3.5" /> Reintegrar Dinero
+                                </button>
+                              ) : (
+                                <span className="px-2.5 py-1 rounded-lg bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                                  <CheckCircle className="w-3.5 h-3.5" /> Dinero Reintegrado
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="p-5 bg-slate-50 dark:bg-slate-900 border-t border-slate-100 dark:border-slate-700 flex justify-between items-center">
+                              <span className="text-xs font-bold uppercase tracking-widest text-slate-500">Total Cotizado</span>
+                              <span className="text-xl font-bold font-exo text-slate-900 dark:text-white">
+                                ${Number(order.total_estimated || 0).toLocaleString('es-AR')}
+                              </span>
+                            </div>
+                          </>
                         )}
                       </div>
-
-                      <div className="p-5 bg-slate-50 dark:bg-slate-900 border-t border-slate-100 dark:border-slate-700 flex justify-between items-center">
-                        <span className="text-xs font-bold uppercase tracking-widest text-slate-500">Total Cotizado</span>
-                        <span className="text-xl font-bold font-exo text-slate-900 dark:text-white">
-                          ${Number(order.total_estimated || 0).toLocaleString('es-AR')}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
