@@ -1,14 +1,181 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react';
 import { 
-  MapPin, Phone, Target, ShieldCheck, TrendingUp, Truck, Wrench, ChevronRight,
+  MapPin, Phone, Target, ShieldCheck, TrendingUp, Truck, ChevronRight,
   Menu, X, MessageSquare, CreditCard, Package, HelpCircle, CheckCircle,
   ChevronDown, Send, Settings, Search, ArrowLeft, ChevronLeft, ShoppingCart,
-  User, Plus, Minus, Trash2, LogOut, PhoneCall, ArrowUp, Filter, Sun, Moon, Clock, Camera
+  User, Plus, Minus, Trash2, LogOut, PhoneCall, ArrowUp, Filter, Sun, Moon, Clock, Camera, RotateCcw
 } from 'lucide-react';
 import { supabase } from './supabase';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 
 const AdminPanel = lazy(() => import('./AdminPanel'));
+
+/* ==========================================================================
+   HELPERS MULTIPLATAFORMA (Windows 7/10/11, macOS, iOS, Android, Linux)
+   ========================================================================== */
+function safeJsonParse(rawValue, fallbackValue) {
+  if (!rawValue) return fallbackValue;
+  try {
+    return JSON.parse(rawValue);
+  } catch {
+    return fallbackValue;
+  }
+}
+
+function openExternalUrl(url) {
+  if (!url) return;
+  try {
+    const newWin = window.open(url, '_blank', 'noopener,noreferrer');
+    if (!newWin || newWin.closed || typeof newWin.closed === 'undefined') {
+      window.location.assign(url);
+    }
+  } catch {
+    window.location.assign(url);
+  }
+}
+
+async function copyTextToClipboard(text) {
+  if (!text) return false;
+  try {
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // Fallback para navegadores antiguos o contextos HTTP
+  }
+  try {
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-9999px';
+    textArea.style.top = '0';
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    const copied = document.execCommand('copy');
+    document.body.removeChild(textArea);
+    return copied;
+  } catch {
+    return false;
+  }
+}
+
+function saveOrderToLocalHistory(orderEntry) {
+  if (!orderEntry || !orderEntry.id) return;
+  try {
+    const current = safeJsonParse(localStorage.getItem('dapa_my_orders'), []);
+    const list = Array.isArray(current) ? current : [];
+    const filtered = list.filter((item) => String(item.id) !== String(orderEntry.id));
+    const updated = [orderEntry, ...filtered].slice(0, 20);
+    localStorage.setItem('dapa_my_orders', JSON.stringify(updated));
+  } catch {
+    // Ignorar errores de cuota de almacenamiento
+  }
+}
+
+async function ensureOrderItemsInserted(orderId, itemsToInsert) {
+  if (!orderId || !Array.isArray(itemsToInsert) || itemsToInsert.length === 0) return;
+  const { count, error: countErr } = await supabase
+    .from('order_items')
+    .select('id', { count: 'exact', head: true })
+    .eq('order_id', orderId);
+
+  if (!countErr && typeof count === 'number' && count > 0) {
+    return;
+  }
+
+  const { error: itemsError } = await supabase
+    .from('order_items')
+    .insert(itemsToInsert);
+
+  if (itemsError) throw itemsError;
+}
+
+function parseOrderChatMessages(notesStr) {
+  const raw = String(notesStr || '');
+  const match = raw.match(/\[\[CHAT_DAPA:([^\]]*)\]\]/);
+  if (!match || !match[1]) return [];
+  try {
+    const parsed = JSON.parse(decodeURIComponent(match[1]));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function injectOrderChatMessages(notesStr, messagesArray) {
+  const raw = String(notesStr || '').replace(/\s*\[\[CHAT_DAPA:[^\]]*\]\]/g, '').trim();
+  const encoded = encodeURIComponent(JSON.stringify(messagesArray.slice(-100)));
+  return `${raw}\n[[CHAT_DAPA:${encoded}]]`.trim();
+}
+
+function extractOrderTrackingMeta(notesStr) {
+  const raw = String(notesStr || '');
+  const trackMatch = raw.match(/\[TRACKING_CA:([A-Z0-9-]+)\]/i) || raw.match(/\b([A-Z]{2}\d{9}AR)\b/i);
+  const dateMatch = raw.match(/\[DESPACHO_FECHA:([^\]]+)\]/i);
+  return {
+    trackingCode: trackMatch ? trackMatch[1].toUpperCase() : '',
+    dispatchedAt: dateMatch ? dateMatch[1] : ''
+  };
+}
+
+async function sendOrderChatMessageHelper({ orderId, senderRole, senderName, text }) {
+  const cleanText = String(text || '').trim().slice(0, 1000);
+  if (!orderId || !cleanText) throw new Error('Mensaje vacío');
+
+  // 1. Intentar vía endpoint serverless /api/orderChat
+  try {
+    const res = await fetch('/api/orderChat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderId, senderRole, senderName, text: cleanText })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.messages)) return data;
+    }
+  } catch {
+    // Fallback directo a Supabase si se corre localmente con vite
+  }
+
+  // 2. Fallback directo con Supabase
+  const { data: orderRow, error: fetchErr } = await supabase
+    .from('orders')
+    .select('id, notes, customer_name')
+    .eq('id', Number(orderId))
+    .single();
+
+  if (fetchErr || !orderRow) {
+    throw new Error('No se pudo conectar con el pedido.');
+  }
+
+  const currentMsgs = parseOrderChatMessages(orderRow.notes);
+  const newMsg = {
+    id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    sender: senderRole === 'seller' ? 'seller' : 'buyer',
+    senderName: String(senderName || orderRow.customer_name || 'Comprador').slice(0, 80),
+    text: cleanText,
+    createdAt: new Date().toISOString()
+  };
+
+  const updatedMessages = [...currentMsgs, newMsg];
+  const updatedNotes = injectOrderChatMessages(orderRow.notes, updatedMessages);
+
+  const { error: updateErr } = await supabase
+    .from('orders')
+    .update({ notes: updatedNotes })
+    .eq('id', Number(orderId));
+
+  if (updateErr) throw updateErr;
+
+  return {
+    success: true,
+    message: newMsg,
+    messages: updatedMessages,
+    updatedNotes
+  };
+}
 
 /* ==========================================================================
    ÍCONOS CUSTOM
@@ -41,9 +208,10 @@ const CONTACT_INFO = {
 };
 
 const FAQ_ITEMS = [
-  { q: '¿Realizan envíos al interior?', a: 'Sí, despachamos a cualquier punto mediante servicios de correo y encomiendas.' },
-  { q: '¿Cómo puedo pagar mi compra?', a: 'Aceptamos transferencias bancarias, Cuenta DNI, Mercado Pago, tarjetas de crédito/débito y efectivo. Podes abonar directo, pasar por nuestro local o acordamos por WhatsApp.' },
-  { q: '¿Qué datos necesito para cotizar un repuesto?', a: 'Para mayor precisión, te recomendamos enviarnos la marca, modelo, motor, año del vehículo o el código del repuesto.' }
+  { q: '¿Realizan envíos al interior?', a: 'Sí, despachamos a cualquier punto del país mediante Correo Argentino (a domicilio o sucursal) y servicios de encomiendas.' },
+  { q: '¿Cuánto demora un repuesto por encargue y qué pasa si ya pagué?', a: 'Gran parte de nuestro catálogo multimarca se trae directamente de distribuidora por encargue, por lo que tu pedido puede tener una demora de preparación que te confirmaremos apenas ingresa. Si abonaste con tarjeta, Mercado Pago o transferencia y decidís no esperar, te reintegramos el 100% de tu dinero de inmediato.' },
+  { q: '¿Cómo puedo pagar mi compra?', a: 'Aceptamos tarjetas de crédito/débito y dinero en cuenta a través de Mercado Pago, transferencias bancarias, Cuenta DNI y efectivo en nuestro mostrador. Todas las compras online cuentan con garantía de reintegro.' },
+  { q: '¿Qué datos necesito para cotizar un repuesto?', a: 'Para mayor precisión, te recomendamos enviarnos la marca, modelo, motor, año del vehículo, foto de la cédula verde/chasis o el código del repuesto.' }
 ];
 
 /* ==========================================================================
@@ -177,12 +345,13 @@ function QuickViewModal({ product, categoryName, isOpen, onClose, onAddToCart })
   if (!isOpen || !product) return null;
   const brandName = product.brand?.name || 'Multimarca';
   const resolvedCategory = categoryName || product.category?.name || 'General';
+  const hasImmediateStock = Number(product.stock || 0) > 0;
   
   return (
     <div className="fixed inset-0 bg-black/60 z-[110] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-300">
-      <div className="bg-white dark:bg-slate-800 rounded-none shadow-2xl w-full max-w-2xl overflow-hidden relative flex flex-col md:flex-row animate-in zoom-in-95 duration-300 border border-slate-200 dark:border-slate-700">
+      <div className="bg-white dark:bg-slate-800 rounded-none shadow-2xl w-full max-w-2xl overflow-hidden relative flex flex-col md:flex-row animate-in zoom-in-95 duration-300 border border-slate-200 dark:border-slate-700 max-h-[92vh] overflow-y-auto custom-scrollbar">
         
-        <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors focus:outline-none z-20 bg-white/50 dark:bg-slate-900/50 rounded-none p-1 backdrop-blur-sm">
+        <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors focus:outline-none z-20 bg-white/50 dark:bg-slate-900/50 rounded-none p-1 backdrop-blur-sm" aria-label="Cerrar vista rápida">
           <X className="w-6 h-6" />
         </button>
 
@@ -200,13 +369,16 @@ function QuickViewModal({ product, categoryName, isOpen, onClose, onAddToCart })
         </div>
 
         <div className="w-full md:w-1/2 p-6 md:p-8 flex flex-col">
-          <h2 className="text-xl md:text-2xl font-bold text-slate-900 dark:text-white mb-6 leading-tight pr-6">{product.name}</h2>
+          <h2 className="text-xl md:text-2xl font-bold text-slate-900 dark:text-white mb-2 leading-tight pr-6">{product.name}</h2>
+          <p className="text-xl font-bold font-exo text-blue-600 dark:text-blue-400 mb-4">
+            {product.price > 0 ? `$${Number(product.price).toLocaleString('es-AR')}` : 'Consultar Precio'}
+          </p>
           
-          <div className="bg-slate-50 dark:bg-slate-900/50 rounded-none p-5 mb-6 border border-slate-100 dark:border-slate-700/50">
-            <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-4 flex items-center gap-2">
+          <div className="bg-slate-50 dark:bg-slate-900/50 rounded-none p-4 mb-4 border border-slate-100 dark:border-slate-700/50">
+            <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-3 flex items-center gap-2">
               <Settings className="w-3 h-3" /> Ficha Técnica
             </h4>
-            <ul className="space-y-3 text-sm text-slate-700 dark:text-slate-300 font-medium">
+            <ul className="space-y-2.5 text-sm text-slate-700 dark:text-slate-300 font-medium">
               <li className="flex justify-between border-b border-slate-200 dark:border-slate-700/50 pb-2">
                 <span className="text-slate-500 dark:text-slate-400 font-light">Categoría:</span><span>{resolvedCategory}</span>
               </li>
@@ -214,17 +386,38 @@ function QuickViewModal({ product, categoryName, isOpen, onClose, onAddToCart })
                 <span className="text-slate-500 dark:text-slate-400 font-light">Marca:</span>
                 <span className="text-blue-600 dark:text-blue-400">{brandName}</span>
               </li>
-            <li className="flex justify-between pb-1">
-                <span className="text-slate-500 dark:text-slate-400 font-light">Disponibilidad:</span>
-                <span className="text-amber-600 dark:text-amber-400 flex items-center gap-1 font-semibold">
-                  <Clock className="w-3.5 h-3.5"/> En local / Por encargue
-                </span>
+              <li className="flex justify-between pb-1">
+                <span className="text-slate-500 dark:text-slate-400 font-light">Modalidad:</span>
+                {hasImmediateStock ? (
+                  <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1 font-semibold">
+                    <CheckCircle className="w-3.5 h-3.5" /> Stock en local / Por encargue
+                  </span>
+                ) : (
+                  <span className="text-amber-600 dark:text-amber-400 flex items-center gap-1 font-semibold">
+                    <Clock className="w-3.5 h-3.5" /> Disponible por encargue
+                  </span>
+                )}
               </li>
             </ul>
           </div>
+
+          <div className="mb-4 p-3 rounded-none bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 text-[11px] text-slate-700 dark:text-slate-300 leading-snug space-y-1.5">
+            <div className="flex items-start gap-2">
+              <Clock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+              <span>
+                <strong>Aviso de encargue:</strong> La mayoría de los repuestos se piden a distribuidora y <strong>tu pedido puede tener demora</strong>. Te confirmamos el plazo exacto al procesarlo.
+              </span>
+            </div>
+            <div className="flex items-start gap-2 pt-1 border-t border-amber-200/60 dark:border-amber-800/40">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
+              <span>
+                <strong>Reintegro 100% garantizado:</strong> Si abonás con tarjeta o pago directo y decidís no esperar la demora, te reintegramos el total de tu dinero.
+              </span>
+            </div>
+          </div>
           
           {product.description && (
-             <p className="text-xs text-slate-500 dark:text-slate-400 mb-6 font-light italic bg-slate-50 dark:bg-slate-900/30 p-3 rounded-none border border-slate-100 dark:border-slate-800">
+             <p className="text-xs text-slate-500 dark:text-slate-400 mb-4 font-light italic bg-slate-50 dark:bg-slate-900/30 p-3 rounded-none border border-slate-100 dark:border-slate-800">
                {product.description}
              </p>
           )}
@@ -266,7 +459,29 @@ function AuthModal({ isOpen, onClose, onLogin }) {
   const [apellido, setApellido] = useState('');
   const [telefono, setTelefono] = useState('');
 
+  // Estado de verificación "No soy un robot" (reCAPTCHA style) para registro
+  const [captchaState, setCaptchaState] = useState('unchecked'); // 'unchecked' | 'verifying' | 'verified'
+  const [honeypotWebsite, setHoneypotWebsite] = useState('');
+  const captchaTimerRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (captchaTimerRef.current) clearTimeout(captchaTimerRef.current);
+    };
+  }, []);
+
   if (!isOpen) return null;
+
+  const handleToggleCaptcha = () => {
+    if (honeypotWebsite) return;
+    if (captchaState === 'verified' || captchaState === 'verifying') return;
+    setError('');
+    setCaptchaState('verifying');
+    if (captchaTimerRef.current) clearTimeout(captchaTimerRef.current);
+    captchaTimerRef.current = setTimeout(() => {
+      setCaptchaState('verified');
+    }, 600);
+  };
 
   const handleGoogleLogin = async () => {
     setLoading(true);
@@ -288,6 +503,13 @@ function AuthModal({ isOpen, onClose, onLogin }) {
 
   const handleEmailAuth = async (e) => {
     e.preventDefault();
+    if (!isLogin && honeypotWebsite) return;
+
+    if (!isLogin && captchaState !== 'verified') {
+      setError('Por favor confirmá que no sos un robot marcando la casilla.');
+      return;
+    }
+
     setLoading(true);
     setError('');
     setSuccessMsg('');
@@ -295,7 +517,7 @@ function AuthModal({ isOpen, onClose, onLogin }) {
     const cleanEmail = email.trim().toLowerCase();
 
     try {
-      const localAccounts = JSON.parse(localStorage.getItem('dapa_registered_users') || '{}');
+      const localAccounts = safeJsonParse(localStorage.getItem('dapa_registered_users'), {});
 
       if (isLogin) {
         // 1. Si no es el correo de administración general, verificamos primero en la tabla de usuarios
@@ -311,14 +533,14 @@ function AuthModal({ isOpen, onClose, onLogin }) {
             const hashedTrimmed = hashUserPassword(password.trim());
             if (
               dbUser.password_hash === hashedInput ||
-              dbUser.password_hash === hashedTrimmed ||
-              dbUser.password_hash === password
+              dbUser.password_hash === hashedTrimmed
             ) {
               const phoneFromRole =
                 dbUser.role && dbUser.role.startsWith('cliente|')
                   ? dbUser.role.slice('cliente|'.length)
                   : '';
               onLogin({
+                id: dbUser.id,
                 name: dbUser.name || cleanEmail.split('@')[0],
                 phone: phoneFromRole,
                 email: dbUser.email || cleanEmail
@@ -326,20 +548,6 @@ function AuthModal({ isOpen, onClose, onLogin }) {
               return;
             } else {
               throw new Error("Email o contraseña incorrectos");
-            }
-          }
-
-          // Fallback en localStorage por si se registró sin conexión a la tabla
-          const localUser = localAccounts[cleanEmail];
-          if (localUser) {
-            const hashedInput = hashUserPassword(password);
-            if (localUser.password_hash === hashedInput || localUser.password_hash === password) {
-              onLogin({
-                name: localUser.name || cleanEmail.split('@')[0],
-                phone: localUser.phone || '',
-                email: cleanEmail
-              });
-              return;
             }
           }
         }
@@ -378,6 +586,7 @@ function AuthModal({ isOpen, onClose, onLogin }) {
         }
         
         onLogin({
+          id: data.user.id,
           name: data.user.user_metadata?.name || cleanEmail.split('@')[0],
           phone: data.user.user_metadata?.phone || '',
           email: data.user.email
@@ -402,7 +611,7 @@ function AuthModal({ isOpen, onClose, onLogin }) {
           .ilike('email', cleanEmail)
           .maybeSingle();
 
-        if (existingUser || cleanEmail === 'admin@dapa.com' || localAccounts[cleanEmail]) {
+        if (existingUser || cleanEmail === 'admin@dapa.com') {
           throw new Error("Este correo electrónico ya está vinculado a una cuenta. Por favor, iniciá sesión.");
         }
 
@@ -431,12 +640,11 @@ function AuthModal({ isOpen, onClose, onLogin }) {
           throw new Error("No se pudo registrar la cuenta. Intentá nuevamente.");
         }
 
-        // Guardar respaldo local
+        // Guardar respaldo local de metadatos públicos (NUNCA guardar hashes de contraseña en localStorage)
         localAccounts[cleanEmail] = {
           name: fullName,
           phone: cleanPhone,
-          email: cleanEmail,
-          password_hash: passwordHash
+          email: cleanEmail
         };
         localStorage.setItem('dapa_registered_users', JSON.stringify(localAccounts));
 
@@ -456,6 +664,7 @@ function AuthModal({ isOpen, onClose, onLogin }) {
         setIsLogin(true);
         setPassword('');
         setConfirmPassword('');
+        setCaptchaState('unchecked');
         setSuccessMsg("¡Cuenta creada con éxito! Ya podés iniciar sesión con tu clave.");
       }
     } catch (err) {
@@ -518,6 +727,18 @@ function AuthModal({ isOpen, onClose, onLogin }) {
           )}
 
           <form onSubmit={handleEmailAuth} className="space-y-4">
+            {/* Honeypot anti-bots invisible para humanos */}
+            <input
+              type="text"
+              name="website_url"
+              tabIndex={-1}
+              autoComplete="off"
+              value={honeypotWebsite}
+              onChange={(e) => setHoneypotWebsite(e.target.value)}
+              className="hidden"
+              aria-hidden="true"
+            />
+
             {!isLogin && (
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
@@ -546,24 +767,79 @@ function AuthModal({ isOpen, onClose, onLogin }) {
             </div>
 
             {!isLogin && (
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Repetir Contraseña</label>
-                <input 
-                  type="password" 
-                  required 
-                  value={confirmPassword} 
-                  onChange={e => setConfirmPassword(e.target.value)} 
-                  placeholder="Volvé a escribir tu contraseña"
-                  className={`w-full p-3 rounded-none border bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none ${
-                    confirmPassword && password !== confirmPassword 
-                      ? 'border-red-500 focus:border-red-500' 
-                      : 'border-slate-300 dark:border-slate-600 focus:border-blue-500'
-                  }`} 
-                />
-                {confirmPassword && password !== confirmPassword && (
-                  <p className="text-[11px] text-red-500 font-semibold ml-1 pt-1">Las contraseñas no coinciden</p>
-                )}
-              </div>
+              <>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Repetir Contraseña</label>
+                  <input 
+                    type="password" 
+                    required 
+                    value={confirmPassword} 
+                    onChange={e => setConfirmPassword(e.target.value)} 
+                    placeholder="Volvé a escribir tu contraseña"
+                    className={`w-full p-3 rounded-none border bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none ${
+                      confirmPassword && password !== confirmPassword 
+                        ? 'border-red-500 focus:border-red-500' 
+                        : 'border-slate-300 dark:border-slate-600 focus:border-blue-500'
+                    }`} 
+                  />
+                  {confirmPassword && password !== confirmPassword && (
+                    <p className="text-[11px] text-red-500 font-semibold ml-1 pt-1">Las contraseñas no coinciden</p>
+                  )}
+                </div>
+
+                {/* WIDGET "NO SOY UN ROBOT" ESTILO RECAPTCHA */}
+                <div
+                  onClick={handleToggleCaptcha}
+                  role="checkbox"
+                  aria-checked={captchaState === 'verified'}
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === ' ' || e.key === 'Enter') {
+                      e.preventDefault();
+                      handleToggleCaptcha();
+                    }
+                  }}
+                  className={`flex items-center justify-between px-4 py-3 border select-none cursor-pointer transition-colors ${
+                    captchaState === 'verified'
+                      ? 'bg-emerald-50/50 dark:bg-slate-900 border-emerald-400 dark:border-emerald-600'
+                      : 'bg-[#f9f9f9] dark:bg-slate-900 border-slate-300 dark:border-slate-600 hover:border-slate-400'
+                  }`}
+                >
+                  <div className="flex items-center gap-3.5">
+                    <div
+                      className={`w-7 h-7 flex items-center justify-center border-2 transition-all ${
+                        captchaState === 'verified'
+                          ? 'border-emerald-500 bg-emerald-500 text-white'
+                          : captchaState === 'verifying'
+                          ? 'border-transparent bg-transparent'
+                          : 'border-slate-400 dark:border-slate-500 bg-white dark:bg-slate-800 hover:border-blue-500'
+                      }`}
+                    >
+                      {captchaState === 'verifying' && (
+                        <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent animate-spin" style={{ borderRadius: '50%' }} />
+                      )}
+                      {captchaState === 'verified' && (
+                        <svg viewBox="0 0 24 24" className="w-5 h-5 stroke-current stroke-[3] fill-none">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      )}
+                    </div>
+                    <span className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                      No soy un robot
+                    </span>
+                  </div>
+
+                  <div className="flex flex-col items-center text-center pl-3 border-l border-slate-200 dark:border-slate-700">
+                    <ShieldCheck className="w-6 h-6 text-blue-600 dark:text-blue-400 mb-0.5" />
+                    <span className="text-[9px] font-bold text-slate-500 dark:text-slate-400 leading-none">
+                      reCAPTCHA
+                    </span>
+                    <span className="text-[8px] text-slate-400 dark:text-slate-500 mt-0.5 leading-none">
+                      Privacidad · Condiciones
+                    </span>
+                  </div>
+                </div>
+              </>
             )}
 
             <button type="submit" disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-widest py-3 rounded-none transition-colors mt-2">
@@ -573,7 +849,7 @@ function AuthModal({ isOpen, onClose, onLogin }) {
 
           <div className="mt-6 text-center">
             <button 
-              onClick={() => { setIsLogin(!isLogin); setError(''); setSuccessMsg(''); setConfirmPassword(''); }} 
+              onClick={() => { setIsLogin(!isLogin); setError(''); setSuccessMsg(''); setConfirmPassword(''); setCaptchaState('unchecked'); }} 
               type="button" 
               className="text-sm text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 font-medium"
             >
@@ -611,22 +887,33 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
 
   const nameParts = (currentUser?.name || '').trim().split(' ');
 
-  const [formData, setFormData] = useState({
-    email: currentUser?.email || '',
-    nombre: nameParts[0] || '',
-    apellido: nameParts.slice(1).join(' ') || '',
-    dni: '',
-    telefono: currentUser?.phone || '',
-    metodoEnvio: 'correo_domicilio', // correo_domicilio | correo_sucursal | acordar | retiro
-    calle: '',
-    numero: '',
-    piso: '',
-    ciudad: 'Arrecifes',
-    provincia: 'Buenos Aires',
-    cp: '2740',
-    metodoPago: 'mercadopago',
-    observaciones: ''
+  const [formData, setFormData] = useState(() => {
+    const savedDraft = safeJsonParse(sessionStorage.getItem('dapa_checkout_draft'), null);
+    return {
+      email: savedDraft?.email || currentUser?.email || '',
+      nombre: savedDraft?.nombre || nameParts[0] || '',
+      apellido: savedDraft?.apellido || nameParts.slice(1).join(' ') || '',
+      dni: savedDraft?.dni || '',
+      telefono: savedDraft?.telefono || currentUser?.phone || '',
+      metodoEnvio: savedDraft?.metodoEnvio || 'correo_domicilio', // correo_domicilio | correo_sucursal | acordar | retiro
+      calle: savedDraft?.calle || '',
+      numero: savedDraft?.numero || '',
+      piso: savedDraft?.piso || '',
+      ciudad: savedDraft?.ciudad || 'Arrecifes',
+      provincia: savedDraft?.provincia || 'Buenos Aires',
+      cp: savedDraft?.cp || '2740',
+      metodoPago: savedDraft?.metodoPago || 'mercadopago',
+      observaciones: savedDraft?.observaciones || ''
+    };
   });
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('dapa_checkout_draft', JSON.stringify(formData));
+    } catch {
+      // Ignorar si sessionStorage está restringido
+    }
+  }, [formData]);
 
   const totalUnidades = useMemo(
     () => cart.reduce((acc, item) => acc + Number(item.quantity || 1), 0),
@@ -652,7 +939,7 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
         if (!res.ok) throw new Error('Error en API');
         const data = await res.json();
         if (isMounted) setCotizacionCorreo(data);
-      } catch (err) {
+      } catch {
         // Fallback local por si estás corriendo solo vite sin vercel dev
         const recargo = Math.max(0, (totalUnidades - 1) * 950);
         const isLocal = formData.cp === '2740';
@@ -773,7 +1060,7 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
         OBSERVACIONES:
         ${formData.observaciones || 'Ninguna'}`;
 
-    const itemsPayload = cart.map(item => ({
+      const itemsPayload = cart.map(item => ({
         product_id: item.product.id,
         quantity: item.quantity,
         unit_price: item.product.price
@@ -798,8 +1085,18 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
         unit_price: item.product.price
       }));
 
-      const { error: itemsError } = await supabase.from('order_items').insert(itemsToInsert);
-      if (itemsError) throw itemsError;
+      await ensureOrderItemsInserted(newOrder.id, itemsToInsert);
+
+      saveOrderToLocalHistory({
+        id: newOrder.id,
+        created_at: new Date().toISOString(),
+        total_estimated: finalTotal,
+        status: 'Pendiente (Vía Web)',
+        metodoPago: formData.metodoPago,
+        customer_name: `${formData.nombre} ${formData.apellido}`,
+        customer_phone: formData.telefono,
+        items: cart.map(i => ({ sku: i.product.sku_code, name: i.product.name, qty: i.quantity }))
+      });
 
       if (formData.metodoPago === 'mercadopago') {
         const response = await fetch('/api/createPreference', {
@@ -809,14 +1106,16 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
             orderId: newOrder.id,
             items: cart,
             shippingCost,
-            shippingTitle: getShippingLabel()
+            shippingTitle: getShippingLabel(),
+            metodoEnvio: formData.metodoEnvio,
+            cpDestino: formData.cp
           })
         });
         
         const data = await response.json();
         
         if (data.init_point) {
-          if (onSuccess) onSuccess(true);
+          if (onSuccess) onSuccess(true, newOrder.id);
           window.location.href = data.init_point;
           return;
         } else {
@@ -824,7 +1123,12 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
         }
       }
 
-      onSuccess(false);
+      try {
+        sessionStorage.removeItem('dapa_checkout_draft');
+      } catch {
+        // Ignorar
+      }
+      onSuccess(false, newOrder.id);
 
     } catch (error) {
       console.error(error);
@@ -839,15 +1143,31 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
     <div className="fixed inset-0 z-[1000] bg-slate-50 dark:bg-slate-900 overflow-y-auto flex flex-col transition-colors">
       <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-4 sticky top-0 z-10 shadow-sm flex items-center justify-between">
         <h2 className="font-michroma text-xl font-bold text-slate-900 dark:text-white ml-4">D.A.P.A <span className="text-[10px] font-exo tracking-[0.2em] uppercase text-slate-500">Checkout</span></h2>
-        <button onClick={onClose} className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-none"><X className="w-6 h-6" /></button>
+        <button onClick={onClose} className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-none" aria-label="Cerrar checkout"><X className="w-6 h-6" /></button>
       </div>
 
       <div className="flex-1 max-w-5xl mx-auto w-full p-4 sm:p-6 lg:p-8 flex flex-col lg:flex-row gap-8">
         <div className="flex-1">
-          <div className="flex items-center justify-between mb-8 border-b border-slate-200 dark:border-slate-700 pb-4">
+          <div className="flex items-center justify-between mb-6 border-b border-slate-200 dark:border-slate-700 pb-4">
             <div className={`flex-1 text-center font-bold text-xs uppercase tracking-widest ${step >= 1 ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`}>1. Envío</div>
             <div className={`flex-1 text-center font-bold text-xs uppercase tracking-widest border-l border-slate-200 dark:border-slate-700 ${step >= 2 ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`}>2. Pago</div>
             <div className={`flex-1 text-center font-bold text-xs uppercase tracking-widest border-l border-slate-200 dark:border-slate-700 ${step >= 3 ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`}>3. Revisión</div>
+          </div>
+
+          {/* AVISO PERMANENTE DE DEMORA POR ENCARGUE Y GARANTÍA DE REINTEGRO */}
+          <div className="mb-6 p-4 rounded-none bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 text-xs text-slate-700 dark:text-slate-300 space-y-2">
+            <div className="flex items-start gap-2.5">
+              <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+              <span>
+                <strong className="text-amber-900 dark:text-amber-300 uppercase tracking-wider">Aviso importante sobre plazos (Por Encargue):</strong> La mayoría de nuestros repuestos se traen directamente de distribuidora por encargue, por lo que <strong>tu pedido puede presentar demora de preparación</strong> antes del despacho o retiro. Un asesor se comunicará con vos para confirmarte el plazo exacto.
+              </span>
+            </div>
+            <div className="flex items-start gap-2.5 pt-2 border-t border-amber-200/70 dark:border-amber-800/50">
+              <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
+              <span>
+                <strong className="text-emerald-800 dark:text-emerald-300 uppercase tracking-wider">Garantía de Reintegro 100%:</strong> Si abonás con tarjeta, Mercado Pago o transferencia y preferís no aguardar la demora del encargue, <strong>te reintegramos el 100% de tu dinero de inmediato</strong> sin ningún cargo.
+              </span>
+            </div>
           </div>
 
           {step === 1 && (
@@ -1119,7 +1439,7 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
                   <input type="radio" name="metodoPago" value="mercadopago" checked={formData.metodoPago === 'mercadopago'} onChange={handleChange} className="w-5 h-5 text-blue-600" />
                   <div>
                     <span className="font-bold text-slate-900 dark:text-white block">Mercado Pago</span>
-                    <span className="text-xs text-slate-500">Tarjetas de crédito, débito o dinero en cuenta</span>
+                    <span className="text-xs text-slate-500">Tarjetas de crédito, débito o dinero en cuenta (con reintegro automático 100% garantizado si preferís no esperar un encargue)</span>
                   </div>
                 </label>
                 
@@ -1127,7 +1447,7 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
                   <input type="radio" name="metodoPago" value="transferencia" checked={formData.metodoPago === 'transferencia'} onChange={handleChange} className="w-5 h-5 text-blue-600" />
                   <div>
                     <span className="font-bold text-slate-900 dark:text-white block">Transferencia Bancaria</span>
-                    <span className="text-xs text-slate-500">Alias o CBU (Coordinamos por WhatsApp)</span>
+                    <span className="text-xs text-slate-500">Alias o CBU (Coordinamos por WhatsApp luego de confirmar disponibilidad)</span>
                   </div>
                 </label>
                 
@@ -1135,12 +1455,12 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
                   <input type="radio" name="metodoPago" value="acordar" checked={formData.metodoPago === 'acordar'} onChange={handleChange} className="w-5 h-5 text-blue-600" />
                   <div>
                     <span className="font-bold text-slate-900 dark:text-white block">Acordar en el local</span>
-                    <span className="text-xs text-slate-500">Pagás en efectivo al retirar en mostrador</span>
+                    <span className="text-xs text-slate-500">Pagás en efectivo o tarjeta al retirar en mostrador</span>
                   </div>
                 </label>
               </div>
 
-              <textarea name="observaciones" value={formData.observaciones} onChange={handleChange} placeholder="Notas del pedido (Opcional)" className="w-full p-3 rounded-none border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-24 resize-none mt-4"></textarea>
+              <textarea name="observaciones" value={formData.observaciones} onChange={handleChange} placeholder="Notas del pedido (Opcional: ej. modelo exacto, motor, año o consulta sobre demora)" className="w-full p-3 rounded-none border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-24 resize-none mt-4"></textarea>
 
               <div className="flex gap-4 mt-6">
                 <button onClick={() => setStep(1)} className="w-1/3 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 font-bold uppercase py-4 rounded-none">Volver</button>
@@ -1231,7 +1551,9 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
                 <div key={item.product.sku_code} className="flex justify-between items-start gap-4">
                   <div>
                     <p className="text-sm font-semibold text-slate-800 dark:text-white leading-tight line-clamp-2">{item.quantity}x {item.product.name}</p>
-                    <p className="text-xs text-slate-500">{item.product.sku_code}</p>
+                    <p className="text-xs text-slate-500">
+                      {item.product.sku_code} • {Number(item.product.stock || 0) > 0 ? 'Stock en local' : 'Por encargue'}
+                    </p>
                   </div>
                   <p className="text-sm font-bold text-slate-900 dark:text-white whitespace-nowrap">
                     ${(item.product.price * item.quantity).toLocaleString('es-AR')}
@@ -1260,6 +1582,11 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
                 <span className="text-2xl font-bold text-slate-900 dark:text-white">${finalTotal.toLocaleString('es-AR')}</span>
               </div>
             </div>
+
+            <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-700 text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+              <span>Compra protegida: reintegro del 100% disponible si tu pedido por encargue demora y preferís cancelar.</span>
+            </div>
           </div>
         </div>
       </div>
@@ -1271,9 +1598,9 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, current
   const [checkoutMode, setCheckoutMode] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
+  const [lastCreatedOrderId, setLastCreatedOrderId] = useState(null);
   const [showWebCheckout, setShowWebCheckout] = useState(false);
   const [drawerError, setDrawerError] = useState('');
-  
 
   if (!isOpen) return null;
 
@@ -1311,13 +1638,22 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, current
         unit_price: item.product.price
       }));
 
-      const { error: itemsError } = await supabase
-        .from('order_items')
-        .insert(itemsToInsert);
+      await ensureOrderItemsInserted(newOrder.id, itemsToInsert);
 
-      if (itemsError) throw itemsError;
+      saveOrderToLocalHistory({
+        id: newOrder.id,
+        created_at: new Date().toISOString(),
+        total_estimated: cartTotal,
+        status: metodoDeEnvio === 'WHATSAPP' ? 'Pendiente (Vía WhatsApp)' : 'Pendiente (Vía Web)',
+        metodoPago: metodoDeEnvio === 'WHATSAPP' ? 'whatsapp' : 'web',
+        customer_name: clienteNombre,
+        customer_phone: clienteTelefono,
+        items: cart.map(i => ({ sku: i.product.sku_code, name: i.product.name, qty: i.quantity }))
+      });
 
- if (metodoDeEnvio === 'WHATSAPP') {
+      setLastCreatedOrderId(newOrder.id);
+
+      if (metodoDeEnvio === 'WHATSAPP') {
         let wppText = `¡Hola DAPA Repuestos! Soy ${clienteNombre}.\n\nAcabo de generar el pedido web #${newOrder.id}:\n\n`;
         cart.forEach(item => {
           wppText += `• ${item.quantity}x [${item.product.sku_code}] ${item.product.name}\n`;
@@ -1329,20 +1665,20 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, current
 
         const wppUrl = `${CONTACT_INFO.whatsappLink}?text=${encodeURIComponent(wppText)}`;
         
-        window.open(wppUrl, '_blank');
         if (clearCart) clearCart();
         onClose();
         setCheckoutMode(false);
+        openExternalUrl(wppUrl);
       } else {
         setOrderSuccess(true);
         if (clearCart) clearCart();
       }
 
-   } catch (error) {
-   console.error("Error al procesar el pedido:", error);
-   setDrawerError("Hubo un error al procesar el pedido. Intentá nuevamente.");
-   setTimeout(() => setDrawerError(''), 4000);
- } finally {
+    } catch (error) {
+      console.error("Error al procesar el pedido:", error);
+      setDrawerError("Hubo un error al procesar el pedido. Intentá nuevamente.");
+      setTimeout(() => setDrawerError(''), 4000);
+    } finally {
       setIsSubmitting(false);
     }
   };
@@ -1361,9 +1697,12 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, current
         cartTotal={cartTotal}
         currentUser={currentUser}
         onClose={() => setShowWebCheckout(false)}
-        onSuccess={(isMp) => {
+        onSuccess={(isMp, createdOrderId) => {
+          if (createdOrderId) setLastCreatedOrderId(createdOrderId);
           if (isMp) {
-            if (clearCart) clearCart(); 
+            // No vaciamos el carrito antes de redirigir a Mercado Pago por si el usuario vuelve atrás;
+            // TiendaPublica vacía el carrito automáticamente cuando regresa con mp_status=approved.
+            setShowWebCheckout(false);
           } else {
             setOrderSuccess(true);
             setShowWebCheckout(false);
@@ -1384,7 +1723,7 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, current
             <ShoppingCart className="w-6 h-6 text-slate-900 dark:text-white" />
             <h3 className="font-bold text-xl uppercase tracking-widest font-exo text-slate-900 dark:text-white">Tu Cotización</h3>
           </div>
-          <button onClick={resetAndClose} className="text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors p-2 rounded-none hover:bg-slate-200 dark:hover:bg-slate-700 focus:outline-none">
+          <button onClick={resetAndClose} className="text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors p-2 rounded-none hover:bg-slate-200 dark:hover:bg-slate-700 focus:outline-none" aria-label="Cerrar carrito">
             <X className="w-6 h-6" />
           </button>
         </div>
@@ -1395,9 +1734,14 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, current
               <div className="w-20 h-20 bg-green-100 dark:bg-green-900/30 rounded-none flex items-center justify-center mb-6">
                 <CheckCircle className="w-10 h-10 text-green-600 dark:text-green-400" />
               </div>
-              <h3 className="text-2xl font-bold uppercase tracking-widest mb-4 dark:text-white">¡Pedido Registrado!</h3>
-              <p className="text-slate-500 dark:text-slate-400 font-light mb-8 px-4">
-                Ya guardamos tu solicitud. A la brevedad uno de nuestros asesores verificará el stock y se comunicará con vos.
+              <h3 className="text-2xl font-bold uppercase tracking-widest mb-2 dark:text-white">¡Pedido Registrado!</h3>
+              {lastCreatedOrderId && (
+                <span className="text-xs font-bold uppercase tracking-widest bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-3 py-1 mb-4">
+                  Pedido #{lastCreatedOrderId}
+                </span>
+              )}
+              <p className="text-slate-500 dark:text-slate-400 font-light mb-6 px-4 text-sm">
+                Ya guardamos tu solicitud. A la brevedad uno de nuestros asesores verificará la disponibilidad o demora del encargue y se comunicará con vos.
               </p>
               <button onClick={resetAndClose} className="text-sm font-bold uppercase tracking-widest text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400 pb-1 hover:text-slate-900 dark:hover:text-white transition-colors focus:outline-none">
                 Seguir viendo el catálogo
@@ -1410,7 +1754,7 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, current
               <p className="text-sm mt-2">Buscá repuestos en el catálogo y agregalos aquí.</p>
             </div>
           ) : (
-         <div className="space-y-4">
+            <div className="space-y-4">
               {cart.map((item) => (
                 <div key={item.product.sku_code} className="flex gap-4 border border-slate-100 dark:border-slate-700 p-4 rounded-none shadow-sm relative group bg-white dark:bg-slate-800 hover:border-blue-200 transition-colors">
                   <div className="flex-1 min-w-0">
@@ -1419,7 +1763,7 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, current
                     </h4>
                     <div className="flex items-center justify-between mt-1">
                       <span className="text-[10px] font-bold tracking-widest uppercase text-slate-400">
-                        {item.product.sku_code}
+                        {item.product.sku_code} • {Number(item.product.stock || 0) > 0 ? 'En local' : 'Por encargue'}
                       </span>
                       <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
                         ${Number(item.product.price).toLocaleString('es-AR')} c/u
@@ -1428,11 +1772,11 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, current
                     
                     <div className="flex items-center gap-3 mt-4">
                       <div className="flex items-center border border-slate-200 dark:border-slate-600 rounded-none bg-slate-50 dark:bg-slate-900">
-                        <button onClick={() => updateQuantity(item.product.sku_code, -1)} className="p-2 text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700 rounded-none transition-colors focus:outline-none">
+                        <button onClick={() => updateQuantity(item.product.sku_code, -1)} className="p-2 text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700 rounded-none transition-colors focus:outline-none" aria-label="Disminuir cantidad">
                           <Minus className="w-3 h-3" />
                         </button>
                         <span className="w-8 text-center text-xs font-bold text-slate-700 dark:text-slate-200">{item.quantity}</span>
-                        <button onClick={() => updateQuantity(item.product.sku_code, 1)} className="p-2 text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700 rounded-none transition-colors focus:outline-none">
+                        <button onClick={() => updateQuantity(item.product.sku_code, 1)} className="p-2 text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700 rounded-none transition-colors focus:outline-none" aria-label="Aumentar cantidad">
                           <Plus className="w-3 h-3" />
                         </button>
                       </div>
@@ -1441,7 +1785,7 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, current
                         ${(Number(item.product.price) * item.quantity).toLocaleString('es-AR')}
                       </span>
 
-                      <button onClick={() => removeItem(item.product.sku_code)} className="text-red-400 hover:text-red-600 p-2 rounded-none hover:bg-red-50 dark:hover:bg-slate-700 transition-colors focus:outline-none">
+                      <button onClick={() => removeItem(item.product.sku_code)} className="text-red-400 hover:text-red-600 p-2 rounded-none hover:bg-red-50 dark:hover:bg-slate-700 transition-colors focus:outline-none" aria-label="Eliminar del carrito">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
@@ -1455,16 +1799,24 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, current
         {!orderSuccess && cart.length > 0 && (
           <div className="p-6 border-t border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.05)]">
             {currentUser && (
-              <div className="mb-4 text-xs font-light text-slate-500 dark:text-slate-400 text-center bg-slate-50 dark:bg-slate-900 py-2 rounded-none border border-slate-100 dark:border-slate-700">
+              <div className="mb-3 text-xs font-light text-slate-500 dark:text-slate-400 text-center bg-slate-50 dark:bg-slate-900 py-2 rounded-none border border-slate-100 dark:border-slate-700">
                 Cotización a nombre de: <strong className="font-bold text-slate-700 dark:text-slate-200">{currentUser.name}</strong>
               </div>
             )}
 
-            <div className="mb-4 p-3 rounded-none bg-amber-50 dark:bg-slate-900/80 border border-amber-200/80 dark:border-slate-700 text-[11px] text-slate-600 dark:text-slate-400 leading-snug flex items-start gap-2">
-              <Clock className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
-              <span>
-                <strong>Nota:</strong> Algunos artículos de catálogo se traen directamente de distribuidora <strong>por encargue</strong>. Te confirmaremos la demora exacta al procesar tu pedido.
-              </span>
+            <div className="mb-4 p-3 rounded-none bg-amber-50 dark:bg-slate-900/80 border border-amber-200/80 dark:border-slate-700 text-[11px] text-slate-600 dark:text-slate-400 leading-snug space-y-1.5">
+              <div className="flex items-start gap-2">
+                <Clock className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                <span>
+                  <strong>Aviso por encargue:</strong> La mayoría de los artículos se traen directamente de distribuidora <strong>por encargue</strong> y tu pedido puede demorar. Te confirmaremos el plazo exacto al procesarlo.
+                </span>
+              </div>
+              <div className="flex items-start gap-2 pt-1 border-t border-amber-200/60 dark:border-slate-700">
+                <ShieldCheck className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
+                <span>
+                  <strong>Reintegro garantizado:</strong> Si pagás con tarjeta o medio directo y decidís no esperar, te reintegramos el 100% del dinero.
+                </span>
+              </div>
             </div>
 
             {drawerError && <div className="mb-3 p-3 rounded-none bg-red-50 dark:bg-red-900/25 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 text-xs font-bold text-center">{drawerError}</div>}
@@ -1508,11 +1860,667 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, current
                 onClick={() => setCheckoutMode(true)}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-widest py-4 rounded-none transition-colors flex items-center justify-center gap-3 shadow-lg shadow-blue-600/20 focus:outline-none focus:ring-4 focus:ring-blue-300"
               >
-                Solicitar Cotización
+                Solicitar Cotización / Comprar
               </button>
             )}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function CustomerOrdersModal({ isOpen, onClose, currentUser }) {
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [lookupOrderId, setLookupOrderId] = useState('');
+  const [lookupError, setLookupError] = useState('');
+
+  // Estados para Rastreo de Correo Argentino
+  const [activeTrackingOrder, setActiveTrackingOrder] = useState(null);
+  const [trackingInfo, setTrackingInfo] = useState(null);
+  const [isTrackingLoading, setIsTrackingLoading] = useState(false);
+  const [copiedTracking, setCopiedTracking] = useState(false);
+
+  // Estados para Chat Directo Vendedor <-> Comprador (habilitado solo al tener una compra)
+  const [activeChatOrder, setActiveChatOrder] = useState(null);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState('');
+  const [isSendingChat, setIsSendingChat] = useState(false);
+  const [chatError, setChatError] = useState('');
+  const chatBottomRef = useRef(null);
+
+  const loadOrders = useCallback(async () => {
+    if (!currentUser) {
+      setOrders([]);
+      return;
+    }
+    setLoading(true);
+    setLookupError('');
+    try {
+      const localHistory = safeJsonParse(localStorage.getItem('dapa_my_orders'), []);
+      const localIds = Array.isArray(localHistory) ? localHistory.map(o => Number(o.id)).filter(Boolean) : [];
+      const mergedMap = new Map();
+
+      // 1. Buscar pedidos asociados al email del usuario logueado en notes
+      if (currentUser.email) {
+        const { data: byEmail } = await supabase
+          .from('orders')
+          .select('id, created_at, customer_name, customer_phone, status, total_estimated, notes')
+          .ilike('notes', `%${currentUser.email}%`)
+          .order('created_at', { ascending: false })
+          .limit(30);
+
+        if (Array.isArray(byEmail)) {
+          byEmail.forEach(o => mergedMap.set(String(o.id), o));
+        }
+      }
+
+      // 2. Buscar pedidos asociados al user_id si es UUID válido
+      if (currentUser.id && String(currentUser.id).includes('-')) {
+        const { data: byUserId } = await supabase
+          .from('orders')
+          .select('id, created_at, customer_name, customer_phone, status, total_estimated, notes')
+          .eq('user_id', currentUser.id)
+          .order('created_at', { ascending: false })
+          .limit(30);
+
+        if (Array.isArray(byUserId)) {
+          byUserId.forEach(o => mergedMap.set(String(o.id), o));
+        }
+      }
+
+      // 3. Buscar pedidos guardados localmente en este navegador
+      if (localIds.length > 0) {
+        const { data: byLocalIds } = await supabase
+          .from('orders')
+          .select('id, created_at, customer_name, customer_phone, status, total_estimated, notes')
+          .in('id', localIds)
+          .order('created_at', { ascending: false });
+
+        if (Array.isArray(byLocalIds)) {
+          byLocalIds.forEach(o => mergedMap.set(String(o.id), o));
+        }
+      }
+
+      const finalOrders = Array.from(mergedMap.values()).sort(
+        (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+      );
+
+      if (finalOrders.length > 0) {
+        setOrders(finalOrders);
+      } else {
+        setOrders(Array.isArray(localHistory) ? localHistory : []);
+      }
+    } catch {
+      const fallback = safeJsonParse(localStorage.getItem('dapa_my_orders'), []);
+      setOrders(Array.isArray(fallback) ? fallback : []);
+    } finally {
+      setLoading(false);
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (isOpen && currentUser) {
+      loadOrders();
+    } else if (!isOpen) {
+      setActiveChatOrder(null);
+      setActiveTrackingOrder(null);
+    }
+  }, [isOpen, currentUser, loadOrders]);
+
+  // Sincronización en tiempo real del chat cuando hay un pedido con chat abierto
+  useEffect(() => {
+    if (!isOpen || !activeChatOrder) return;
+    let isMounted = true;
+
+    const refreshChat = async () => {
+      try {
+        const { data } = await supabase
+          .from('orders')
+          .select('id, notes, status')
+          .eq('id', Number(activeChatOrder.id))
+          .maybeSingle();
+
+        if (isMounted && data) {
+          const msgs = parseOrderChatMessages(data.notes);
+          setChatMessages(msgs);
+          setOrders(prev => prev.map(o => o.id === data.id ? { ...o, notes: data.notes, status: data.status } : o));
+        }
+      } catch {
+        // Silencioso en polling
+      }
+    };
+
+    refreshChat();
+    const intervalId = setInterval(refreshChat, 4000);
+    return () => {
+      isMounted = false;
+      clearInterval(intervalId);
+    };
+  }, [isOpen, activeChatOrder]);
+
+  useEffect(() => {
+    if (chatBottomRef.current) {
+      chatBottomRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [chatMessages.length, activeChatOrder]);
+
+  if (!isOpen || !currentUser) return null;
+
+  const handleOpenOrderChat = (order) => {
+    setActiveTrackingOrder(null);
+    setActiveChatOrder(order);
+    setChatMessages(parseOrderChatMessages(order.notes));
+    setChatError('');
+  };
+
+  const handleSendChat = async (e) => {
+    e.preventDefault();
+    if (!activeChatOrder || !chatInput.trim() || isSendingChat) return;
+    const messageText = chatInput.trim();
+    setIsSendingChat(true);
+    setChatError('');
+    try {
+      const result = await sendOrderChatMessageHelper({
+        orderId: activeChatOrder.id,
+        senderRole: 'buyer',
+        senderName: currentUser?.name || activeChatOrder.customer_name || 'Comprador',
+        text: messageText
+      });
+      setChatInput('');
+      if (Array.isArray(result.messages)) {
+        setChatMessages(result.messages);
+      }
+      if (result.updatedNotes) {
+        setOrders(prev => prev.map(o => o.id === activeChatOrder.id ? { ...o, notes: result.updatedNotes } : o));
+      }
+    } catch {
+      setChatError('No se pudo enviar el mensaje. Intentá de nuevo en unos segundos.');
+    } finally {
+      setIsSendingChat(false);
+    }
+  };
+
+  const handleOpenTracking = async (order) => {
+    setActiveChatOrder(null);
+    setActiveTrackingOrder(order);
+    setIsTrackingLoading(true);
+    setTrackingInfo(null);
+
+    const meta = extractOrderTrackingMeta(order.notes);
+    try {
+      const res = await fetch('/api/rastrearCorreo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderId: order.id,
+          trackingNumber: meta.trackingCode
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setTrackingInfo(data);
+        setIsTrackingLoading(false);
+        return;
+      }
+    } catch {
+      // Fallback local si se corre sin funciones serverless
+    }
+
+    const statusLower = String(order.status || '').toLowerCase();
+    const stage = statusLower.includes('encargue')
+      ? 'encargue'
+      : meta.trackingCode
+      ? 'en_camino'
+      : 'preparacion';
+
+    setTrackingInfo({
+      trackingNumber: meta.trackingCode || null,
+      orderId: order.id,
+      orderStatus: order.status,
+      carrier: 'Correo Argentino',
+      currentStage: stage,
+      officialTrackingUrl: 'https://www.correoargentino.com.ar/formularios/e-commerce',
+      events: [
+        ...(meta.trackingCode
+          ? [{
+              date: meta.dispatchedAt || new Date().toLocaleDateString('es-AR'),
+              status: 'Despachado en Correo Argentino',
+              location: 'Sucursal Arrecifes (CP 2740)',
+              description: `Código de pieza Correo Argentino: ${meta.trackingCode}`
+            }]
+          : []),
+        {
+          date: order.created_at ? new Date(order.created_at).toLocaleString('es-AR') : 'Reciente',
+          status: `Estado actual: ${order.status || 'En revisión'}`,
+          location: 'D.A.P.A. Repuestos Molle (Lamadrid 65, Arrecifes)',
+          description: statusLower.includes('encargue')
+            ? 'Pedido en gestión por encargue con distribuidora.'
+            : 'Pedido recibido y en proceso de preparación.'
+        }
+      ]
+    });
+    setIsTrackingLoading(false);
+  };
+
+  const handleLookupById = async (e) => {
+    e.preventDefault();
+    const cleanId = lookupOrderId.replace(/\D/g, '');
+    if (!cleanId) return;
+    setLoading(true);
+    setLookupError('');
+    try {
+      const { data, error } = await supabase
+        .from('orders')
+        .select('id, created_at, customer_name, customer_phone, status, total_estimated, notes')
+        .eq('id', Number(cleanId))
+        .maybeSingle();
+
+      if (error || !data) {
+        setLookupError(`No encontramos el pedido #${cleanId}. Verificá el número ingresado.`);
+      } else {
+        saveOrderToLocalHistory({
+          id: data.id,
+          created_at: data.created_at,
+          total_estimated: data.total_estimated,
+          status: data.status,
+          customer_name: data.customer_name,
+          customer_phone: data.customer_phone
+        });
+        setOrders(prev => [data, ...prev.filter(o => String(o.id) !== String(data.id))]);
+        setLookupOrderId('');
+      }
+    } catch {
+      setLookupError('No se pudo consultar el pedido en este momento.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRequestRefundWpp = (order) => {
+    const text = `¡Hola DAPA Repuestos! Soy ${order.customer_name || currentUser?.name || 'cliente'}.\n\nQuería solicitar el *reintegro del dinero* correspondiente a mi *Pedido #${order.id}* ($${Number(order.total_estimated || 0).toLocaleString('es-AR')}) por demora en el encargue.`;
+    openExternalUrl(`${CONTACT_INFO.whatsappLink}?text=${encodeURIComponent(text)}`);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-white dark:bg-slate-800 w-full max-w-2xl rounded-none shadow-2xl border border-slate-200 dark:border-slate-700 max-h-[92vh] flex flex-col overflow-hidden">
+        <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-900">
+          <div className="flex items-center gap-3">
+            <Package className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+            <div>
+              <h2 className="text-lg font-bold uppercase tracking-widest text-slate-900 dark:text-white font-exo">
+                Mis Pedidos, Rastreo y Reintegros
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Seguimiento Correo Argentino, Chat Directo con el Vendedor y Reintegro 100% garantizado
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-900 dark:hover:text-white" aria-label="Cerrar">
+            <X className="w-6 h-6" />
+          </button>
+        </div>
+
+        <div className="p-6 overflow-y-auto custom-scrollbar space-y-5 flex-1">
+          {/* VISTA DE CHAT DIRECTO VENDEDOR <-> COMPRADOR (HABILITADA SOLO EN COMPRAS REALIZADAS) */}
+          {activeChatOrder ? (
+            <div className="flex flex-col h-[62vh] border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60">
+              <div className="p-4 bg-slate-900 text-white flex items-center justify-between gap-3 border-b border-slate-700">
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setActiveChatOrder(null)}
+                    className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors"
+                    title="Volver a mis pedidos"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                  </button>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 bg-emerald-400 animate-pulse" />
+                      <h3 className="text-xs font-black uppercase tracking-widest font-exo">
+                        Chat Directo con el Vendedor • Pedido #{activeChatOrder.id}
+                      </h3>
+                    </div>
+                    <p className="text-[11px] text-slate-400">
+                      D.A.P.A. Repuestos Molle (Atención exclusiva post-compra)
+                    </p>
+                  </div>
+                </div>
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 bg-blue-600/30 border border-blue-400/40 text-blue-200">
+                  {activeChatOrder.status || 'En curso'}
+                </span>
+              </div>
+
+              <div className="flex-1 p-4 overflow-y-auto custom-scrollbar space-y-3">
+                {chatMessages.length === 0 ? (
+                  <div className="text-center py-10 px-4 text-slate-400 space-y-2">
+                    <MessageSquare className="w-10 h-10 mx-auto text-blue-500 opacity-50" />
+                    <p className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">
+                      Canal directo habilitado por tu compra #{activeChatOrder.id}
+                    </p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+                      Escribinos por acá cualquier consulta sobre el plazo de encargue, envío por Correo Argentino o solicitud de reintegro. El vendedor te responderá directamente en este chat.
+                    </p>
+                  </div>
+                ) : (
+                  chatMessages.map((msg) => {
+                    const isBuyer = msg.sender !== 'seller';
+                    return (
+                      <div
+                        key={msg.id}
+                        className={`flex flex-col ${isBuyer ? 'items-end' : 'items-start'}`}
+                      >
+                        <div
+                          className={`max-w-[82%] p-3 text-xs leading-relaxed ${
+                            isBuyer
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 shadow-sm'
+                          }`}
+                        >
+                          <div className={`text-[10px] font-bold uppercase tracking-wider mb-1 ${
+                            isBuyer ? 'text-blue-200' : 'text-amber-500'
+                          }`}>
+                            {isBuyer ? 'Vos' : '🔧 D.A.P.A. Repuestos (Vendedor)'}
+                          </div>
+                          <p className="whitespace-pre-wrap break-words">{msg.text}</p>
+                        </div>
+                        <span className="text-[10px] text-slate-400 mt-1 px-1">
+                          {msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : ''}
+                        </span>
+                      </div>
+                    );
+                  })
+                )}
+                <div ref={chatBottomRef} />
+              </div>
+
+              {chatError && (
+                <div className="px-4 py-2 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-300 text-xs font-bold border-t border-red-200 dark:border-red-800">
+                  {chatError}
+                </div>
+              )}
+
+              <form onSubmit={handleSendChat} className="p-3 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 flex gap-2">
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  placeholder="Escribí un mensaje para el vendedor..."
+                  className="flex-1 px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white outline-none focus:border-blue-500"
+                />
+                <button
+                  type="submit"
+                  disabled={isSendingChat || !chatInput.trim()}
+                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 disabled:opacity-50 transition-colors"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  {isSendingChat ? 'Enviando...' : 'Enviar'}
+                </button>
+              </form>
+            </div>
+          ) : activeTrackingOrder ? (
+            /* VISTA DE SEGUIMIENTO CORREO ARGENTINO */
+            <div className="border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60 p-5 space-y-5">
+              <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-4">
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTrackingOrder(null)}
+                    className="p-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 text-slate-700 dark:text-slate-200 transition-colors"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                  </button>
+                  <CorreoArgentinoLogo />
+                  <div>
+                    <h3 className="text-sm font-black uppercase tracking-wider text-slate-900 dark:text-white font-exo">
+                      Seguimiento de Envío • Pedido #{activeTrackingOrder.id}
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Integración Correo Argentino Paq.ar / e-Commerce
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {isTrackingLoading ? (
+                <div className="py-12 text-center text-slate-400 flex flex-col items-center gap-2">
+                  <Settings className="w-7 h-7 animate-spin text-blue-500" />
+                  <span className="text-xs uppercase tracking-widest">Consultando estado con Correo Argentino...</span>
+                </div>
+              ) : (
+                <>
+                  {/* Barra de progreso de 4 etapas */}
+                  <div className="grid grid-cols-4 gap-2 text-center pt-1">
+                    {[
+                      { id: 'encargue', label: '1. Encargue / Confirmado' },
+                      { id: 'preparacion', label: '2. Empaquetado en Local' },
+                      { id: 'en_camino', label: '3. En Correo Argentino' },
+                      { id: 'entregado', label: '4. Listo / Entregado' }
+                    ].map((st, idx) => {
+                      const stageOrder = ['encargue', 'preparacion', 'en_camino', 'entregado'];
+                      const currIdx = stageOrder.indexOf(trackingInfo?.currentStage || 'preparacion');
+                      const isDone = idx <= currIdx;
+                      return (
+                        <div key={st.id} className="space-y-1.5">
+                          <div className={`h-2 w-full ${isDone ? 'bg-blue-600' : 'bg-slate-200 dark:bg-slate-700'}`} />
+                          <span className={`block text-[10px] font-bold uppercase tracking-wider ${isDone ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`}>
+                            {st.label}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Código de Seguimiento Correo Argentino */}
+                  <div className="p-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block">
+                        Código de Seguimiento Correo Argentino (T&T)
+                      </span>
+                      {trackingInfo?.trackingNumber ? (
+                        <span className="text-base font-black font-mono text-slate-900 dark:text-white tracking-wider">
+                          {trackingInfo.trackingNumber}
+                        </span>
+                      ) : (
+                        <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">
+                          Pendiente de despacho (Se asignará apenas entreguemos el paquete en Correo Argentino)
+                        </span>
+                      )}
+                    </div>
+
+                    {trackingInfo?.trackingNumber && (
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            await copyTextToClipboard(trackingInfo.trackingNumber);
+                            setCopiedTracking(true);
+                            setTimeout(() => setCopiedTracking(false), 2000);
+                          }}
+                          className="px-3 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-slate-800 dark:text-white text-[11px] font-bold uppercase tracking-wider transition-colors"
+                        >
+                          {copiedTracking ? '¡Copiado!' : 'Copiar Código'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openExternalUrl(trackingInfo.officialTrackingUrl || 'https://www.correoargentino.com.ar/formularios/e-commerce')}
+                          className="px-3 py-2 bg-[#FFCE00] hover:bg-amber-400 text-[#152663] text-[11px] font-black uppercase tracking-wider transition-colors"
+                        >
+                          Ver en Web Correo Argentino ↗
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Historial de eventos */}
+                  <div className="space-y-3">
+                    <h4 className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                      Historial de Movimientos
+                    </h4>
+                    <div className="space-y-2.5 border-l-2 border-blue-500 pl-4 ml-1">
+                      {(trackingInfo?.events || []).map((ev, i) => (
+                        <div key={i} className="bg-white dark:bg-slate-800 p-3 border border-slate-200 dark:border-slate-700">
+                          <div className="flex flex-wrap justify-between items-center gap-2 mb-1">
+                            <span className="text-xs font-bold text-slate-900 dark:text-white">{ev.status}</span>
+                            <span className="text-[10px] text-slate-400 font-mono">{ev.date}</span>
+                          </div>
+                          <p className="text-[11px] text-blue-600 dark:text-blue-400 font-semibold">{ev.location}</p>
+                          {ev.description && <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">{ev.description}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
+            /* LISTA PRINCIPAL DE PEDIDOS DEL USUARIO LOGUEADO */
+            <>
+              <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 text-xs text-slate-700 dark:text-slate-300 space-y-1.5">
+                <p className="font-bold text-amber-900 dark:text-amber-300 uppercase tracking-wider flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                  Política de Encargue, Seguimiento y Reintegro 100%
+                </p>
+                <p>
+                  La mayoría de los repuestos se traen por encargue de distribuidora y pueden demorar entre 24 y 72 hs hábiles. En cada compra tenés habilitado el <strong>Chat Directo con el Vendedor</strong>, el <strong>Rastreo de Correo Argentino</strong> y el botón para solicitar el <strong>reintegro del 100% de tu dinero</strong> si decidís no esperar.
+                </p>
+              </div>
+
+              <form onSubmit={handleLookupById} className="flex gap-2">
+                <input
+                  type="text"
+                  value={lookupOrderId}
+                  onChange={(e) => setLookupOrderId(e.target.value)}
+                  placeholder="Vincular otro N° de Pedido a mi cuenta (ej: 145)..."
+                  className="flex-1 p-3 text-xs sm:text-sm rounded-none border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white outline-none focus:border-blue-500"
+                />
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold uppercase tracking-wider rounded-none transition-colors"
+                >
+                  Buscar Pedido
+                </button>
+              </form>
+
+              {lookupError && (
+                <p className="text-xs font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-3 border border-red-200 dark:border-red-800">
+                  {lookupError}
+                </p>
+              )}
+
+              {loading ? (
+                <div className="py-12 text-center text-slate-400 flex flex-col items-center gap-2">
+                  <Settings className="w-7 h-7 animate-spin text-blue-500" />
+                  <span className="text-xs uppercase tracking-widest">Consultando tus compras...</span>
+                </div>
+              ) : orders.length === 0 ? (
+                <div className="py-10 text-center text-slate-400 border border-dashed border-slate-200 dark:border-slate-700 p-6 space-y-2">
+                  <Package className="w-12 h-12 mx-auto mb-2 opacity-30" />
+                  <p className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                    Aún no registrás compras realizadas con tu cuenta
+                  </p>
+                  <p className="text-xs max-w-md mx-auto">
+                    El <strong>Chat Directo con el Vendedor</strong> y el <strong>Rastreo de Correo Argentino</strong> se habilitan automáticamente en cuanto realices tu primera compra.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {orders.map((ord) => {
+                    const isRefunded = String(ord.status || '').toLowerCase().includes('reintegrado');
+                    const isCancelled = String(ord.status || '').toLowerCase().includes('cancelado');
+                    const trackMeta = extractOrderTrackingMeta(ord.notes);
+                    const orderMsgs = parseOrderChatMessages(ord.notes);
+                    const lastMsg = orderMsgs.length > 0 ? orderMsgs[orderMsgs.length - 1] : null;
+                    const hasSellerReply = lastMsg?.sender === 'seller';
+
+                    return (
+                      <div key={ord.id} className="p-4 border border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-900/50 space-y-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-700 pb-2.5">
+                          <div>
+                            <span className="text-sm font-black font-exo text-slate-900 dark:text-white">
+                              PEDIDO #{ord.id}
+                            </span>
+                            {ord.created_at && (
+                              <span className="text-xs text-slate-400 ml-2">
+                                • {new Date(ord.created_at).toLocaleDateString('es-AR')}
+                              </span>
+                            )}
+                          </div>
+                          <span className={`text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 ${
+                            isRefunded
+                              ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300'
+                              : isCancelled
+                              ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                              : 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+                          }`}>
+                            {ord.status || 'En revisión'}
+                          </span>
+                        </div>
+
+                        <div className="flex flex-wrap justify-between items-center text-xs text-slate-600 dark:text-slate-300">
+                          <span>Cliente: <strong>{ord.customer_name || currentUser.name}</strong></span>
+                          <span className="text-sm font-bold font-exo text-slate-900 dark:text-white">
+                            Total: ${Number(ord.total_estimated || 0).toLocaleString('es-AR')}
+                          </span>
+                        </div>
+
+                        {trackMeta.trackingCode && (
+                          <div className="p-2.5 bg-blue-50 dark:bg-slate-800 border border-blue-200 dark:border-slate-700 flex items-center justify-between text-xs">
+                            <span className="font-semibold text-slate-700 dark:text-slate-200">
+                              📦 Código Correo Argentino: <strong className="font-mono text-blue-600 dark:text-amber-400">{trackMeta.trackingCode}</strong>
+                            </span>
+                          </div>
+                        )}
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenOrderChat(ord)}
+                            className="py-2.5 px-3 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors relative"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" />
+                            <span>Chat Vendedor</span>
+                            {orderMsgs.length > 0 && (
+                              <span className={`ml-1 px-1.5 py-0.5 text-[9px] font-black ${
+                                hasSellerReply ? 'bg-amber-400 text-slate-950 animate-pulse' : 'bg-blue-800 text-white'
+                              }`}>
+                                {orderMsgs.length}
+                              </span>
+                            )}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleOpenTracking(ord)}
+                            className="py-2.5 px-3 bg-slate-800 hover:bg-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600 text-white text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors"
+                          >
+                            <Truck className="w-3.5 h-3.5 text-amber-400" />
+                            <span>Rastrear Envío</span>
+                          </button>
+
+                          {!isRefunded && !isCancelled && (
+                            <button
+                              type="button"
+                              onClick={() => handleRequestRefundWpp(ord)}
+                              className="py-2.5 px-3 bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                              <span>Pedir Reintegro</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -1731,7 +2739,7 @@ function getCategoryVisualImage(category) {
 /* ==========================================================================
    NAVBAR CON MEGA-MENÚ A PANTALLA COMPLETA Y BUSCADOR CON ESTILO BISELADO
    ========================================================================== */
-function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenCart, onLogout, toggleDarkMode, isDarkMode, categories, allProducts, onOpenCategory, onProductSearchSelect, onSearchSubmit, onLoginClick }) {
+function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenCart, onOpenOrders, onLogout, toggleDarkMode, isDarkMode, categories, allProducts, onOpenCategory, onProductSearchSelect, onSearchSubmit, onLoginClick }) {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState(null);
@@ -2172,7 +3180,7 @@ function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenCart, on
                 {currentUser.name.charAt(0).toUpperCase()}
               </button>
               
-              <div className={`absolute top-full right-0 mt-2 w-52 bg-white dark:bg-slate-800 rounded-none shadow-xl border border-slate-200 dark:border-slate-700 transition-all duration-200 z-[110] overflow-hidden ${
+              <div className={`absolute top-full right-0 mt-2 w-56 bg-white dark:bg-slate-800 rounded-none shadow-xl border border-slate-200 dark:border-slate-700 transition-all duration-200 z-[110] overflow-hidden ${
                 userMenuOpen 
                   ? 'opacity-100 visible pointer-events-auto' 
                   : 'opacity-0 invisible pointer-events-none md:group-hover:opacity-100 md:group-hover:visible md:group-hover:pointer-events-auto'
@@ -2181,6 +3189,18 @@ function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenCart, on
                   <p className="text-sm font-bold text-slate-800 dark:text-white truncate">{currentUser.name}</p>
                   {currentUser.email && <p className="text-[11px] text-slate-400 truncate">{currentUser.email}</p>}
                 </div>
+                {onOpenOrders && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUserMenuOpen(false);
+                      onOpenOrders();
+                    }}
+                    className="w-full text-left px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/60 flex items-center gap-2 border-b border-slate-100 dark:border-slate-700 transition-colors"
+                  >
+                    <Clock className="w-4 h-4 text-amber-500" /> Mis Pedidos / Reintegros
+                  </button>
+                )}
                 {currentUser.email?.toLowerCase() === 'admin@dapa.com' && (
                   <a 
                     href="/admin" 
@@ -2248,6 +3268,15 @@ function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenCart, on
                 </div>
               </div>
               <div className="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+                {onOpenOrders && (
+                  <button
+                    type="button"
+                    onClick={() => { setMobileMenuOpen(false); onOpenOrders(); }}
+                    className="w-full py-2.5 px-3 rounded-none text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60 flex items-center gap-2 transition-colors"
+                  >
+                    <Clock className="w-4 h-4 text-amber-500" /> Mis Pedidos / Reintegros
+                  </button>
+                )}
                 {currentUser.email?.toLowerCase() === 'admin@dapa.com' && (
                   <a 
                     href="/admin" 
@@ -2266,12 +3295,14 @@ function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenCart, on
               </div>
             </div>
           ) : (
-            <button 
-              onClick={() => { setMobileMenuOpen(false); onLoginClick(); }}
-              className="w-full py-3 px-4 rounded-none bg-blue-600 text-white font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-md"
-            >
-              <User className="w-4 h-4" /> Iniciar Sesión / Registrarse
-            </button>
+            <div className="flex flex-col gap-2">
+              <button 
+                onClick={() => { setMobileMenuOpen(false); onLoginClick(); }}
+                className="w-full py-3 px-4 rounded-none bg-blue-600 text-white font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-md"
+              >
+                <User className="w-4 h-4" /> Iniciar Sesión / Registrarse
+              </button>
+            </div>
           )}
 
           {/* BUSCADOR MOBILE CON ESTILO BISELADO */}
@@ -2526,6 +3557,7 @@ function MediaShowcaseSection({ navigateTo }) {
   const [currentBanner, setCurrentBanner] = useState(0);
   const [isMuted, setIsMuted] = useState(true);
   const [isPaused, setIsPaused] = useState(false);
+  const sectionRef = useRef(null);
 
   const handleNextBanner = useCallback(() => {
     setCurrentBanner((prev) => (prev + 1) % SHOWCASE_BANNERS.length);
@@ -2534,6 +3566,27 @@ function MediaShowcaseSection({ navigateTo }) {
   const handlePrevBanner = () => {
     setCurrentBanner((prev) => (prev - 1 + SHOWCASE_BANNERS.length) % SHOWCASE_BANNERS.length);
   };
+
+  // Pausar videos y carrusel cuando la sección no está visible en pantalla (ahorro de CPU/GPU en todos los SO)
+  useEffect(() => {
+    const el = sectionRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        const vids = el.querySelectorAll('video');
+        vids.forEach((v) => {
+          if (entry.isIntersecting) {
+            v.play?.().catch(() => {});
+          } else {
+            v.pause?.();
+          }
+        });
+      },
+      { threshold: 0.05 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   // Desplazamiento automático de los banners a pantalla completa cada 5.5 segundos
   useEffect(() => {
@@ -2544,7 +3597,7 @@ function MediaShowcaseSection({ navigateTo }) {
 
   const handleBannerAction = (action) => {
     if (action === 'whatsapp') {
-      window.open(CONTACT_INFO.whatsappLink, '_blank');
+      openExternalUrl(CONTACT_INFO.whatsappLink);
     } else if (action === 'contacto') {
       navigateTo('inicio', 'contacto');
     } else {
@@ -2554,6 +3607,7 @@ function MediaShowcaseSection({ navigateTo }) {
 
   return (
     <section
+      ref={sectionRef}
       className="pt-20 pb-28 md:pt-28 md:pb-36 relative z-20 text-white overflow-hidden w-full"
       style={{ background: 'linear-gradient(135deg, #061536 0%, #0d2f75 50%, #05112b 100%)' }}
     >
@@ -2851,7 +3905,18 @@ function MediaShowcaseSection({ navigateTo }) {
   );
 }
 
-function CatalogSection({ categories, allProducts, onOpenCategory, onProductSearchSelect, onSearchSubmit }) {
+const POPULAR_VEHICLE_BRANDS = [
+  'Volkswagen',
+  'Ford',
+  'Chevrolet',
+  'Renault',
+  'Fiat',
+  'Peugeot',
+  'Toyota',
+  'Citroen'
+];
+
+function CatalogSection({ categories, allProducts, isLoadingData, onOpenCategory, onProductSearchSelect, onSearchSubmit }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [isCatalogExpanded, setIsCatalogExpanded] = useState(false);
@@ -2894,7 +3959,7 @@ function CatalogSection({ categories, allProducts, onOpenCategory, onProductSear
 
   return (
     <section id="catálogo" className="pt-16 pb-16 md:pt-24 md:pb-24 bg-white dark:bg-slate-900 relative z-20 transition-colors duration-300">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center mb-10 md:mb-16 relative z-30">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center mb-10 md:mb-12 relative z-30">
         <RevealOnScroll>
           <PremiumTitle dark={true} className="text-2xl sm:text-3xl md:text-4xl font-bold mb-2 uppercase tracking-widest">Nuestro Catálogo</PremiumTitle>
           <div className="w-16 h-1.5 bg-amber-400 mx-auto my-3 -skew-x-12 rounded-none"></div>
@@ -2903,7 +3968,7 @@ function CatalogSection({ categories, allProducts, onOpenCategory, onProductSear
 
         {/* BUSCADOR PRINCIPAL CON BORDES BISELADOS Y BOTÓN AMARILLO EN DIAGONAL (Estilo Imagen 1) */}
         <RevealOnScroll delay="md:delay-100">
-          <form className="w-full max-w-2xl mx-auto mt-6 md:mt-10 mb-6 md:mb-8 relative group" onSubmit={handleSearchSubmit}>
+          <form className="w-full max-w-2xl mx-auto mt-6 md:mt-10 mb-5 relative group" onSubmit={handleSearchSubmit}>
             <label htmlFor="search" className="sr-only">Buscar repuesto</label>
             <div
               className="p-[2px] bg-slate-900 dark:bg-slate-500 group-focus-within:bg-amber-400 transition-colors shadow-lg"
@@ -2966,11 +4031,59 @@ function CatalogSection({ categories, allProducts, onOpenCategory, onProductSear
               </div>
             )}
           </form>
+
+          {/* FILTROS RÁPIDOS POR MARCA DE VEHÍCULO */}
+          {onSearchSubmit && (
+            <div className="max-w-3xl mx-auto mb-6">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-2">
+                Búsqueda rápida por marca de vehículo:
+              </p>
+              <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2">
+                {POPULAR_VEHICLE_BRANDS.map((brand) => (
+                  <button
+                    key={brand}
+                    type="button"
+                    onClick={() => onSearchSubmit(brand)}
+                    className="px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 hover:text-white dark:hover:bg-amber-400 dark:hover:text-slate-950 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-none transition-colors cursor-pointer"
+                  >
+                    {brand}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* AVISO CLARO DE PEDIDOS POR ENCARGUE Y REINTEGRO GARANTIZADO */}
+          <div className="max-w-3xl mx-auto bg-amber-50/80 dark:bg-amber-950/25 border border-amber-200 dark:border-amber-800/60 p-3.5 sm:p-4 rounded-none text-left flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="flex items-start gap-2.5">
+              <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+              <p className="text-[11px] sm:text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
+                <strong className="text-amber-900 dark:text-amber-300 uppercase">Importante sobre plazos de entrega:</strong> La mayoría de las piezas de nuestro catálogo se traen <strong>por encargue directo de fábrica/distribuidora</strong>, por lo que tu pedido puede tener demora. Si abonás con tarjeta o Mercado Pago y preferís no esperar el plazo informado, <strong>te reintegramos el 100% de tu dinero de inmediato</strong>.
+              </p>
+            </div>
+          </div>
         </RevealOnScroll>
       </div>
 
-      {categories.length === 0 ? (
-         <div className="text-center py-10"><Settings className="w-8 h-8 animate-spin mx-auto text-blue-500" /></div>
+      {isLoadingData && categories.length === 0 ? (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8" aria-label="Cargando categorías">
+            {[0, 1, 2, 3, 4, 5].map((skeletonIdx) => (
+              <div
+                key={skeletonIdx}
+                className="h-72 sm:h-80 md:h-[380px] rounded-none border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800/70 animate-pulse flex flex-col items-center justify-center p-6"
+              >
+                <div className="w-40 h-7 bg-slate-300 dark:bg-slate-700 rounded-none mb-3"></div>
+                <div className="w-56 h-3.5 bg-slate-200 dark:bg-slate-700/70 rounded-none mb-2"></div>
+                <div className="w-36 h-3.5 bg-slate-200 dark:bg-slate-700/70 rounded-none"></div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : categories.length === 0 ? (
+        <div className="text-center py-10 text-slate-500 dark:text-slate-400 text-sm">
+          No hay categorías disponibles en este momento.
+        </div>
       ) : (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* TARJETAS DE CATEGORÍAS CON IMAGEN REPRESENTATIVA DE FONDO (Estilo Imagen 5) */}
@@ -3076,7 +4189,7 @@ function CatalogSection({ categories, allProducts, onOpenCategory, onProductSear
   );
 }
 
-function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, initialSelectedProduct, selectedProduct, onQuickView, onShowToast }) {
+function CategoryDetailSection({ category, allProducts, isLoadingData, onBack, onAddToCart, initialSelectedProduct, selectedProduct, onQuickView, onShowToast }) {
   const [selectedBrand, setSelectedBrand] = useState('Todas');
   const [categorySearch, setCategorySearch] = useState('');
   const [sortBy, setSortBy] = useState('relevancia'); // relevancia | precio_asc | precio_desc | nombre_asc
@@ -3182,9 +4295,9 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
     );
   };
 
-  const handleCopyProductLink = (prod) => {
+  const handleCopyProductLink = async (prod) => {
     const url = `${window.location.origin}/#producto-${encodeURIComponent(prod.sku_code)}`;
-    navigator.clipboard.writeText(url);
+    await copyTextToClipboard(url);
     setCopiedLink(true);
     if (onShowToast) onShowToast('Enlace del repuesto copiado');
     setTimeout(() => setCopiedLink(false), 2500);
@@ -3232,19 +4345,20 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
                   onMouseLeave={() => setIsZoomed(false)}
                   onMouseMove={handleMouseMove}
                 >
-                  <ProductImage 
-                    sku={viewingProduct.sku_code} 
-                    imageUrl={viewingProduct.image_url} 
-                    alt={viewingProduct.name} 
-                    className={`w-full h-full object-contain transition-transform duration-200 ${isZoomed ? 'scale-[2]' : 'scale-100'}`}
-                  />
-                  {isZoomed && (
-                    <style>{`
-                      .scale-\\[2\\] {
-                        transform-origin: ${zoomPos.x}% ${zoomPos.y}%;
-                      }
-                    `}</style>
-                  )}
+                  <div
+                    className="w-full h-full flex items-center justify-center transition-transform duration-200"
+                    style={{
+                      transform: isZoomed ? 'scale(2)' : 'scale(1)',
+                      transformOrigin: `${zoomPos.x}% ${zoomPos.y}%`
+                    }}
+                  >
+                    <ProductImage 
+                      sku={viewingProduct.sku_code} 
+                      imageUrl={viewingProduct.image_url} 
+                      alt={viewingProduct.name} 
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
                 </div>
                 <p className="text-center text-[10px] uppercase tracking-widest text-slate-400 mt-3 hidden sm:block">
                   Pasá el mouse por la imagen para hacer zoom
@@ -3253,13 +4367,22 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
 
               <div className="w-full lg:w-1/2 flex flex-col justify-center">
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-none">
                       {viewingProduct.brand?.name || 'Genérico'}
                     </span>
                     <span className="text-xs font-bold text-slate-400 dark:text-slate-500 font-exo">
                       CÓDIGO: {viewingProduct.sku_code}
                     </span>
+                    {Number(viewingProduct.stock || 0) > 0 ? (
+                      <span className="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-none">
+                        Stock en local / Por encargue
+                      </span>
+                    ) : (
+                      <span className="bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-none">
+                        Disponible por encargue
+                      </span>
+                    )}
                   </div>
 
                   {/* BOTÓN DE COPIAR ENLACE DIRECTO AL PRODUCTO */}
@@ -3305,13 +4428,24 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
                   </p>
                 </div>
 
-              <div className="mb-8 p-4 rounded-none bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 flex items-start gap-3">
-                  <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
-                  <div className="text-xs leading-relaxed text-slate-700 dark:text-slate-300">
-                    <span className="font-bold uppercase tracking-wider text-amber-800 dark:text-amber-300 block mb-0.5">
-                      Disponibilidad en local o por encargue
-                    </span>
-                    Trabajamos con catálogos directos de múltiples proveedores. Si el repuesto no se encuentra físicamente en el mostrador al momento de tu compra, <strong>lo pedimos por encargue de forma inmediata</strong> y te avisamos apenas ingresa.
+                <div className="mb-8 space-y-2.5">
+                  <div className="p-4 rounded-none bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 flex items-start gap-3">
+                    <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                    <div className="text-xs leading-relaxed text-slate-700 dark:text-slate-300">
+                      <span className="font-bold uppercase tracking-wider text-amber-800 dark:text-amber-300 block mb-0.5">
+                        Aviso importante: Demora por encargue
+                      </span>
+                      La mayoría de los repuestos de nuestro catálogo se solicitan <strong>por encargue directo a distribuidora</strong>, por lo que tu pedido puede demorar unos días hábiles en llegar al local o despacharse. Nuestro equipo te confirmará el plazo exacto tras tu compra.
+                    </div>
+                  </div>
+                  <div className="p-3.5 rounded-none bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 flex items-start gap-3">
+                    <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
+                    <div className="text-xs leading-relaxed text-slate-700 dark:text-slate-300">
+                      <span className="font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300 block mb-0.5">
+                        Garantía de Reintegro 100%
+                      </span>
+                      Si abonás con <strong>tarjeta, Mercado Pago o transferencia directa</strong> y no podés esperar el plazo del encargue, podés solicitar el <strong>reintegro total de tu dinero de inmediato</strong> y sin cargos.
+                    </div>
                   </div>
                 </div>
 
@@ -3348,7 +4482,7 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
 
                 <div className="grid grid-cols-2 gap-4 mt-8 pt-6 border-t border-slate-100 dark:border-slate-700 text-xs text-slate-500 dark:text-slate-400">
                   <div className="flex items-center gap-2"><Truck className="w-4 h-4 text-blue-500 flex-shrink-0" /> Retiro gratis en local o envíos</div>
-                  <div className="flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-blue-500 flex-shrink-0" /> Garantía de confianza</div>
+                  <div className="flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-blue-500 flex-shrink-0" /> Reintegro 100% garantizado</div>
                 </div>
               </div>
             </div>
@@ -3459,7 +4593,22 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
                   )}
                 </div>
 
-                {currentProducts.length > 0 ? (
+                {isLoadingData && currentProducts.length === 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5" aria-label="Cargando repuestos">
+                    {[0, 1, 2, 3, 4, 5].map((sk) => (
+                      <div key={sk} className="bg-white dark:bg-slate-800 rounded-none border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm animate-pulse flex flex-col">
+                        <div className="h-44 bg-slate-200 dark:bg-slate-700"></div>
+                        <div className="p-4 space-y-2.5">
+                          <div className="w-20 h-3 bg-slate-200 dark:bg-slate-700"></div>
+                          <div className="w-full h-4 bg-slate-200 dark:bg-slate-700"></div>
+                          <div className="w-2/3 h-4 bg-slate-200 dark:bg-slate-700"></div>
+                          <div className="w-24 h-5 bg-slate-300 dark:bg-slate-600 mt-2"></div>
+                          <div className="w-full h-9 bg-slate-200 dark:bg-slate-700 mt-3"></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : currentProducts.length > 0 ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                     {currentProducts.map((prod) => (
                       <div
@@ -3494,7 +4643,18 @@ function CategoryDetailSection({ category, allProducts, onBack, onAddToCart, ini
 
                         <div className="p-4 flex-1 flex flex-col justify-between">
                           <div>
-                            <div className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-1 font-exo">CÓDIGO: {prod.sku_code}</div>
+                            <div className="flex items-center justify-between gap-2 mb-1.5">
+                              <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 font-exo truncate">CÓDIGO: {prod.sku_code}</span>
+                              {Number(prod.stock || 0) > 0 ? (
+                                <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/50 rounded-none flex-shrink-0">
+                                  En local / Encargue
+                                </span>
+                              ) : (
+                                <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/50 rounded-none flex-shrink-0" title="Se pide a distribuidora, puede tener demora">
+                                  Por encargue
+                                </span>
+                              )}
+                            </div>
                             <h3 className="font-bold text-slate-800 dark:text-white text-sm leading-snug mb-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors line-clamp-2" title={prod.name}>
                               {prod.name}
                             </h3>
@@ -3777,6 +4937,17 @@ function ContactSection() {
       if (orderError) throw orderError;
       const newOrder = { id: newOrderId };
 
+      saveOrderToLocalHistory({
+        id: newOrder.id,
+        date: new Date().toISOString(),
+        customerName: nombre,
+        customerPhone: telefono,
+        status: 'Cotización Web',
+        paymentMethod: 'Cotización',
+        total: 0,
+        itemsSummary: `${repuesto} (${marca} ${modelo})`
+      });
+
       // Usamos viñetas limpias (•) en lugar de emojis complejos para evitar el símbolo "" en WhatsApp Web
       let wppText = `¡Hola DAPA Repuestos! Soy ${nombre}.\n\n`;
       wppText += `Estoy buscando cotizar este repuesto por la página web:\n`;
@@ -3801,7 +4972,7 @@ function ContactSection() {
       form.reset();
       setPhoto1(null);
       setPhoto2(null);
-      window.open(wppUrl, '_blank');
+      openExternalUrl(wppUrl);
 
     } catch (error) {
       console.error(error);
@@ -4240,6 +5411,7 @@ function TiendaPublica() {
   const [cart, setCart] = useState([]);
   const [isAuthModalOpen, setAuthModalOpen] = useState(false);
   const [isCartOpen, setCartOpen] = useState(false);
+  const [isOrdersModalOpen, setOrdersModalOpen] = useState(false);
   const [isTutorialOpen, setTutorialOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -4292,12 +5464,12 @@ function TiendaPublica() {
   }, []);
 
   useEffect(() => {
-    const savedUser = localStorage.getItem('dapa_user');
-    const savedCart = localStorage.getItem('dapa_cart');
+    const savedUser = safeJsonParse(localStorage.getItem('dapa_user'), null);
+    const savedCart = safeJsonParse(localStorage.getItem('dapa_cart'), []);
     const savedTheme = localStorage.getItem('dapa_theme');
     
-    if (savedUser) setCurrentUser(JSON.parse(savedUser));
-    if (savedCart) setCart(JSON.parse(savedCart));
+    if (savedUser && typeof savedUser === 'object') setCurrentUser(savedUser);
+    if (Array.isArray(savedCart)) setCart(savedCart);
 
     if (savedTheme === 'dark') {
       setIsDarkMode(true);
@@ -4307,15 +5479,23 @@ function TiendaPublica() {
     // Detectar retorno desde Mercado Pago
     const urlParams = new URLSearchParams(window.location.search);
     const mpStatus = urlParams.get('mp_status') || urlParams.get('status') || urlParams.get('collection_status');
+    const mpOrderId = urlParams.get('order_id');
     if (mpStatus) {
       if (mpStatus === 'approved') {
         setCart([]);
         localStorage.removeItem('dapa_cart');
+        if (mpOrderId) {
+          const prevOrders = safeJsonParse(localStorage.getItem('dapa_customer_orders'), []);
+          const updated = Array.isArray(prevOrders)
+            ? prevOrders.map((o) => String(o.id) === String(mpOrderId) ? { ...o, status: 'Pagado (Mercado Pago)' } : o)
+            : [];
+          localStorage.setItem('dapa_customer_orders', JSON.stringify(updated));
+        }
         setTimeout(() => showToast('¡Pago acreditado con éxito! Ya registramos tu pedido.'), 400);
       } else if (mpStatus === 'pending' || mpStatus === 'in_process') {
         setTimeout(() => showToast('Tu pago está pendiente de acreditación.'), 400);
       } else if (mpStatus === 'failure' || mpStatus === 'rejected') {
-        setTimeout(() => showToast('El pago no pudo completarse. Podés intentar nuevamente.'), 400);
+        setTimeout(() => showToast('El pago no pudo completarse. Tu carrito sigue guardado por si deseás intentar nuevamente.'), 400);
       }
       window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
     }
@@ -4556,7 +5736,7 @@ const handleAddToCart = (product, qty = 1) => {
       <GlobalStyles />
       <ProgressBarComponent />
       
-      {!isCartOpen && !quickViewData && !isTutorialOpen && <FloatingActions />}
+      {!isCartOpen && !quickViewData && !isTutorialOpen && !isOrdersModalOpen && <FloatingActions />}
       
       <Toast message={toastMessage} isVisible={!!toastMessage} />
       
@@ -4566,6 +5746,7 @@ const handleAddToCart = (product, qty = 1) => {
         currentUser={currentUser}
         cartCount={cartTotalItems}
         onOpenCart={() => setCartOpen(true)}
+        onOpenOrders={() => setOrdersModalOpen(true)}
         onLogout={handleLogout}
         toggleDarkMode={toggleDarkMode}
         isDarkMode={isDarkMode}
@@ -4584,6 +5765,7 @@ const handleAddToCart = (product, qty = 1) => {
             <CatalogSection
               categories={dbCategories}
               allProducts={dbProducts}
+              isLoadingData={isLoadingData}
               onOpenCategory={handleOpenCategory}
               onProductSearchSelect={handleProductSearchSelect}
               onSearchSubmit={handleFullSearch}
@@ -4598,6 +5780,7 @@ const handleAddToCart = (product, qty = 1) => {
             <CategoryDetailSection 
               category={selectedCategory}
               allProducts={dbProducts} 
+              isLoadingData={isLoadingData}
               selectedProduct={selectedProduct}
               onBack={() => navigateTo('inicio', 'catálogo')} 
               onAddToCart={handleAddToCart}
@@ -4631,6 +5814,12 @@ const handleAddToCart = (product, qty = 1) => {
         removeItem={removeItem}
         currentUser={currentUser}
         clearCart={() => { setCart([]); localStorage.removeItem('dapa_cart'); }}
+      />
+
+      <CustomerOrdersModal
+        isOpen={isOrdersModalOpen}
+        onClose={() => setOrdersModalOpen(false)}
+        currentUser={currentUser}
       />
 
       <HowToBuyTutorial 

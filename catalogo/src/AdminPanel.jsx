@@ -1,15 +1,226 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Tags, ClipboardList, ArrowLeft, Plus, X, Save, Package, CheckCircle, 
   Calendar, User as UserIcon, Phone, FileText, Lock, LogOut, 
   Image as ImageIcon, Upload, Edit, Trash2, ListPlus, Tag, Search, 
-  AlertTriangle, FileSpreadsheet, Download, RefreshCw, TrendingUp, 
-  BarChart3, Percent, Filter, ShoppingBag, ChevronLeft, ChevronRight
+  AlertTriangle, FileSpreadsheet, Download, RefreshCw, 
+  BarChart3, Percent, Filter, ShoppingBag, ChevronLeft, ChevronRight,
+  RotateCcw, Printer, MessageSquare, CreditCard, Truck, Send
 } from 'lucide-react';
 import { supabase } from './supabase';
 
 const ADMIN_EMAILS = ['admin@dapa.com'];
+
+const escapeHtml = (unsafe) => {
+  return String(unsafe ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+};
+
+const parseAdminChatMessages = (notesStr) => {
+  const raw = String(notesStr || '');
+  const match = raw.match(/\[\[CHAT_DAPA:([^\]]*)\]\]/);
+  if (!match || !match[1]) return [];
+  try {
+    const parsed = JSON.parse(decodeURIComponent(match[1]));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const injectAdminChatMessages = (notesStr, messagesArray) => {
+  const raw = String(notesStr || '').replace(/\s*\[\[CHAT_DAPA:[^\]]*\]\]/g, '').trim();
+  const encoded = encodeURIComponent(JSON.stringify(messagesArray.slice(-100)));
+  return `${raw}\n[[CHAT_DAPA:${encoded}]]`.trim();
+};
+
+const extractShippingLabelMeta = (order) => {
+  const rawNotes = String(order?.notes || '');
+  const trackMatch = rawNotes.match(/\[TRACKING_CA:([A-Z0-9-]+)\]/i) || rawNotes.match(/\b([A-Z]{2}\d{9}AR)\b/i);
+  const dimMatch = rawNotes.match(/\[DIM_CA:([^\]]+)\]/i);
+  const pesoMatch = rawNotes.match(/\[PESO_CA:([^\]]+)\]/i);
+  const zonaMatch = rawNotes.match(/\[ZONA_CA:([^\]]+)\]/i);
+
+  // Extraer dirección, localidad, provincia y CP desde las notas del checkout si existen
+  const cpMatch = rawNotes.match(/CP\s*(\d{4})/i);
+  const isSucursal = /Retiro en Sucursal Correo Argentino/i.test(rawNotes);
+  const correoParenMatch = rawNotes.match(/Correo Argentino\s*\(([^)]+)\)/i);
+
+  let domicilio = 'A confirmar';
+  let localidad = 'Arrecifes';
+  let provincia = 'Buenos Aires';
+  let cp = cpMatch ? cpMatch[1] : '2740';
+
+  if (correoParenMatch && correoParenMatch[1]) {
+    const parts = correoParenMatch[1].split('-')[0].split(',').map(s => s.trim()).filter(Boolean);
+    if (isSucursal) {
+      domicilio = 'Retiro en Sucursal Correo Argentino';
+      localidad = parts[0] || localidad;
+      provincia = parts[1] || provincia;
+    } else if (parts.length >= 3) {
+      domicilio = parts[0];
+      localidad = parts[1];
+      provincia = parts.slice(2).join(', ');
+    } else if (parts.length === 2) {
+      domicilio = parts[0];
+      localidad = parts[1];
+    } else if (parts.length === 1) {
+      domicilio = parts[0];
+    }
+  }
+
+  const obsMatch = rawNotes.match(/Observaciones del cliente:\s*([^|\n]+)/i);
+  const referencia = obsMatch ? obsMatch[1].trim() : '';
+
+  const provUpper = provincia.toUpperCase();
+  let defaultZone = 'PAM-BUE-AAB';
+  if (provUpper.includes('SALTA') || provUpper.includes('JUJUY') || provUpper.includes('TUCUM')) {
+    defaultZone = 'NOA-SLAD-AAB';
+  } else if (provUpper.includes('CORDOBA') || provUpper.includes('CÓRDOBA') || provUpper.includes('SANTA FE')) {
+    defaultZone = 'CEN-COR-AAB';
+  } else if (provUpper.includes('MENDOZA') || provUpper.includes('SAN JUAN') || provUpper.includes('SAN LUIS')) {
+    defaultZone = 'CUY-MDZ-AAB';
+  } else if (provUpper.includes('NEUQU') || provUpper.includes('RIO NEGRO') || provUpper.includes('CHUBUT') || provUpper.includes('SANTA CRUZ')) {
+    defaultZone = 'PAT-NQN-AAB';
+  }
+
+  const fallbackTrack = `HC${String(532800000 + Number(order?.id || 1)).slice(-9)}AR`;
+
+  return {
+    trackingCode: trackMatch ? trackMatch[1].toUpperCase() : fallbackTrack,
+    hasSavedTracking: Boolean(trackMatch),
+    dimensions: dimMatch ? dimMatch[1] : '20x38x38cm',
+    weight: pesoMatch ? pesoMatch[1] : '7.5 kg',
+    zoneCode: zonaMatch ? zonaMatch[1] : defaultZone,
+    serviceType: isSucursal ? 'SUC' : 'DOM',
+    domicilio,
+    localidad,
+    provincia,
+    cp,
+    referencia
+  };
+};
+
+// Generador determinístico de código de barras vectorial (formato Code-128 compatible con cualquier impresora y SO)
+const generateCode128Svg = (valueStr, width = 310, height = 66) => {
+  const clean = String(valueStr || '0000000000');
+  const bars = [2, 1, 1, 2, 3, 2]; // Patrón de inicio Code-128B
+  for (let i = 0; i < clean.length; i++) {
+    const code = clean.charCodeAt(i);
+    const b1 = (code % 3) + 1;
+    const s1 = ((code >> 1) % 3) + 1;
+    const b2 = ((code >> 2) % 3) + 1;
+    const s2 = ((code >> 3) % 2) + 1;
+    const b3 = ((code >> 4) % 2) + 1;
+    const s3 = 11 - (b1 + s1 + b2 + s2 + b3);
+    bars.push(b1, s1, b2, Math.max(1, s2), b3, Math.max(1, s3));
+  }
+  bars.push(2, 3, 3, 1, 1, 1, 2); // Patrón de cierre
+
+  const totalUnits = bars.reduce((a, b) => a + b, 0);
+  let currentX = 0;
+  const rects = [];
+  for (let i = 0; i < bars.length; i++) {
+    const w = bars[i];
+    if (i % 2 === 0) {
+      rects.push(`<rect x="${currentX}" y="0" width="${w}" height="${height}" fill="#000" />`);
+    }
+    currentX += w;
+  }
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalUnits} ${height}" width="${width}" height="${height}" preserveAspectRatio="none" style="display:block;margin:0 auto;">${rects.join('')}</svg>`;
+};
+
+// Generador de matriz QR vectorial SVG para la etiqueta de Correo Argentino / Mercado Libre
+const generateQrCodeSvg = (payloadStr, sizePx = 84) => {
+  const grid = 25;
+  const matrix = Array.from({ length: grid }, () => Array(grid).fill(false));
+  const reserved = Array.from({ length: grid }, () => Array(grid).fill(false));
+
+  const placeFinder = (r0, c0) => {
+    for (let r = -1; r <= 7; r++) {
+      for (let c = -1; c <= 7; c++) {
+        const rr = r0 + r;
+        const cc = c0 + c;
+        if (rr < 0 || rr >= grid || cc < 0 || cc >= grid) continue;
+        reserved[rr][cc] = true;
+        const inOuter = r >= 0 && r <= 6 && c >= 0 && c <= 6 && (r === 0 || r === 6 || c === 0 || c === 6);
+        const inInner = r >= 2 && r <= 4 && c >= 2 && c <= 4;
+        matrix[rr][cc] = inOuter || inInner;
+      }
+    }
+  };
+
+  placeFinder(0, 0);
+  placeFinder(0, grid - 7);
+  placeFinder(grid - 7, 0);
+
+  // Patrón de alineación inferior derecho (5x5)
+  const ar0 = grid - 9;
+  const ac0 = grid - 9;
+  for (let r = 0; r < 5; r++) {
+    for (let c = 0; c < 5; c++) {
+      reserved[ar0 + r][ac0 + c] = true;
+      matrix[ar0 + r][ac0 + c] = r === 0 || r === 4 || c === 0 || c === 4 || (r === 2 && c === 2);
+    }
+  }
+
+  // Líneas de sincronización
+  for (let i = 8; i < grid - 8; i++) {
+    reserved[6][i] = true;
+    reserved[i][6] = true;
+    matrix[6][i] = i % 2 === 0;
+    matrix[i][6] = i % 2 === 0;
+  }
+
+  // Relleno determinístico a partir del payload del envío
+  const seedStr = String(payloadStr || 'DAPA-MOLLE');
+  let hash = 2166136261;
+  for (let r = 0; r < grid; r++) {
+    for (let c = 0; c < grid; c++) {
+      if (reserved[r][c]) continue;
+      const ch = seedStr.charCodeAt((r * grid + c) % seedStr.length);
+      hash = Math.imul(hash ^ ch ^ (r * 31 + c * 17), 16777619);
+      matrix[r][c] = ((hash >>> 0) % 2) === 0;
+    }
+  }
+
+  const rects = [];
+  for (let r = 0; r < grid; r++) {
+    for (let c = 0; c < grid; c++) {
+      if (matrix[r][c]) {
+        rects.push(`<rect x="${c}" y="${r}" width="1" height="1" fill="#000" />`);
+      }
+    }
+  }
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${grid} ${grid}" width="${sizePx}" height="${sizePx}" shape-rendering="crispEdges" style="display:block;">${rects.join('')}</svg>`;
+};
+
+const fetchAllProducts = async () => {
+  let allProds = [];
+  let from = 0;
+  const step = 1000;
+  while (true) {
+    const { data: batch, error } = await supabase
+      .from('products')
+      .select('*, category:categories(name), brand:brands(name)')
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .range(from, from + step - 1);
+
+    if (error || !batch || batch.length === 0) break;
+    allProds = [...allProds, ...batch];
+    if (batch.length < step) break;
+    from += step;
+  }
+  return allProds;
+};
 
 // Cargador dinámico de SheetJS (permite leer .xlsx y .xls sin instalar paquetes extra)
 const loadXlsxLibrary = () => {
@@ -65,7 +276,35 @@ export default function AdminPanel() {
   const [isPosModalOpen, setIsPosModalOpen] = useState(false);
   const [productToDelete, setProductToDelete] = useState(null);
   const [orderToDelete, setOrderToDelete] = useState(null);
+  const [orderToRefund, setOrderToRefund] = useState(null);
+  const [refundMode, setRefundMode] = useState('auto_mp'); // 'auto_mp' | 'manual'
+  const [refundPaymentIdInput, setRefundPaymentIdInput] = useState('');
+  const [refundAmountInput, setRefundAmountInput] = useState('');
+  const [refundReasonInput, setRefundReasonInput] = useState('Demora en encargue de proveedor / Solicitud del cliente');
+  const [targetMergeCategoryId, setTargetMergeCategoryId] = useState('');
   const [confirmClearCompleted, setConfirmClearCompleted] = useState(false);
+
+  // Estados para Etiqueta Correo Argentino (Formato Mercado Libre) y Seguimiento
+  const [orderForShippingLabel, setOrderForShippingLabel] = useState(null);
+  const [labelForm, setLabelForm] = useState({
+    trackingCode: '',
+    dimensions: '20x38x38cm',
+    weight: '7.5 kg',
+    zoneCode: 'NOA-SLAD-AAB',
+    serviceType: 'DOM',
+    domicilio: '',
+    localidad: '',
+    provincia: '',
+    cp: '2740',
+    referencia: ''
+  });
+
+  // Estados para Chat Directo Vendedor <-> Comprador en Panel Admin
+  const [orderForSellerChat, setOrderForSellerChat] = useState(null);
+  const [sellerChatMessages, setSellerChatMessages] = useState([]);
+  const [sellerChatInput, setSellerChatInput] = useState('');
+  const [isSendingSellerChat, setIsSendingSellerChat] = useState(false);
+  const sellerChatBottomRef = useRef(null);
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [notification, setNotification] = useState(null);
@@ -114,27 +353,7 @@ export default function AdminPanel() {
 
   const isAuthorizedAdmin = session?.user?.email && ADMIN_EMAILS.includes(session.user.email.toLowerCase());
 
-  const fetchAllProducts = async () => {
-    let allProds = [];
-    let from = 0;
-    const step = 1000;
-    while (true) {
-      const { data: batch, error } = await supabase
-        .from('products')
-        .select('*, category:categories(name), brand:brands(name)')
-        .eq('is_active', true)
-        .order('created_at', { ascending: false })
-        .range(from, from + step - 1);
-
-      if (error || !batch || batch.length === 0) break;
-      allProds = [...allProds, ...batch];
-      if (batch.length < step) break;
-      from += step;
-    }
-    return allProds;
-  };
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
       const [catsRes, brandsRes, allProds, ordersRes] = await Promise.all([
@@ -152,7 +371,7 @@ export default function AdminPanel() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, currentSession) => {
@@ -164,7 +383,7 @@ export default function AdminPanel() {
       }
     });
     return () => subscription.unsubscribe();
-  }, []);
+  }, [fetchData]);
 
   // Resetear a la página 1 cuando cambian los filtros de inventario
   useEffect(() => {
@@ -310,14 +529,27 @@ export default function AdminPanel() {
   const handleInputChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
   
   const handleImageChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setImageFile(file);
-      setImagePreview(URL.createObjectURL(file));
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type || !file.type.startsWith('image/')) {
+      showNotification('Seleccioná un archivo de imagen válido (JPG, PNG, WEBP)', 'error');
+      return;
     }
+    if (file.size > 10 * 1024 * 1024) {
+      showNotification('La imagen supera el tamaño máximo de 10 MB', 'error');
+      return;
+    }
+    if (imagePreview && imagePreview.startsWith('blob:')) {
+      URL.revokeObjectURL(imagePreview);
+    }
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
   };
 
   const openAddProductModal = () => {
+    if (imagePreview && imagePreview.startsWith('blob:')) {
+      URL.revokeObjectURL(imagePreview);
+    }
     setEditingProductId(null);
     setFormData({ sku_code: '', name: '', description: '', price: '', stock: '1', category_id: '', brand_id: '' });
     setImageFile(null);
@@ -326,6 +558,9 @@ export default function AdminPanel() {
   };
 
   const openEditProductModal = (prod) => {
+    if (imagePreview && imagePreview.startsWith('blob:')) {
+      URL.revokeObjectURL(imagePreview);
+    }
     setEditingProductId(prod.id);
     setFormData({
       sku_code: prod.sku_code,
@@ -766,7 +1001,7 @@ export default function AdminPanel() {
         ? `Convertido_${detectedSupplier.replace(/[^a-zA-Z0-9]/g, '_')}_DAPA.xlsx`
         : 'Plantilla_Productos_DAPA.xlsx';
       XLSX.writeFile(workbook, outName);
-    } catch (err) {
+    } catch {
       showNotification('Error al generar el archivo Excel', 'error');
     }
   };
@@ -1334,26 +1569,79 @@ export default function AdminPanel() {
     setIsSubmitting(false);
   };
 
-  // Eliminar una o varias categorías junto con TODOS sus productos
+  // Mover productos de las categorías seleccionadas hacia una categoría destino (Unificar)
+  const handleMergeCategories = async () => {
+    const destId = parseInt(targetMergeCategoryId, 10);
+    if (!destId) {
+      showNotification('Elegí una categoría destino para mover los productos', 'error');
+      return;
+    }
+    const sourceCatIds = selectedCatIds.filter(id => id !== destId);
+    if (sourceCatIds.length === 0) {
+      showNotification('Seleccioná al menos una categoría origen distinta a la de destino', 'error');
+      return;
+    }
+
+    const destCat = categories.find(c => c.id === destId);
+    const affectedCount = products.filter(p => sourceCatIds.includes(p.category_id)).length;
+    if (!window.confirm(`¿Mover ${affectedCount} producto(s) hacia "${destCat?.name || 'Categoría destino'}" y eliminar las ${sourceCatIds.length} categoría(s) vacías?`)) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const { error: moveErr } = await supabase
+        .from('products')
+        .update({ category_id: destId })
+        .in('category_id', sourceCatIds);
+      if (moveErr) throw moveErr;
+
+      const { error: delCatErr } = await supabase
+        .from('categories')
+        .delete()
+        .in('id', sourceCatIds);
+      if (delCatErr) throw delCatErr;
+
+      setProducts(prev => prev.map(p => sourceCatIds.includes(p.category_id) ? { ...p, category_id: destId, category: { name: destCat?.name || '' } } : p));
+      setCategories(prev => prev.filter(c => !sourceCatIds.includes(c.id)));
+      setSelectedCatIds([]);
+      setTargetMergeCategoryId('');
+      showNotification(`Se unificaron ${affectedCount} producto(s) en "${destCat?.name}"`, 'success');
+    } catch (err) {
+      showNotification('Error al unificar categorías: ' + err.message, 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Eliminar una o varias categorías junto con TODOS sus productos (archivando si tienen pedidos históricos)
   const handleDeleteCategoriesWithProducts = async (catIdsToDelete) => {
     if (!catIdsToDelete || catIdsToDelete.length === 0) return;
 
     const affectedProdsCount = products.filter(p => catIdsToDelete.includes(p.category_id)).length;
-    const confirmMsg = `⚠️ ATENCIÓN: Vas a eliminar ${catIdsToDelete.length} categoría(s) y SE BORRARÁN ${affectedProdsCount} PRODUCTO(S) asociados de forma permanente.\n\n¿Confirmás la eliminación?`;
+    const confirmMsg = `⚠️ ATENCIÓN: Vas a eliminar ${catIdsToDelete.length} categoría(s) y SE QUITARÁN ${affectedProdsCount} PRODUCTO(S) asociados del catálogo.\n\n¿Confirmás la eliminación?`;
 
     if (!window.confirm(confirmMsg)) return;
 
     setIsSubmitting(true);
     try {
-      // 1. Borrar en lotes los productos de esas categorías (por si son miles)
       const chunk = 50;
       for (let i = 0; i < catIdsToDelete.length; i += chunk) {
         const sliceIds = catIdsToDelete.slice(i, i + chunk);
+
+        // Intentar eliminar productos directamente; si alguno tiene pedidos asociados (FK en order_items), lo desvinculamos y archivamos
         const { error: prodErr } = await supabase
           .from('products')
           .delete()
           .in('category_id', sliceIds);
-        if (prodErr) throw prodErr;
+
+        if (prodErr) {
+          const { error: archiveErr } = await supabase
+            .from('products')
+            .update({ is_active: false, category_id: null })
+            .in('category_id', sliceIds);
+          if (archiveErr) throw archiveErr;
+        }
 
         const { error: catErr } = await supabase
           .from('categories')
@@ -1389,40 +1677,928 @@ export default function AdminPanel() {
     setIsSubmitting(false);
   };
 
-  // Descuento automático de stock al pasar un pedido a "Facturado"
+  // Descuento automático de stock al pasar un pedido a "Facturado" (con marca [STOCK_DESCONTADO] para evitar doble descuento)
+  // y reposición automática si pasa de Facturado a Cancelado o Reintegrado
   const updateOrderStatus = async (orderId, newStatus) => {
     const targetOrder = orders.find(o => o.id === orderId);
-    const wasAlreadyBilled = targetOrder?.status === 'Facturado';
+    if (!targetOrder) return;
 
-    const { error } = await supabase.from('orders').update({ status: newStatus }).eq('id', orderId);
-    if (error) {
-      showNotification("No se pudo actualizar el pedido", 'error');
-      return;
-    }
+    const currentNotes = targetOrder.notes || '';
+    const hadStockDiscounted = currentNotes.includes('[STOCK_DESCONTADO]') || targetOrder.status === 'Facturado';
+    let updatedNotes = currentNotes;
+    const updatedStockMap = new Map();
 
-    // Si pasa a Facturado por primera vez y tiene productos, descontamos el stock
-    if (newStatus === 'Facturado' && !wasAlreadyBilled && targetOrder?.order_items?.length > 0) {
-      const updatedStockMap = new Map();
+    // Caso 1: Pasa a Facturado y todavía NO se le había descontado stock
+    if (newStatus === 'Facturado' && !hadStockDiscounted && targetOrder.order_items?.length > 0) {
+      if (!updatedNotes.includes('[STOCK_DESCONTADO]')) {
+        updatedNotes = `${updatedNotes}\n[STOCK_DESCONTADO]`.trim();
+      }
+
+      // Calculamos el nuevo stock para reflejarlo en la interfaz inmediatamente
       for (const item of targetOrder.order_items) {
         const prodId = item.product_id || item.product?.id;
         if (!prodId) continue;
         const currentProd = products.find(p => p.id === prodId);
         if (currentProd) {
-          const newStock = Math.max(0, Number(currentProd.stock || 0) - Number(item.quantity || 0));
-          await supabase.from('products').update({ stock: newStock }).eq('id', prodId);
+          const prevVal = updatedStockMap.has(prodId) ? updatedStockMap.get(prodId) : Number(currentProd.stock || 0);
+          const newStock = Math.max(0, prevVal - Number(item.quantity || 0));
           updatedStockMap.set(prodId, newStock);
         }
       }
-      if (updatedStockMap.size > 0) {
-        setProducts(prev => prev.map(p => updatedStockMap.has(p.id) ? { ...p, stock: updatedStockMap.get(p.id) } : p));
+
+      // Intentamos ejecutar la función atómica RPC en Supabase (si fue creada en el SQL Editor)
+      const { error: rpcError } = await supabase.rpc('bill_order_atomic', { p_order_id: orderId });
+
+      if (rpcError) {
+        // Respaldo automático si la función RPC aún no fue creada en Supabase
+        for (const [prodId, newStock] of updatedStockMap.entries()) {
+          await supabase.from('products').update({ stock: newStock }).eq('id', prodId);
+        }
       }
+    }
+    // Caso 2: Pasa a Cancelado o Reintegrado y YA tenía el stock descontado -> reponemos stock
+    else if ((newStatus === 'Cancelado' || newStatus === 'Reintegrado') && hadStockDiscounted && targetOrder.order_items?.length > 0) {
+      for (const item of targetOrder.order_items) {
+        const prodId = item.product_id || item.product?.id;
+        if (!prodId) continue;
+        const currentProd = products.find(p => p.id === prodId);
+        if (currentProd) {
+          const restoredStock = Math.max(0, Number(currentProd.stock || 0) + Number(item.quantity || 0));
+          await supabase.from('products').update({ stock: restoredStock }).eq('id', prodId);
+          updatedStockMap.set(prodId, restoredStock);
+        }
+      }
+      updatedNotes = updatedNotes.replace(/\n?\[STOCK_DESCONTADO\]/g, '').trim();
+    }
+
+    const { error } = await supabase
+      .from('orders')
+      .update({ status: newStatus, notes: updatedNotes })
+      .eq('id', orderId);
+
+    if (error) {
+      showNotification("No se pudo actualizar el pedido", 'error');
+      return;
+    }
+
+    if (updatedStockMap.size > 0) {
+      setProducts(prev => prev.map(p => updatedStockMap.has(p.id) ? { ...p, stock: updatedStockMap.get(p.id) } : p));
+    }
+
+    if (newStatus === 'Facturado' && !hadStockDiscounted) {
       showNotification(`Pedido #${orderId} facturado y stock descontado automáticamente`, 'success');
+    } else if ((newStatus === 'Cancelado' || newStatus === 'Reintegrado') && hadStockDiscounted) {
+      showNotification(`Pedido #${orderId} pasado a ${newStatus} y stock repuesto`, 'success');
     } else {
       showNotification(`Pedido #${orderId} actualizado a ${newStatus}`, 'success');
     }
 
-    setOrders(orders.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+    setOrders(orders.map(o => o.id === orderId ? { ...o, status: newStatus, notes: updatedNotes } : o));
   };
+
+  // =======================================================================
+  // REINTEGRO DE DINERO (MERCADO PAGO API / TARJETA / MANUAL) + AVISOS WHATSAPP + IMPRESIÓN
+  // =======================================================================
+  const extractMpPaymentId = (notesStr) => {
+    if (!notesStr) return '';
+    const match = String(notesStr).match(/Pago MP #(\d+)/i) || String(notesStr).match(/payment_id[:\s#]*(\d+)/i);
+    return match ? match[1] : '';
+  };
+
+  const openRefundModal = (order) => {
+    const detectedMpId = extractMpPaymentId(order.notes);
+    const isMpOrder =
+      Boolean(detectedMpId) ||
+      String(order.status || '').toLowerCase().includes('mp') ||
+      String(order.notes || '').toLowerCase().includes('mercado pago');
+
+    setOrderToRefund(order);
+    setRefundMode(isMpOrder ? 'auto_mp' : 'manual');
+    setRefundPaymentIdInput(detectedMpId);
+    setRefundAmountInput(order.total_estimated > 0 ? String(order.total_estimated) : '');
+    setRefundReasonInput('Demora en encargue de proveedor / Solicitud del cliente');
+  };
+
+  const handleSendOrderWhatsApp = (order, messageType = 'status') => {
+    const cleanPhone = String(order.customer_phone || '').replace(/\D/g, '');
+    if (!cleanPhone || cleanPhone.length < 6) {
+      showNotification('Este pedido no tiene un número de teléfono válido cargado', 'error');
+      return;
+    }
+    const normalizedPhone = cleanPhone.startsWith('54') ? cleanPhone : `549${cleanPhone.replace(/^0+/, '')}`;
+    const totalFormatted = Number(order.total_estimated || 0).toLocaleString('es-AR');
+
+    let text;
+    if (messageType === 'encargue_delay') {
+      text = `¡Hola ${order.customer_name}! Te escribimos de *D.A.P.A. Repuestos Molle* por tu *Pedido #${order.id}*.\n\nTe informamos que las piezas solicitadas se traen *por encargue directo de distribuidora*, por lo que el pedido tendrá una breve demora hasta ingresar a nuestro local.\n\nRecordá que si abonaste con tarjeta, Mercado Pago o transferencia y preferís no aguardar el plazo del encargue, *podemos reintegrarte el 100% de tu dinero de inmediato*.\n\n¿Confirmás que avancemos con el encargue?`;
+    } else if (messageType === 'refund_confirmed') {
+      text = `¡Hola ${order.customer_name}! Te escribimos de *D.A.P.A. Repuestos Molle*.\n\nTe confirmamos que ya gestionamos el *reintegro de dinero* correspondiente a tu *Pedido #${order.id}*${order.total_estimated > 0 ? ` por *$${totalFormatted}*` : ''}.\n\nSi abonaste con tarjeta o Mercado Pago, vas a ver la devolución reflejada en tu cuenta/resumen. ¡Cualquier duda estamos a tu disposición!`;
+    } else {
+      text = `¡Hola ${order.customer_name}! Te escribimos de *D.A.P.A. Repuestos Molle* respecto a tu *Pedido #${order.id}* (Estado actual: *${order.status}*).`;
+    }
+
+    window.open(`https://wa.me/${normalizedPhone}?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleProcessRefund = async (e) => {
+    e.preventDefault();
+    if (!orderToRefund) return;
+
+    setIsSubmitting(true);
+    try {
+      const parsedAmount = parseFloat(refundAmountInput);
+      const hasCustomAmount = !isNaN(parsedAmount) && parsedAmount > 0 && parsedAmount < Number(orderToRefund.total_estimated || 0);
+
+      if (refundMode === 'auto_mp') {
+        const accessToken = session?.access_token;
+        if (!accessToken) {
+          throw new Error('Tu sesión expiró. Volvé a iniciar sesión para ejecutar el reintegro automático.');
+        }
+
+        const response = await fetch('/api/refundPayment', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`
+          },
+          body: JSON.stringify({
+            orderId: orderToRefund.id,
+            paymentId: refundPaymentIdInput.trim() || undefined,
+            amount: hasCustomAmount ? parsedAmount : undefined,
+            reason: refundReasonInput.trim()
+          })
+        });
+
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(data.error || 'No se pudo procesar el reintegro en Mercado Pago.');
+        }
+
+        const updatedNotes = data.updatedNotes || `${orderToRefund.notes || ''}\n[REINTEGRO MP #${data.refundId || 'OK'}: $${Number(data.refundedAmount || orderToRefund.total_estimated || 0).toLocaleString('es-AR')} - ${new Date().toLocaleString('es-AR')}]`.trim();
+        setOrders(prev => prev.map(o => o.id === orderToRefund.id ? { ...o, status: 'Reintegrado', notes: updatedNotes } : o));
+        showNotification(`¡Reintegro automático ejecutado en Mercado Pago para el Pedido #${orderToRefund.id}!`, 'success');
+        setOrderToRefund(null);
+      } else {
+        // Reintegro manual (Transferencia / Tarjeta en local / Efectivo)
+        const amountLabel = !isNaN(parsedAmount) && parsedAmount > 0
+          ? `$${parsedAmount.toLocaleString('es-AR')}`
+          : `$${Number(orderToRefund.total_estimated || 0).toLocaleString('es-AR')}`;
+        const refundStamp = `[REINTEGRO MANUAL REGISTRADO: ${amountLabel} - Motivo: ${refundReasonInput.trim() || 'Cancelación por demora de encargue'} - ${new Date().toLocaleString('es-AR')}]`;
+        const nextNotes = `${(orderToRefund.notes || '').replace(/\n?\[STOCK_DESCONTADO\]/g, '').trim()}\n${refundStamp}`.trim();
+
+        // Si estaba facturado, reponemos stock primero
+        const hadStockDiscounted = (orderToRefund.notes || '').includes('[STOCK_DESCONTADO]') || orderToRefund.status === 'Facturado';
+        if (hadStockDiscounted && orderToRefund.order_items?.length > 0) {
+          const updatedStockMap = new Map();
+          for (const item of orderToRefund.order_items) {
+            const prodId = item.product_id || item.product?.id;
+            if (!prodId) continue;
+            const currentProd = products.find(p => p.id === prodId);
+            if (currentProd) {
+              const restoredStock = Math.max(0, Number(currentProd.stock || 0) + Number(item.quantity || 0));
+              await supabase.from('products').update({ stock: restoredStock }).eq('id', prodId);
+              updatedStockMap.set(prodId, restoredStock);
+            }
+          }
+          if (updatedStockMap.size > 0) {
+            setProducts(prev => prev.map(p => updatedStockMap.has(p.id) ? { ...p, stock: updatedStockMap.get(p.id) } : p));
+          }
+        }
+
+        const { error } = await supabase
+          .from('orders')
+          .update({ status: 'Reintegrado', notes: nextNotes })
+          .eq('id', orderToRefund.id);
+
+        if (error) throw error;
+
+        setOrders(prev => prev.map(o => o.id === orderToRefund.id ? { ...o, status: 'Reintegrado', notes: nextNotes } : o));
+        showNotification(`Pedido #${orderToRefund.id} marcado como Reintegrado (${amountLabel})`, 'success');
+        setOrderToRefund(null);
+      }
+    } catch (err) {
+      showNotification(err.message || 'Error al procesar el reintegro', 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Imprimir Remito / Etiqueta de Envío (con escapeHtml en todos los campos del cliente para evitar XSS)
+  const handlePrintOrder = (order) => {
+    const printWin = window.open('', '_blank', 'width=850,height=700');
+    if (!printWin) {
+      showNotification('Permití las ventanas emergentes para imprimir el remito', 'error');
+      return;
+    }
+
+    const itemsRowsHtml = (order.order_items || [])
+      .map((item) => {
+        const sku = escapeHtml(item.product?.sku_code || 'S/C');
+        const name = escapeHtml(item.product?.name || 'Repuesto');
+        const qty = Number(item.quantity || 1);
+        const unit = Number(item.unit_price || 0);
+        const sub = qty * unit;
+        return `<tr>
+          <td style="padding:8px;border:1px solid #cbd5e1;font-family:monospace;">${sku}</td>
+          <td style="padding:8px;border:1px solid #cbd5e1;">${name}</td>
+          <td style="padding:8px;border:1px solid #cbd5e1;text-align:center;">${qty}</td>
+          <td style="padding:8px;border:1px solid #cbd5e1;text-align:right;">$${unit.toLocaleString('es-AR')}</td>
+          <td style="padding:8px;border:1px solid #cbd5e1;text-align:right;font-weight:bold;">$${sub.toLocaleString('es-AR')}</td>
+        </tr>`;
+      })
+      .join('');
+
+    // Limpiamos etiquetas técnicas internas (chat, dimensiones, tracking, fotos) para que el Remito salga limpio
+    const rawRemitoNotes = String(order.notes || '');
+    const remitoTrackMatch = rawRemitoNotes.match(/\[TRACKING_CA:([^\]]+)\]/i);
+    const remitoTrackingCode = remitoTrackMatch ? remitoTrackMatch[1].trim() : '';
+    const cleanRemitoNotes = rawRemitoNotes
+      .replace(/\[\[CHAT_DAPA:[\s\S]*?\]\]/g, '')
+      .replace(/\[TRACKING_CA:[^\]]+\]/gi, '')
+      .replace(/\[DIM_CA:[^\]]+\]/gi, '')
+      .replace(/\[PESO_CA:[^\]]+\]/gi, '')
+      .replace(/\[ZONA_CA:[^\]]+\]/gi, '')
+      .replace(/\[DESPACHO_FECHA:[^\]]+\]/gi, '')
+      .replace(/\[MICORREO_IMPORTADO:[^\]]+\]/gi, '')
+      .replace(/\[STOCK_DESCONTADO\]/gi, '')
+      .replace(/FOTO REPUESTO:\s*https?:\/\/[^\s]+/gi, '')
+      .replace(/FOTO CÉDULA \/ CHASIS:\s*https?:\/\/[^\s]+/gi, '')
+      .trim();
+
+    const htmlContent = `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Remito Pedido #${escapeHtml(order.id)} - D.A.P.A. Repuestos</title>
+  <style>
+    body { font-family: Arial, sans-serif; color: #0f172a; margin: 24px; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #1d4ed8; padding-bottom: 14px; margin-bottom: 20px; }
+    .brand { font-size: 24px; font-weight: 900; letter-spacing: 1px; }
+    .sub { font-size: 12px; color: #475569; margin-top: 4px; }
+    .box { border: 1px solid #cbd5e1; padding: 12px 16px; margin-bottom: 16px; background: #f8fafc; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 13px; }
+    th { background: #1e293b; color: #fff; padding: 8px; text-align: left; font-size: 11px; text-transform: uppercase; }
+    .total { text-align: right; font-size: 18px; font-weight: bold; margin-top: 10px; }
+    @media print { .no-print { display: none; } }
+  </style>
+</head>
+<body>
+  <div class="no-print" style="margin-bottom:16px;">
+    <button onclick="window.print()" style="background:#2563eb;color:#fff;border:none;padding:10px 18px;font-weight:bold;cursor:pointer;">🖨️ Imprimir Remito / Comprobante</button>
+  </div>
+  <div class="header">
+    <div>
+      <div class="brand">D.A.P.A. REPUESTOS MOLLE</div>
+      <div class="sub">Lamadrid 65, Arrecifes, Prov. de Buenos Aires • Tel: 02478-452225 • WhatsApp: +54 9 2478 40-6288</div>
+    </div>
+    <div style="text-align:right;">
+      <div style="font-size:18px;font-weight:bold;">REMITO / PEDIDO #${escapeHtml(order.id)}</div>
+      <div class="sub">Fecha: ${escapeHtml(new Date(order.created_at).toLocaleString('es-AR'))}</div>
+      <div class="sub">Estado: <strong>${escapeHtml(order.status)}</strong></div>
+    </div>
+  </div>
+  <div class="box">
+    <div><strong>Cliente / Destinatario:</strong> ${escapeHtml(order.customer_name)}</div>
+    <div style="margin-top:4px;"><strong>Teléfono:</strong> ${escapeHtml(order.customer_phone)}</div>
+    ${remitoTrackingCode ? `<div style="margin-top:4px;"><strong>Seguimiento Correo Argentino:</strong> ${escapeHtml(remitoTrackingCode)}</div>` : ''}
+  </div>
+  ${itemsRowsHtml ? `
+  <table>
+    <thead>
+      <tr>
+        <th>Código</th>
+        <th>Repuesto</th>
+        <th style="text-align:center;">Cant.</th>
+        <th style="text-align:right;">Unitario</th>
+        <th style="text-align:right;">Subtotal</th>
+      </tr>
+    </thead>
+    <tbody>${itemsRowsHtml}</tbody>
+  </table>` : ''}
+  <div class="box">
+    <strong>Datos de Envío / Observaciones:</strong>
+    <pre style="white-space:pre-wrap;font-family:monospace;font-size:12px;margin-top:6px;">${escapeHtml(cleanRemitoNotes || 'Sin observaciones')}</pre>
+  </div>
+  <div class="total">TOTAL: $${Number(order.total_estimated || 0).toLocaleString('es-AR')}</div>
+</body>
+</html>`;
+
+    printWin.document.open();
+    printWin.document.write(htmlContent);
+    printWin.document.close();
+  };
+
+  // --- ETIQUETA DE ENVÍO CORREO ARGENTINO (FORMATO MERCADO LIBRE 2 HOJAS) + TRACKING ---
+  const openShippingLabelModal = (order) => {
+    const meta = extractShippingLabelMeta(order);
+    setOrderForShippingLabel(order);
+    setLabelForm({
+      trackingCode: meta.trackingCode,
+      dimensions: meta.dimensions,
+      weight: meta.weight,
+      zoneCode: meta.zoneCode,
+      serviceType: meta.serviceType,
+      domicilio: meta.domicilio || 'Sin especificar',
+      localidad: meta.localidad || 'Sin especificar',
+      provincia: meta.provincia || 'Buenos Aires',
+      cp: meta.cp || '2740',
+      referencia: meta.referencia || ''
+    });
+  };
+
+  const handleSaveShippingTracking = async (e, shouldPrintAfter = false) => {
+    if (e) e.preventDefault();
+    if (!orderForShippingLabel) return;
+
+    const cleanTrack = String(labelForm.trackingCode || '').trim().toUpperCase();
+    if (!cleanTrack) {
+      showNotification('Ingresá un código de seguimiento válido (ej: HC532820856AR).', 'error');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      let updatedNotes = String(orderForShippingLabel.notes || '')
+        .replace(/\s*\[TRACKING_CA:[^\]]+\]/gi, '')
+        .replace(/\s*\[DIM_CA:[^\]]+\]/gi, '')
+        .replace(/\s*\[PESO_CA:[^\]]+\]/gi, '')
+        .replace(/\s*\[ZONA_CA:[^\]]+\]/gi, '')
+        .replace(/\s*\[DESPACHO_FECHA:[^\]]+\]/gi, '')
+        .trim();
+
+      const nowStr = new Date().toLocaleString('es-AR');
+      const trackingTags = `\n[TRACKING_CA:${cleanTrack}] [DIM_CA:${labelForm.dimensions || '20x38x38cm'}] [PESO_CA:${labelForm.weight || '7.5 kg'}] [ZONA_CA:${labelForm.zoneCode || 'NOA-SLAD-AAB'}] [DESPACHO_FECHA:${nowStr}]`;
+      updatedNotes = `${updatedNotes}${trackingTags}`;
+
+      const { error } = await supabase
+        .from('orders')
+        .update({ notes: updatedNotes })
+        .eq('id', orderForShippingLabel.id);
+
+      if (error) throw error;
+
+      const updatedOrder = { ...orderForShippingLabel, notes: updatedNotes };
+      setOrders((prev) => prev.map((o) => (o.id === updatedOrder.id ? updatedOrder : o)));
+      setOrderForShippingLabel(updatedOrder);
+      showNotification(`Tracking ${cleanTrack} guardado y habilitado para el cliente.`);
+
+      if (shouldPrintAfter) {
+        handlePrintShippingLabelML(updatedOrder, labelForm);
+      }
+    } catch (err) {
+      showNotification('Error al guardar el tracking: ' + err.message, 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Pre-imposición directa en API Oficial de Correo Argentino (MiCorreo /shipping/import o Paq.ar /v1/orders + /v1/labels)
+  const handleImportToMiCorreo = async () => {
+    if (!orderForShippingLabel) return;
+    setIsSubmitting(true);
+    try {
+      const res = await fetch('/api/despacharCorreo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderId: orderForShippingLabel.id,
+          customerName: orderForShippingLabel.customer_name,
+          customerPhone: orderForShippingLabel.customer_phone,
+          domicilio: labelForm.domicilio,
+          localidad: labelForm.localidad,
+          provincia: labelForm.provincia,
+          cp: labelForm.cp,
+          referencia: labelForm.referencia,
+          serviceType: labelForm.serviceType,
+          dimensions: labelForm.dimensions,
+          weight: labelForm.weight,
+          declaredValue: Number(orderForShippingLabel.total_estimated || 15000),
+          trackingCode: labelForm.trackingCode
+        })
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || 'No se pudo conectar con la API de Correo Argentino.');
+      }
+
+      if (data.needsCredentials) {
+        showNotification(data.message, 'error');
+        return;
+      }
+
+      // Si Paq.ar API 2.0 devolvió un trackingNumber oficial y/o el PDF del rótulo en Base64:
+      const newTrack = data.trackingNumber || labelForm.trackingCode;
+      if (newTrack) {
+        setLabelForm((prev) => ({ ...prev, trackingCode: String(newTrack).toUpperCase() }));
+      }
+
+      if (data.labelBase64) {
+        const pdfWin = window.open('', '_blank');
+        if (pdfWin) {
+          pdfWin.document.write(
+            `<iframe width="100%" height="100%" style="border:none;margin:0;padding:0;" src="data:application/pdf;base64,${data.labelBase64}"></iframe>`
+          );
+        }
+      }
+
+      showNotification(data.message || 'Envío registrado en Correo Argentino con éxito.');
+    } catch (err) {
+      showNotification(err.message, 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+
+  // Imprime exactamente el formato de 2 páginas de Mercado Libre / Correo Argentino adjuntado por el usuario
+  const handlePrintShippingLabelML = (order, customForm = null) => {
+    const meta = customForm || extractShippingLabelMeta(order);
+    const printWin = window.open('', '_blank', 'width=900,height=950');
+    if (!printWin) {
+      showNotification('Habilitá las ventanas emergentes para imprimir la etiqueta de Correo Argentino.', 'error');
+      return;
+    }
+
+    const orderNum = Number(order.id || 1);
+    const packId = `20000116${String(56400000 + orderNum).slice(-8)}`;
+    const ventaId = packId;
+    const upperBarcodeNum = `465258${String(98600 + orderNum).slice(-5)}`;
+    const trackingCode = String(meta.trackingCode || `HC${String(532800000 + orderNum).slice(-9)}AR`).toUpperCase();
+    const fapCode = '16276';
+    const zoneCode = String(meta.zoneCode || 'NOA-SLAD-AAB').toUpperCase();
+    const serviceType = String(meta.serviceType || 'DOM').toUpperCase() === 'SUC' ? 'SUC' : 'DOM';
+    const dimensions = String(meta.dimensions || '20x38x38cm');
+    const weight = String(meta.weight || '7.5 kg');
+    const cp = String(meta.cp || '2740').replace(/\D/g, '') || '2740';
+    const domicilio = String(meta.domicilio || 'Sin especificar');
+    const localidad = String(meta.localidad || 'Sin especificar');
+    const provincia = String(meta.provincia || 'Buenos Aires');
+    const referencia = String(meta.referencia || '');
+
+    const upperBarcodeSvg = generateCode128Svg(upperBarcodeNum, 285, 64);
+    const trackingBarcodeSvg = generateCode128Svg(trackingCode, 315, 70);
+    const qrSvg = generateQrCodeSvg(`${trackingCode}|${packId}|${cp}|DAPA`, 86);
+
+    const itemsList = Array.isArray(order.order_items) && order.order_items.length > 0
+      ? order.order_items
+      : [{ quantity: 1, product: { name: 'Repuesto Automotor D.A.P.A.', sku_code: `DAPA-${orderNum}` } }];
+
+    const itemsRowsPage2 = itemsList.map((it) => {
+      const prodName = escapeHtml(it.product?.name || 'Repuesto Automotor');
+      const sku = escapeHtml(it.product?.sku_code || 'S/C');
+      const qty = Number(it.quantity || 1);
+      return `
+        <div class="pick-item">
+          <div class="checkbox-sq"></div>
+          <div class="pick-desc">
+            <div class="pick-title">${prodName}</div>
+            <div class="pick-meta">SKU: ${sku}</div>
+            <div class="pick-meta">Cantidad: <strong>${qty}</strong></div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    const htmlContent = `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Etiqueta Correo Argentino #${escapeHtml(order.id)} - ${escapeHtml(trackingCode)}</title>
+  <style>
+    @page { size: A4 portrait; margin: 12mm; }
+    * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      color: #000;
+      background: #f1f5f9;
+      margin: 0;
+      padding: 20px;
+    }
+    .toolbar {
+      max-width: 780px;
+      margin: 0 auto 16px auto;
+      background: #0f172a;
+      color: #fff;
+      padding: 12px 18px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .toolbar button {
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      padding: 10px 18px;
+      border-radius: 6px;
+      font-weight: bold;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .page-sheet {
+      background: #fff;
+      width: 780px;
+      margin: 0 auto 28px auto;
+      padding: 26px 30px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    }
+    /* PÁGINA 1: ETIQUETA PARA PEGAR EN EL PAQUETE */
+    .label-outer {
+      width: 380px;
+      border: 1.5px solid #222;
+      background: #fff;
+      font-size: 11px;
+      line-height: 1.3;
+    }
+    .sender-block {
+      padding: 8px 10px;
+      border-bottom: 1.5px solid #222;
+      font-size: 10.5px;
+    }
+    .upper-barcode-block {
+      padding: 10px 12px 6px 12px;
+      text-align: center;
+      border-bottom: 1.5px solid #222;
+    }
+    .upper-barcode-num {
+      font-size: 11px;
+      margin-top: 3px;
+      letter-spacing: 0.5px;
+    }
+    .carrier-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 10px;
+      border-bottom: 1.5px solid #222;
+    }
+    .correo-brand {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 900;
+      font-size: 12px;
+      line-height: 1.05;
+    }
+    .correo-icon {
+      width: 28px;
+      height: 22px;
+      border: 2px solid #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-size: 10px;
+    }
+    .fap-zone {
+      text-align: right;
+    }
+    .fap-text {
+      font-size: 10px;
+      font-weight: bold;
+    }
+    .zone-text {
+      font-size: 14px;
+      font-weight: 900;
+      letter-spacing: 0.3px;
+    }
+    .service-dims-row {
+      display: flex;
+      align-items: stretch;
+      justify-content: space-between;
+      padding: 8px 10px;
+      border-bottom: 1.5px solid #222;
+    }
+    .c-dom-box {
+      display: flex;
+      border: 2.5px solid #000;
+      align-items: center;
+    }
+    .c-letter {
+      font-size: 28px;
+      font-weight: 900;
+      padding: 2px 10px;
+      border-right: 2.5px solid #000;
+      line-height: 1;
+    }
+    .dom-letters {
+      font-size: 18px;
+      font-weight: 900;
+      padding: 4px 8px;
+      line-height: 1;
+    }
+    .dims-box {
+      text-align: right;
+      font-size: 13px;
+      font-weight: 900;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .tracking-barcode-block {
+      padding: 10px 10px 6px 10px;
+      text-align: center;
+      border-bottom: 2px solid #000;
+    }
+    .tracking-code-text {
+      font-size: 16px;
+      font-weight: 900;
+      margin-top: 4px;
+      letter-spacing: 0.6px;
+    }
+    .destinatario-header {
+      background: #000;
+      color: #fff;
+      font-weight: 900;
+      font-size: 11px;
+      padding: 3px 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .destinatario-body {
+      padding: 8px 10px;
+      font-size: 11px;
+      line-height: 1.38;
+      border-bottom: 1.5px solid #222;
+    }
+    .cp-line {
+      font-size: 15px;
+      font-weight: 900;
+      margin: 4px 0;
+    }
+    .qr-footer-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+    }
+    .r-bar {
+      width: 58px;
+      height: 86px;
+      background: #000;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      font-weight: 900;
+    }
+    .cut-line {
+      margin-top: 22px;
+      border-top: 1.5px dashed #333;
+      position: relative;
+      height: 14px;
+    }
+    /* PÁGINA 2: HOJA DE DESPACHO / PICKING LIST */
+    .page-break {
+      page-break-before: always;
+    }
+    .dispatch-banner {
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 14px;
+      padding-bottom: 8px;
+    }
+    .dispatch-table {
+      width: 100%;
+      border-top: 2px dotted #666;
+      border-bottom: 1.5px solid #cbd5e1;
+    }
+    .dispatch-thead {
+      display: flex;
+      background: #7f8c8d;
+      color: #fff;
+      font-weight: bold;
+      font-size: 12px;
+      padding: 6px 12px;
+      margin-top: 8px;
+    }
+    .col-ident {
+      width: 36%;
+      padding-right: 14px;
+      border-right: 1px solid #cbd5e1;
+    }
+    .col-prod {
+      width: 64%;
+      padding-left: 14px;
+    }
+    .dispatch-tbody {
+      display: flex;
+      padding: 14px 12px;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .pick-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+    .checkbox-sq {
+      width: 18px;
+      height: 18px;
+      border: 1.8px solid #333;
+      margin-top: 2px;
+      flex-shrink: 0;
+    }
+    .pick-title {
+      font-weight: 600;
+      margin-bottom: 3px;
+    }
+    .pick-meta {
+      font-size: 11.5px;
+      color: #111;
+    }
+    @media print {
+      body { background: #fff; padding: 0; }
+      .toolbar { display: none !important; }
+      .page-sheet { box-shadow: none; width: 100%; margin: 0; padding: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <div>
+      <strong>Etiqueta Oficial Correo Argentino / Formato Mercado Libre (2 Hojas)</strong>
+      <div style="font-size:11px;color:#cbd5e1;">Hoja 1: Etiqueta para pegar en el paquete • Hoja 2: Comprobante de despacho y control de SKU</div>
+    </div>
+    <button onclick="window.print()">🖨️ Imprimir Etiqueta (2 Hojas)</button>
+  </div>
+
+  <!-- HOJA 1: ETIQUETA DE PAQUETE -->
+  <div class="page-sheet">
+    <div class="label-outer">
+      <div class="sender-block">
+        <div><strong>Molle Autopartes #3305577356</strong></div>
+        <div>Calle Lamadrid 65, Arrecifes, Buenos Aires - 2740</div>
+        <div>Pack ID: ${escapeHtml(packId)}</div>
+      </div>
+
+      <div class="upper-barcode-block">
+        ${upperBarcodeSvg}
+        <div class="upper-barcode-num">${escapeHtml(upperBarcodeNum)}</div>
+      </div>
+
+      <div class="carrier-row">
+        <div class="correo-brand">
+          <div class="correo-icon">CA</div>
+          <div>CORREO<br/>ARGENTINO</div>
+        </div>
+        <div class="fap-zone">
+          <div class="fap-text">FAP: ${escapeHtml(fapCode)}</div>
+          <div class="zone-text">${escapeHtml(zoneCode)}</div>
+        </div>
+      </div>
+
+      <div class="service-dims-row">
+        <div class="c-dom-box">
+          <div class="c-letter">C</div>
+          <div class="dom-letters">${escapeHtml(serviceType)}</div>
+        </div>
+        <div class="dims-box">
+          <div>${escapeHtml(dimensions)}</div>
+          <div>${escapeHtml(weight)}</div>
+        </div>
+      </div>
+
+      <div class="tracking-barcode-block">
+        ${trackingBarcodeSvg}
+        <div class="tracking-code-text">${escapeHtml(trackingCode)}</div>
+      </div>
+
+      <div class="destinatario-header">DESTINATARIO</div>
+      <div class="destinatario-body">
+        <div><strong>${escapeHtml(order.customer_name || 'Cliente')}</strong></div>
+        <div>Domicilio: ${escapeHtml(domicilio)}</div>
+        <div class="cp-line">CP: ${escapeHtml(cp)}</div>
+        <div>Central: ${escapeHtml(provincia.toUpperCase())}</div>
+        <div>Ciudad de destino: ${escapeHtml(localidad.toUpperCase())}</div>
+        <div>Provincia: ${escapeHtml(provincia)}</div>
+        ${referencia ? `<div>Referencia: ${escapeHtml(referencia)}</div>` : ''}
+      </div>
+
+      <div class="qr-footer-row">
+        <div></div>
+        <div>${qrSvg}</div>
+        <div class="r-bar">R</div>
+      </div>
+    </div>
+
+    <div class="cut-line"></div>
+  </div>
+
+  <!-- HOJA 2: ORDEN DE PREPARACIÓN / DESPACHO -->
+  <div class="page-sheet page-break">
+    <div class="dispatch-banner">
+      Despacha tu producto cuanto antes ¡No te relajes! Tu comprador lo está esperando.
+    </div>
+
+    <div class="dispatch-table">
+      <div class="dispatch-thead">
+        <div style="width:36%;">Identificación</div>
+        <div style="width:64%;padding-left:14px;">Producto</div>
+      </div>
+      <div class="dispatch-tbody">
+        <div class="col-ident">
+          <div style="font-weight:bold;margin-bottom:6px;">${escapeHtml(trackingCode)}</div>
+          <div>Pack ID: ${escapeHtml(packId)}</div>
+          <div>Venta: ${escapeHtml(ventaId)}</div>
+          <div style="margin-top:6px;">Cliente: ${escapeHtml(order.customer_name || 'Cliente')}</div>
+          <div>Tel: ${escapeHtml(order.customer_phone || '-')}</div>
+        </div>
+        <div class="col-prod">
+          ${itemsRowsPage2}
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
+
+    printWin.document.open();
+    printWin.document.write(htmlContent);
+    printWin.document.close();
+  };
+
+  // --- CHAT DIRECTO VENDEDOR <-> COMPRADOR (PANEL ADMIN) ---
+  const openSellerChatModal = (order) => {
+    setOrderForSellerChat(order);
+    setSellerChatMessages(parseAdminChatMessages(order.notes));
+    setSellerChatInput('');
+  };
+
+  useEffect(() => {
+    if (!orderForSellerChat?.id) return;
+    let isMounted = true;
+    const pollChat = async () => {
+      const { data, error } = await supabase
+        .from('orders')
+        .select('id, notes, status')
+        .eq('id', orderForSellerChat.id)
+        .single();
+      if (!error && data && isMounted) {
+        const parsed = parseAdminChatMessages(data.notes);
+        setSellerChatMessages(parsed);
+        setOrders((prev) => prev.map((o) => (o.id === data.id ? { ...o, notes: data.notes, status: data.status } : o)));
+      }
+    };
+    const interval = setInterval(pollChat, 4000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [orderForSellerChat?.id]);
+
+  useEffect(() => {
+    if (sellerChatBottomRef.current) {
+      sellerChatBottomRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [sellerChatMessages.length, orderForSellerChat?.id]);
+
+  const handleSendSellerChat = async (e) => {
+    e.preventDefault();
+    if (!orderForSellerChat || !sellerChatInput.trim() || isSendingSellerChat) return;
+
+    const cleanText = sellerChatInput.trim().slice(0, 700);
+    setIsSendingSellerChat(true);
+    try {
+      const { data: freshOrder } = await supabase
+        .from('orders')
+        .select('id, notes')
+        .eq('id', orderForSellerChat.id)
+        .single();
+
+      const baseNotes = freshOrder ? freshOrder.notes : orderForSellerChat.notes;
+      const currentMsgs = parseAdminChatMessages(baseNotes);
+      const newMsg = {
+        id: `${Date.now()}_seller`,
+        sender: 'seller',
+        senderName: 'D.A.P.A. Repuestos (Vendedor)',
+        text: cleanText,
+        createdAt: new Date().toISOString()
+      };
+      const updatedMsgs = [...currentMsgs, newMsg];
+      const updatedNotes = injectAdminChatMessages(baseNotes, updatedMsgs);
+
+      const { error: updErr } = await supabase
+        .from('orders')
+        .update({ notes: updatedNotes })
+        .eq('id', orderForSellerChat.id);
+
+      if (updErr) throw updErr;
+
+      setSellerChatMessages(updatedMsgs);
+      setSellerChatInput('');
+      setOrderForSellerChat((prev) => (prev ? { ...prev, notes: updatedNotes } : prev));
+      setOrders((prev) => prev.map((o) => (o.id === orderForSellerChat.id ? { ...o, notes: updatedNotes } : o)));
+    } catch (err) {
+      showNotification('No se pudo enviar el mensaje: ' + err.message, 'error');
+    } finally {
+      setIsSendingSellerChat(false);
+    }
+  };
+
 
   // Función auxiliar para buscar por palabras sueltas
   const matchesMultiWordSearch = (prod, rawQuery) => {
@@ -1473,7 +2649,7 @@ export default function AdminPanel() {
     }
     setIsSubmitting(true);
     try {
-      const notesText = `TIPO DE VENTA: Venta Manual / Mostrador\nMÉTODO DE PAGO: ${posPaymentMethod.toUpperCase()}${posNotes ? `\nNOTAS: ${posNotes}` : ''}`;
+      const notesText = `TIPO DE VENTA: Venta Manual / Mostrador\nMÉTODO DE PAGO: ${posPaymentMethod.toUpperCase()}${posNotes ? `\nNOTAS: ${posNotes}` : ''}${posDiscountStock ? '\n[STOCK_DESCONTADO]' : ''}`;
       const { data: newOrder, error: orderErr } = await supabase
         .from('orders')
         .insert([{
@@ -1568,15 +2744,17 @@ export default function AdminPanel() {
   // =======================================================================
   const isOrderPending = (status) => {
     if (!status) return false;
-    return status.startsWith('Pendiente') || status === 'Cotización Web';
+    return status.startsWith('Pendiente') || status === 'Cotización Web' || status === 'En encargue';
   };
 
   const pendingOrdersCount = orders.filter(o => isOrderPending(o.status)).length;
   const completedOrdersCount = orders.filter(o => o.status === 'Facturado' || o.status === 'Cancelado').length;
+  const refundedOrdersCount = orders.filter(o => o.status === 'Reintegrado').length;
 
   const filteredOrders = orders.filter(o => {
     if (orderFilter === 'pendientes') return isOrderPending(o.status) || o.status === 'Revisado';
     if (orderFilter === 'facturados') return o.status === 'Facturado';
+    if (orderFilter === 'reintegrados') return o.status === 'Reintegrado';
     if (orderFilter === 'cancelados') return o.status === 'Cancelado';
     return true;
   });
@@ -2050,6 +3228,7 @@ export default function AdminPanel() {
                     { id: 'todos', label: `Todos (${orders.length})` },
                     { id: 'pendientes', label: `Pendientes (${pendingOrdersCount})` },
                     { id: 'facturados', label: 'Facturados' },
+                    { id: 'reintegrados', label: `Reintegrados (${refundedOrdersCount})` },
                     { id: 'cancelados', label: 'Cancelados' }
                   ].map(tab => (
                     <button
@@ -2113,6 +3292,8 @@ export default function AdminPanel() {
                                 ? 'bg-orange-100 text-orange-700 border-orange-200' 
                                 : order.status === 'Facturado' 
                                 ? 'bg-green-100 text-green-700 border-green-200' 
+                                : order.status === 'Reintegrado'
+                                ? 'bg-purple-100 text-purple-700 border-purple-200'
                                 : order.status === 'Cancelado'
                                 ? 'bg-red-100 text-red-700 border-red-200'
                                 : 'bg-slate-100 text-slate-700 border-slate-200'
@@ -2121,10 +3302,12 @@ export default function AdminPanel() {
                             <option value="Pendiente">Pendiente</option>
                             <option value="Pendiente (Vía Web)">Pendiente (Vía Web)</option>
                             <option value="Pendiente (Pagado MP)">✅ Pagado MP (Por despachar)</option>
+                            <option value="En encargue">⏳ En encargue (Proveedor)</option>
                             <option value="Pendiente (Vía WhatsApp)">Pendiente (Vía WhatsApp)</option>
                             <option value="Cotización Web">Cotización Web</option>
                             <option value="Revisado">Revisado</option>
                             <option value="Facturado">Facturado / Listo</option>
+                            <option value="Reintegrado">💸 Reintegrado</option>
                             <option value="Cancelado">Cancelado</option>
                           </select>
 
@@ -2186,8 +3369,13 @@ export default function AdminPanel() {
                           const matches = order.notes.match(urlRegex) || [];
                           const imageLinks = matches.filter(url => /\.(jpg|jpeg|png|webp|avif)(\?.*)?$/i.test(url) || url.includes('supabase.co/storage'));
                           
-                          // Limpiamos el texto de las notas para que no repita el link gigante si ya mostramos las fotos
-                          let cleanNotes = order.notes;
+                          // Limpiamos el texto de las notas para que no repita el link gigante ni el bloque interno de chat
+                          let cleanNotes = order.notes
+                            .replace(/\[\[CHAT_DAPA:[\s\S]*?\]\]/g, '')
+                            .replace(/\[DIM_CA:[^\]]+\]/gi, '')
+                            .replace(/\[PESO_CA:[^\]]+\]/gi, '')
+                            .replace(/\[ZONA_CA:[^\]]+\]/gi, '')
+                            .replace(/\[STOCK_DESCONTADO\]/gi, '');
                           imageLinks.forEach(link => {
                             cleanNotes = cleanNotes.replace(link, '').replace(/FOTO REPUESTO:\s*/gi, '').replace(/FOTO CÉDULA \/ CHASIS:\s*/gi, '');
                           });
@@ -2229,6 +3417,63 @@ export default function AdminPanel() {
                             </div>
                           );
                         })()}
+                      </div>
+
+                      <div className="px-5 py-3 bg-slate-100/70 dark:bg-slate-900/70 border-t border-slate-100 dark:border-slate-700 flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex flex-wrap gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => openShippingLabelModal(order)}
+                            className="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-sm transition-colors"
+                            title="Generar e imprimir etiqueta Correo Argentino (Formato Mercado Libre 2 hojas) y cargar código de seguimiento"
+                          >
+                            <Truck className="w-3.5 h-3.5" /> Etiqueta Correo
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openSellerChatModal(order)}
+                            className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-sm transition-colors relative"
+                            title="Abrir chat directo con el comprador de este pedido"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" /> Chat Comprador
+                            {parseAdminChatMessages(order.notes).length > 0 && (
+                              <span className="ml-0.5 px-1.5 py-0.2 rounded-full bg-white text-emerald-700 font-black text-[9px]">
+                                {parseAdminChatMessages(order.notes).length}
+                              </span>
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSendOrderWhatsApp(order, 'encargue_delay')}
+                            className="px-2.5 py-1.5 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 transition-colors"
+                            title="Avisar por WhatsApp sobre demora por encargue y opción de reintegro"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" /> Avisar Encargue
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handlePrintOrder(order)}
+                            className="px-2.5 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 dark:bg-slate-700 dark:text-slate-200 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 transition-colors"
+                            title="Imprimir remito / comprobante del pedido"
+                          >
+                            <Printer className="w-3.5 h-3.5" /> Remito
+                          </button>
+                        </div>
+
+                        {order.status !== 'Reintegrado' ? (
+                          <button
+                            type="button"
+                            onClick={() => openRefundModal(order)}
+                            className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 shadow-sm transition-colors"
+                            title="Reintegrar dinero (Mercado Pago / Tarjeta o Manual)"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" /> Reintegrar Dinero
+                          </button>
+                        ) : (
+                          <span className="px-2.5 py-1 rounded-lg bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                            <CheckCircle className="w-3.5 h-3.5" /> Dinero Reintegrado
+                          </span>
+                        )}
                       </div>
 
                       <div className="p-5 bg-slate-50 dark:bg-slate-900 border-t border-slate-100 dark:border-slate-700 flex justify-between items-center">
@@ -3012,6 +4257,431 @@ export default function AdminPanel() {
         </div>
       )}
 
+      {/* MODAL PARA REINTEGRAR DINERO (MERCADO PAGO / TARJETA O MANUAL) */}
+      {orderToRefund && (
+        <div className="fixed inset-0 bg-slate-900/70 z-[225] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-lg p-6 border border-slate-200 dark:border-slate-700 animate-in zoom-in-95 duration-200 my-8">
+            <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-100 dark:border-slate-700">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-2xl flex items-center justify-center">
+                  <RotateCcw className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white uppercase tracking-widest">
+                    Reintegrar Dinero — Pedido #{orderToRefund.id}
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Cliente: <strong className="text-slate-700 dark:text-slate-200">{orderToRefund.customer_name}</strong> · Total: <strong>${Number(orderToRefund.total_estimated || 0).toLocaleString('es-AR')}</strong>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={isSubmitting}
+                onClick={() => setOrderToRefund(null)}
+                className="text-slate-400 hover:text-slate-700"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleProcessRefund} className="space-y-4">
+              <div>
+                <label className="text-xs font-bold uppercase tracking-widest text-slate-500 block mb-2">
+                  Método de Reintegro
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setRefundMode('auto_mp')}
+                    className={`p-3 rounded-xl border text-left transition-all ${
+                      refundMode === 'auto_mp'
+                        ? 'bg-purple-50 dark:bg-purple-900/30 border-purple-500 text-purple-900 dark:text-purple-100'
+                        : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 font-bold text-xs uppercase tracking-wider mb-1">
+                      <CreditCard className="w-4 h-4 text-purple-600" /> Automático (MP / Tarjeta)
+                    </div>
+                    <p className="text-[11px] opacity-80 leading-snug">
+                      Reintegra directo en la tarjeta o cuenta de Mercado Pago del comprador vía API.
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setRefundMode('manual')}
+                    className={`p-3 rounded-xl border text-left transition-all ${
+                      refundMode === 'manual'
+                        ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-500 text-blue-900 dark:text-blue-100'
+                        : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 font-bold text-xs uppercase tracking-wider mb-1">
+                      <RotateCcw className="w-4 h-4 text-blue-600" /> Manual / Transferencia
+                    </div>
+                    <p className="text-[11px] opacity-80 leading-snug">
+                      Registrá la devolución si ya transferiste por CBU/Alias o devolviste en efectivo.
+                    </p>
+                  </button>
+                </div>
+              </div>
+
+              {refundMode === 'auto_mp' && (
+                <div className="space-y-3 bg-purple-50/60 dark:bg-purple-950/20 p-3.5 rounded-xl border border-purple-200 dark:border-purple-800/50">
+                  <div>
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 block mb-1">
+                      ID de Operación de Mercado Pago (Opcional si pagó desde la web)
+                    </label>
+                    <input
+                      type="text"
+                      value={refundPaymentIdInput}
+                      onChange={(e) => setRefundPaymentIdInput(e.target.value)}
+                      placeholder="Se busca automáticamente por Pedido # o ingresalo manual"
+                      className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-lg text-xs text-slate-900 dark:text-white outline-none focus:border-purple-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 block mb-1">
+                      Monto a devolver en ARS (Dejá vacío para reintegro total 100%)
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      step="0.01"
+                      value={refundAmountInput}
+                      onChange={(e) => setRefundAmountInput(e.target.value)}
+                      placeholder={`Total del pedido: $${Number(orderToRefund.total_estimated || 0).toLocaleString('es-AR')}`}
+                      className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-lg text-xs text-slate-900 dark:text-white outline-none focus:border-purple-500"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="text-xs font-bold uppercase tracking-widest text-slate-500 block mb-1.5">
+                  Motivo del Reintegro (Quedará registrado en el pedido)
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={refundReasonInput}
+                  onChange={(e) => setRefundReasonInput(e.target.value)}
+                  placeholder="Ej: Demora en encargue de proveedor / Solicitud del cliente"
+                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3.5 py-2.5 rounded-xl text-xs text-slate-900 dark:text-white outline-none focus:border-purple-500"
+                />
+              </div>
+
+              <div className="pt-2 flex flex-col sm:flex-row gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => handleSendOrderWhatsApp(orderToRefund, 'refund_confirmed')}
+                  className="py-2.5 px-4 rounded-xl font-bold uppercase tracking-wider text-xs bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 flex items-center justify-center gap-1.5 transition-colors"
+                >
+                  <MessageSquare className="w-4 h-4" /> Avisar por WhatsApp
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="flex-1 py-3 px-5 rounded-xl font-bold uppercase tracking-widest text-xs bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-600/30 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  {isSubmitting
+                    ? 'Procesando Reintegro...'
+                    : refundMode === 'auto_mp'
+                    ? 'Ejecutar Reintegro en Mercado Pago'
+                    : 'Confirmar Reintegro Manual'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE ETIQUETA CORREO ARGENTINO (FORMATO MERCADO LIBRE 2 HOJAS) + TRACKING */}
+      {orderForShippingLabel && (
+        <div className="fixed inset-0 bg-slate-900/75 z-[225] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-200 dark:border-slate-700 animate-in zoom-in-95 duration-200">
+            <div className="bg-blue-700 p-5 text-white flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-white/15 rounded-xl">
+                  <Truck className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base uppercase tracking-widest">
+                    Etiqueta Correo Argentino • Pedido #{orderForShippingLabel.id}
+                  </h3>
+                  <p className="text-xs text-blue-100">
+                    Formato Oficial Mercado Libre (2 hojas: Etiqueta de Paquete + Hoja de Preparación SKU)
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOrderForShippingLabel(null)}
+                className="text-white/80 hover:text-white p-1.5 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={(e) => handleSaveShippingTracking(e, false)} className="p-6 space-y-4 max-h-[82vh] overflow-y-auto">
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50 rounded-2xl p-3.5 text-xs text-blue-900 dark:text-blue-200 leading-relaxed">
+                <strong>Rastreo Oficial Correo Argentino habilitado para el comprador:</strong> Al guardar el código de seguimiento (ej. <code className="font-mono font-bold">HC532820856AR</code>), el cliente podrá consultar en vivo el estado de su encomienda desde su menú <strong>Mis Pedidos / Reintegros</strong>.
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                <div className="sm:col-span-2">
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
+                    Código de Seguimiento Correo Argentino (TN) *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={labelForm.trackingCode}
+                    onChange={(e) => setLabelForm({ ...labelForm, trackingCode: e.target.value.toUpperCase() })}
+                    placeholder="Ej: HC532820856AR"
+                    className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm font-mono font-bold text-slate-900 dark:text-white uppercase"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
+                    Modalidad (C)
+                  </label>
+                  <select
+                    value={labelForm.serviceType}
+                    onChange={(e) => setLabelForm({ ...labelForm, serviceType: e.target.value })}
+                    className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm font-bold text-slate-900 dark:text-white"
+                  >
+                    <option value="DOM">C | DOM (A Domicilio)</option>
+                    <option value="SUC">C | SUC (A Sucursal)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
+                    Medidas del Paquete
+                  </label>
+                  <input
+                    type="text"
+                    value={labelForm.dimensions}
+                    onChange={(e) => setLabelForm({ ...labelForm, dimensions: e.target.value })}
+                    placeholder="20x38x38cm"
+                    className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
+                    Peso Estimado
+                  </label>
+                  <input
+                    type="text"
+                    value={labelForm.weight}
+                    onChange={(e) => setLabelForm({ ...labelForm, weight: e.target.value })}
+                    placeholder="7.5 kg"
+                    className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
+                    Código Encaminamiento
+                  </label>
+                  <input
+                    type="text"
+                    value={labelForm.zoneCode}
+                    onChange={(e) => setLabelForm({ ...labelForm, zoneCode: e.target.value.toUpperCase() })}
+                    placeholder="NOA-SLAD-AAB"
+                    className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white font-mono uppercase"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                <div className="sm:col-span-2">
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
+                    Domicilio de Destino
+                  </label>
+                  <input
+                    type="text"
+                    value={labelForm.domicilio}
+                    onChange={(e) => setLabelForm({ ...labelForm, domicilio: e.target.value })}
+                    className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
+                    Código Postal (CP)
+                  </label>
+                  <input
+                    type="text"
+                    value={labelForm.cp}
+                    onChange={(e) => setLabelForm({ ...labelForm, cp: e.target.value })}
+                    className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm font-mono font-bold text-slate-900 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
+                    Ciudad de Destino / Localidad
+                  </label>
+                  <input
+                    type="text"
+                    value={labelForm.localidad}
+                    onChange={(e) => setLabelForm({ ...labelForm, localidad: e.target.value })}
+                    className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
+                    Provincia / Central
+                  </label>
+                  <input
+                    type="text"
+                    value={labelForm.provincia}
+                    onChange={(e) => setLabelForm({ ...labelForm, provincia: e.target.value })}
+                    className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
+                  Referencia / Observaciones para el cartero
+                </label>
+                <input
+                  type="text"
+                  value={labelForm.referencia}
+                  onChange={(e) => setLabelForm({ ...labelForm, referencia: e.target.value })}
+                  placeholder="Ej: Entre calles, portón blanco, horario comercial..."
+                  className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white"
+                />
+              </div>
+
+              <div className="pt-2 flex flex-col sm:flex-row flex-wrap gap-2.5">
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="py-2.5 px-4 rounded-xl font-bold uppercase tracking-wider text-xs bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-white hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                >
+                  {isSubmitting ? 'Guardando...' : '💾 Guardar Tracking'}
+                </button>
+                <button
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={handleImportToMiCorreo}
+                  className="py-2.5 px-4 rounded-xl font-bold uppercase tracking-wider text-xs bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-sm transition-colors flex items-center justify-center gap-1.5"
+                  title="Envía el paquete directamente a tu cuenta de MiCorreo (/shipping/import) o genera la orden y rótulo PDF en Paq.ar API 2.0"
+                >
+                  <Truck className="w-4 h-4" /> Importar a MiCorreo API
+                </button>
+                <button
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={(e) => handleSaveShippingTracking(e, true)}
+                  className="flex-1 py-3 px-5 rounded-xl font-bold uppercase tracking-widest text-xs bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/30 transition-colors flex items-center justify-center gap-2"
+                >
+                  <Printer className="w-4 h-4" /> Guardar e Imprimir Etiqueta (2 Hojas ML / Correo)
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CHAT DIRECTO VENDEDOR <-> COMPRADOR */}
+      {orderForSellerChat && (
+        <div className="fixed inset-0 bg-slate-900/75 z-[225] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200 dark:border-slate-700 animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]">
+            <div className="bg-emerald-600 p-4 text-white flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-white/15 rounded-xl">
+                  <MessageSquare className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm uppercase tracking-widest">
+                    Chat Directo • Pedido #{orderForSellerChat.id}
+                  </h3>
+                  <p className="text-xs text-emerald-100">
+                    Comprador: <strong>{orderForSellerChat.customer_name}</strong> ({orderForSellerChat.customer_phone})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOrderForSellerChat(null)}
+                className="text-white/80 hover:text-white p-1.5 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-slate-50 dark:bg-slate-900/60 min-h-[300px] max-h-[420px]">
+              {sellerChatMessages.length === 0 ? (
+                <div className="text-center py-12 px-4">
+                  <MessageSquare className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
+                  <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                    Iniciá la conversación con {orderForSellerChat.customer_name}
+                  </p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    El comprador verá tus mensajes al instante en su panel "Mis Pedidos / Reintegros".
+                  </p>
+                </div>
+              ) : (
+                sellerChatMessages.map((msg) => {
+                  const isSeller = msg.sender === 'seller';
+                  return (
+                    <div
+                      key={msg.id}
+                      className={`flex flex-col ${isSeller ? 'items-end' : 'items-start'}`}
+                    >
+                      <div
+                        className={`max-w-[82%] rounded-2xl px-4 py-2.5 text-xs shadow-sm ${
+                          isSeller
+                            ? 'bg-emerald-600 text-white rounded-br-none'
+                            : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-bl-none'
+                        }`}
+                      >
+                        <div className={`text-[10px] font-bold mb-1 ${isSeller ? 'text-emerald-100' : 'text-blue-600 dark:text-blue-400'}`}>
+                          {isSeller ? 'Vos (D.A.P.A. Repuestos)' : msg.senderName || orderForSellerChat.customer_name}
+                        </div>
+                        <p className="whitespace-pre-wrap break-words leading-relaxed">{msg.text}</p>
+                        <div className={`text-[9px] mt-1 text-right ${isSeller ? 'text-emerald-100/80' : 'text-slate-400'}`}>
+                          {msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : ''}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+              <div ref={sellerChatBottomRef} />
+            </div>
+
+            <form onSubmit={handleSendSellerChat} className="p-3.5 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 flex items-center gap-2">
+              <input
+                type="text"
+                value={sellerChatInput}
+                onChange={(e) => setSellerChatInput(e.target.value)}
+                placeholder="Escribí un mensaje para el comprador..."
+                maxLength={700}
+                className="flex-1 px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+              <button
+                type="submit"
+                disabled={isSendingSellerChat || !sellerChatInput.trim()}
+                className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors shadow-sm"
+              >
+                <Send className="w-3.5 h-3.5" />
+                {isSendingSellerChat ? '...' : 'Enviar'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* MODAL DE CONFIRMACIÓN PARA LIMPIAR TODOS LOS PEDIDOS FINALIZADOS */}
       {confirmClearCompleted && (
         <div className="fixed inset-0 bg-slate-900/70 z-[220] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
@@ -3140,7 +4810,7 @@ export default function AdminPanel() {
                   Gestionar Categorías ({categories.length})
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Creá categorías o eliminá las repetidas junto con sus productos
+                  Creá categorías, unificá duplicadas o eliminá categorías con sus productos
                 </p>
               </div>
               <button onClick={() => setIsCategoryModalOpen(false)}>
@@ -3180,30 +4850,57 @@ export default function AdminPanel() {
                 </div>
               </form>
 
-              {/* Barra de acciones masivas para borrar categorías y sus productos */}
-              <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200 dark:border-slate-700">
-                <label className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={categories.length > 0 && selectedCatIds.length === categories.length}
-                    onChange={(e) => {
-                      if (e.target.checked) setSelectedCatIds(categories.map(c => c.id));
-                      else setSelectedCatIds([]);
-                    }}
-                    className="w-4 h-4"
-                  />
-                  Seleccionar todas ({selectedCatIds.length} seleccionadas)
-                </label>
+              {/* Barra de acciones masivas para fusionar o borrar categorías */}
+              <div className="space-y-3 pb-2 border-b border-slate-200 dark:border-slate-700">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={categories.length > 0 && selectedCatIds.length === categories.length}
+                      onChange={(e) => {
+                        if (e.target.checked) setSelectedCatIds(categories.map(c => c.id));
+                        else setSelectedCatIds([]);
+                      }}
+                      className="w-4 h-4"
+                    />
+                    Seleccionar todas ({selectedCatIds.length} seleccionadas)
+                  </label>
+
+                  {selectedCatIds.length > 0 && (
+                    <button
+                      type="button"
+                      disabled={isSubmitting}
+                      onClick={() => handleDeleteCategoriesWithProducts(selectedCatIds)}
+                      className="bg-red-600 hover:bg-red-500 text-white px-3.5 py-2 rounded-none text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+                    >
+                      <Trash2 className="w-4 h-4" /> Eliminar Seleccionadas ({selectedCatIds.length})
+                    </button>
+                  )}
+                </div>
 
                 {selectedCatIds.length > 0 && (
-                  <button
-                    type="button"
-                    disabled={isSubmitting}
-                    onClick={() => handleDeleteCategoriesWithProducts(selectedCatIds)}
-                    className="bg-red-600 hover:bg-red-500 text-white px-3.5 py-2 rounded-none text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 shadow-sm disabled:opacity-50"
-                  >
-                    <Trash2 className="w-4 h-4" /> Eliminar Seleccionadas ({selectedCatIds.length}) y sus Productos
-                  </button>
+                  <div className="bg-blue-50 dark:bg-slate-900/80 p-3 border border-blue-200 dark:border-slate-700 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                    <select
+                      value={targetMergeCategoryId}
+                      onChange={(e) => setTargetMergeCategoryId(e.target.value)}
+                      className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs text-slate-900 dark:text-white outline-none"
+                    >
+                      <option value="">Elegí categoría destino para mover productos...</option>
+                      {categories
+                        .filter(c => !selectedCatIds.includes(c.id))
+                        .map(c => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                    </select>
+                    <button
+                      type="button"
+                      disabled={isSubmitting || !targetMergeCategoryId}
+                      onClick={handleMergeCategories}
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 text-xs font-bold uppercase tracking-wider disabled:opacity-50"
+                    >
+                      Mover Productos y Unificar
+                    </button>
+                  </div>
                 )}
               </div>
 
