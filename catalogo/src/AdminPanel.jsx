@@ -1555,23 +1555,164 @@ export default function AdminPanel() {
   };
 
   // =======================================================================
-  // FUNCIONES DE CATEGORÍAS (CREAR, ELIMINAR CON PRODUCTOS Y UNIFICAR)
+  // FUNCIONES DE CATEGORÍAS (CREAR, FOTO PROPIA, ELIMINAR Y UNIFICAR)
   // =======================================================================
   const [selectedCatIds, setSelectedCatIds] = useState([]);
+  const [uploadingCatId, setUploadingCatId] = useState(null);
+  const [newCategoryImageFile, setNewCategoryImageFile] = useState(null);
+
+  const getCategoryCustomImage = (cat) => {
+    if (cat?.image_url) return cat.image_url;
+    const match = String(cat?.description || '').match(/\[IMG_CAT:([^\]]+)\]/i);
+    return match && match[1] ? match[1].trim() : null;
+  };
+
+  const getCategoryDefaultPreview = (cat) => {
+    const custom = getCategoryCustomImage(cat);
+    if (custom) return custom;
+    const rawName = String(cat?.name || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+
+    if (rawName.includes('cristal') || rawName.includes('parabrisa') || rawName.includes('luneta') || rawName.includes('puerta delantera') || rawName.includes('puerta trasera') || rawName.includes('aleta')) {
+      return 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=300&q=70';
+    }
+    if (rawName.includes('optica') || rawName.includes('lente') || rawName.includes('faro') || rawName.includes('iluminacion') || rawName.includes('lampara') || rawName.includes('led') || rawName.includes('luz')) {
+      return 'https://images.unsplash.com/photo-1544829099-b9a0c07fad1a?auto=format&fit=crop&w=300&q=70';
+    }
+    if (rawName.includes('espejo') || rawName.includes('retrovisor') || rawName.includes('luna') || rawName.includes('cacha')) {
+      return 'https://images.unsplash.com/photo-1502877338535-766e1452684a?auto=format&fit=crop&w=300&q=70';
+    }
+    if (rawName.includes('cerraj') || rawName.includes('cerradur') || rawName.includes('cilindro') || rawName.includes('manij') || rawName.includes('tirador') || rawName.includes('alzacristal') || rawName.includes('levantavidrio') || rawName.includes('maquina') || rawName.includes('coliza')) {
+      return 'https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?auto=format&fit=crop&w=300&q=70';
+    }
+    if (rawName.includes('chapa') || rawName.includes('carroceria') || rawName.includes('parag') || rawName.includes('parrill') || rawName.includes('capot') || rawName.includes('guardabarro') || rawName.includes('guard.') || rawName.includes('frente') || rawName.includes('moldura') || rawName.includes('pasarr')) {
+      return 'https://images.unsplash.com/photo-1618843479313-40f8afb4b4d8?auto=format&fit=crop&w=300&q=70';
+    }
+    if (rawName.includes('taza') || rawName.includes('insigni') || rawName.includes('emblem') || rawName.includes('llanta')) {
+      return 'https://images.unsplash.com/photo-1611859266238-4b98091d9d9b?auto=format&fit=crop&w=300&q=70';
+    }
+    if (rawName.includes('alfombr') || rawName.includes('interior') || rawName.includes('habitaculo') || rawName.includes('cubre baul') || rawName.includes('tapiz') || rawName.includes('cofia') || rawName.includes('pomo')) {
+      return 'https://images.unsplash.com/photo-1511919884226-fd3cad34687c?auto=format&fit=crop&w=300&q=70';
+    }
+    if (rawName.includes('radiador') || rawName.includes('refrigeracion') || rawName.includes('motor') || rawName.includes('freno') || rawName.includes('amortiguador') || rawName.includes('bisagr') || rawName.includes('grampa') || rawName.includes('abrazadera') || rawName.includes('cable')) {
+      return 'https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=300&q=70';
+    }
+    if (rawName.includes('toxic') || rawName.includes('shine') || rawName.includes('limpia') || rawName.includes('escobill') || rawName.includes('burlet') || rawName.includes('goma')) {
+      return 'https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?auto=format&fit=crop&w=300&q=70';
+    }
+    return 'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=300&q=70';
+  };
+
+  const handleUploadCategoryImage = async (cat, file) => {
+    if (!cat || !file) return;
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/avif'];
+    if (!allowedTypes.includes(file.type)) {
+      showNotification('Formato no permitido. Usá JPG, PNG, WEBP o AVIF.', 'error');
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      showNotification('La imagen no puede superar los 8 MB.', 'error');
+      return;
+    }
+
+    setUploadingCatId(cat.id);
+    try {
+      const fileExt = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const fileName = `cat-${cat.id}-${Date.now()}.${fileExt}`;
+      const { error: uploadError } = await supabase.storage.from('repuestos').upload(fileName, file);
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage.from('repuestos').getPublicUrl(fileName);
+      const publicUrl = urlData.publicUrl;
+
+      const cleanDesc = String(cat.description || '').replace(/\s*\[IMG_CAT:[^\]]+\]/gi, '').trim();
+      const updatedDesc = `${cleanDesc} [IMG_CAT:${publicUrl}]`.trim();
+
+      // Intentamos actualizar image_url + description; si la tabla categories no tiene columna image_url, guardamos en description
+      let { error: updErr } = await supabase
+        .from('categories')
+        .update({ description: updatedDesc, image_url: publicUrl })
+        .eq('id', cat.id);
+
+      if (updErr) {
+        const fallbackRes = await supabase
+          .from('categories')
+          .update({ description: updatedDesc })
+          .eq('id', cat.id);
+        if (fallbackRes.error) throw fallbackRes.error;
+      }
+
+      setCategories((prev) =>
+        prev.map((c) => (c.id === cat.id ? { ...c, description: updatedDesc, image_url: publicUrl } : c))
+      );
+      showNotification(`Imagen de "${cat.name}" actualizada con éxito`, 'success');
+    } catch (err) {
+      showNotification('Error al subir imagen de categoría: ' + err.message, 'error');
+    } finally {
+      setUploadingCatId(null);
+    }
+  };
+
+  const handleRemoveCategoryImage = async (cat) => {
+    if (!cat) return;
+    setUploadingCatId(cat.id);
+    try {
+      const cleanDesc = String(cat.description || '').replace(/\s*\[IMG_CAT:[^\]]+\]/gi, '').trim();
+      let { error: updErr } = await supabase
+        .from('categories')
+        .update({ description: cleanDesc, image_url: null })
+        .eq('id', cat.id);
+
+      if (updErr) {
+        const fallbackRes = await supabase
+          .from('categories')
+          .update({ description: cleanDesc })
+          .eq('id', cat.id);
+        if (fallbackRes.error) throw fallbackRes.error;
+      }
+
+      setCategories((prev) =>
+        prev.map((c) => (c.id === cat.id ? { ...c, description: cleanDesc, image_url: null } : c))
+      );
+      showNotification(`Se restauró la imagen por defecto en "${cat.name}"`, 'success');
+    } catch (err) {
+      showNotification('Error al quitar imagen: ' + err.message, 'error');
+    } finally {
+      setUploadingCatId(null);
+    }
+  };
 
   const handleAddCategory = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
-    const { error } = await supabase.from('categories').insert([{ name: newCategoryName.trim(), description: newCategoryDesc.trim(), is_active: true }]);
-    if (error) {
-      showNotification("Error al crear categoría: " + error.message, 'error');
-    } else {
+    try {
+      let finalDesc = newCategoryDesc.trim();
+      if (newCategoryImageFile) {
+        const fileExt = (newCategoryImageFile.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const fileName = `cat-new-${Date.now()}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage.from('repuestos').upload(fileName, newCategoryImageFile);
+        if (uploadError) throw uploadError;
+        const { data: urlData } = supabase.storage.from('repuestos').getPublicUrl(fileName);
+        finalDesc = `${finalDesc} [IMG_CAT:${urlData.publicUrl}]`.trim();
+      }
+
+      const { error } = await supabase.from('categories').insert([
+        { name: newCategoryName.trim(), description: finalDesc, is_active: true }
+      ]);
+      if (error) throw error;
+
       showNotification("Categoría agregada con éxito", 'success');
       setNewCategoryName('');
       setNewCategoryDesc('');
+      setNewCategoryImageFile(null);
       fetchData();
+    } catch (err) {
+      showNotification("Error al crear categoría: " + err.message, 'error');
+    } finally {
+      setIsSubmitting(false);
     }
-    setIsSubmitting(false);
   };
 
   // Mover productos de las categorías seleccionadas hacia una categoría destino (Unificar)
@@ -4894,7 +5035,7 @@ export default function AdminPanel() {
                 <span className="text-xs font-bold uppercase tracking-widest text-slate-500 block">
                   Agregar Nueva Categoría
                 </span>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                   <input
                     required
                     placeholder="Nombre (Ej: Ópticas)"
@@ -4910,6 +5051,16 @@ export default function AdminPanel() {
                     type="text"
                     className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-none text-xs text-slate-900 dark:text-white outline-none focus:border-blue-500"
                   />
+                  <label className="bg-white dark:bg-slate-900 border border-dashed border-slate-300 dark:border-slate-600 hover:border-blue-500 px-3 py-2 text-xs text-slate-600 dark:text-slate-300 flex items-center justify-center gap-1.5 cursor-pointer truncate">
+                    <Upload className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+                    <span className="truncate">{newCategoryImageFile ? newCategoryImageFile.name : 'Foto propia (Opcional)'}</span>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/avif"
+                      className="hidden"
+                      onChange={(e) => setNewCategoryImageFile(e.target.files?.[0] || null)}
+                    />
+                  </label>
                   <button
                     type="submit"
                     disabled={isSubmitting}
@@ -4984,9 +5135,13 @@ export default function AdminPanel() {
                   categories.map(cat => {
                     const count = products.filter(p => p.category_id === cat.id).length;
                     const isChecked = selectedCatIds.includes(cat.id);
+                    const customImgUrl = getCategoryCustomImage(cat);
+                    const previewImgUrl = getCategoryDefaultPreview(cat);
+                    const isUploadingThis = uploadingCatId === cat.id;
+
                     return (
-                      <div key={cat.id} className="p-3 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                        <label className="flex items-center gap-3 cursor-pointer flex-1">
+                      <div key={cat.id} className="p-3 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                        <label className="flex items-center gap-3 cursor-pointer flex-1 min-w-0">
                           <input
                             type="checkbox"
                             checked={isChecked}
@@ -4994,23 +5149,67 @@ export default function AdminPanel() {
                               if (e.target.checked) setSelectedCatIds(prev => [...prev, cat.id]);
                               else setSelectedCatIds(prev => prev.filter(id => id !== cat.id));
                             }}
-                            className="w-4 h-4"
+                            className="w-4 h-4 flex-shrink-0"
                           />
-                          <div>
-                            <span className="text-xs font-bold text-slate-800 dark:text-white block">{cat.name}</span>
-                            <span className="text-[11px] text-slate-400">{count} producto(s) asociado(s)</span>
+                          <div className="w-12 h-12 bg-slate-200 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 overflow-hidden flex items-center justify-center flex-shrink-0">
+                            <img src={previewImgUrl} alt={cat.name} className="w-full h-full object-cover" />
+                          </div>
+                          <div className="min-w-0">
+                            <span className="text-xs font-bold text-slate-800 dark:text-white block truncate">{cat.name}</span>
+                            <span className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                              <span>{count} producto(s)</span>
+                              <span>•</span>
+                              <span className={customImgUrl ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-slate-400'}>
+                                {customImgUrl ? '✅ Foto propia' : 'Foto genérica'}
+                              </span>
+                            </span>
                           </div>
                         </label>
 
-                        <button
-                          type="button"
-                          disabled={isSubmitting}
-                          onClick={() => handleDeleteCategoriesWithProducts([cat.id])}
-                          title="Eliminar esta categoría y todos sus productos"
-                          className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-none transition-colors flex items-center gap-1 text-xs font-bold"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <label
+                            className={`px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer transition-colors ${
+                              isUploadingThis ? 'opacity-50 pointer-events-none' : ''
+                            }`}
+                            title="Subir imagen propia para esta categoría"
+                          >
+                            <Upload className="w-3.5 h-3.5" />
+                            <span>{isUploadingThis ? 'Subiendo...' : customImgUrl ? 'Cambiar Foto' : 'Subir Foto'}</span>
+                            <input
+                              type="file"
+                              accept="image/jpeg,image/png,image/webp,image/avif"
+                              className="hidden"
+                              disabled={isUploadingThis}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) handleUploadCategoryImage(cat, file);
+                                e.target.value = '';
+                              }}
+                            />
+                          </label>
+
+                          {customImgUrl && (
+                            <button
+                              type="button"
+                              disabled={isUploadingThis}
+                              onClick={() => handleRemoveCategoryImage(cat)}
+                              title="Volver a la foto genérica"
+                              className="p-1.5 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-colors text-xs"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            disabled={isSubmitting}
+                            onClick={() => handleDeleteCategoriesWithProducts([cat.id])}
+                            title="Eliminar esta categoría y todos sus productos"
+                            className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-none transition-colors flex items-center gap-1 text-xs font-bold"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
                     );
                   })

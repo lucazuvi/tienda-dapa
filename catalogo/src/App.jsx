@@ -209,7 +209,7 @@ const CONTACT_INFO = {
 
 const FAQ_ITEMS = [
   { q: '¿Realizan envíos al interior?', a: 'Sí, despachamos a cualquier punto del país mediante Correo Argentino (a domicilio o sucursal) y servicios de encomiendas.' },
-  { q: '¿Cuánto demora un repuesto por encargue y qué pasa si ya pagué?', a: 'Gran parte de nuestro catálogo multimarca se trae directamente de distribuidora por encargue, por lo que tu pedido puede tener una demora de preparación que te confirmaremos apenas ingresa. Si abonaste con tarjeta, Mercado Pago o transferencia y decidís no esperar, te reintegramos el 100% de tu dinero de inmediato.' },
+  { q: '¿Cuánto demora un repuesto por encargue y qué pasa si ya pagué?', a: 'Parte de nuestro catálogo multimarca se trae directamente por encargue, por lo que tu pedido puede tener una demora de preparación que te confirmaremos apenas ingresa. Si abonaste con tarjeta, Mercado Pago o transferencia y decidís no esperar, te reintegramos el 100% de tu dinero de inmediato.' },
   { q: '¿Cómo puedo pagar mi compra?', a: 'Aceptamos tarjetas de crédito/débito y dinero en cuenta a través de Mercado Pago, transferencias bancarias, Cuenta DNI y efectivo en nuestro mostrador. Todas las compras online cuentan con garantía de reintegro.' },
   { q: '¿Qué datos necesito para cotizar un repuesto?', a: 'Para mayor precisión, te recomendamos enviarnos la marca, modelo, motor, año del vehículo, foto de la cédula verde/chasis o el código del repuesto.' }
 ];
@@ -2688,8 +2688,16 @@ function matchesProductQuery(prod, rawQuery) {
 /* ==========================================================================
    HELPER: IMAGEN REPRESENTATIVA POR CATEGORÍA Y BUSCADOR BISELADO
    ========================================================================== */
+function getCleanCategoryDescription(category) {
+  const raw = String(category?.description || '');
+  return raw.replace(/\s*\[IMG_CAT:[^\]]+\]/gi, '').trim();
+}
+
 function getCategoryVisualImage(category) {
   if (category?.image_url) return category.image_url;
+  const descMatch = String(category?.description || '').match(/\[IMG_CAT:([^\]]+)\]/i);
+  if (descMatch && descMatch[1]) return descMatch[1].trim();
+
   const rawName = (typeof category === 'string' ? category : (category?.name || ''))
     .toLowerCase()
     .normalize('NFD')
@@ -3021,9 +3029,9 @@ function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenCart, on
                                   Ver todo <span className="group-hover/ver:translate-x-1 transition-transform">→</span>
                                 </button>
                               </div>
-                              {activeMegaCat.description && (
+                              {getCleanCategoryDescription(activeMegaCat) && (
                                 <p className="text-xs text-slate-400 font-light max-w-md">
-                                  {activeMegaCat.description}
+                                  {getCleanCategoryDescription(activeMegaCat)}
                                 </p>
                               )}
                             </div>
@@ -4136,9 +4144,9 @@ function CatalogSection({ categories, allProducts, isLoadingData, onOpenCategory
                     <h4 className="text-white font-black text-2xl sm:text-3xl uppercase tracking-wider font-exo drop-shadow-[0_4px_14px_rgba(0,0,0,0.95)] group-hover:scale-105 transition-transform duration-300">
                       {cat.name}
                     </h4>
-                    {cat.description && (
+                    {getCleanCategoryDescription(cat) && (
                       <p className="text-blue-100/90 text-xs sm:text-sm font-light mt-2 max-w-xs drop-shadow">
-                        {cat.description}
+                        {getCleanCategoryDescription(cat)}
                       </p>
                     )}
                     <span className="mt-4 inline-flex items-center gap-1.5 bg-amber-400 text-slate-950 text-[10px] font-black uppercase tracking-widest px-4 py-1.5 -skew-x-12 opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 shadow-md">
