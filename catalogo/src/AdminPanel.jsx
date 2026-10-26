@@ -286,6 +286,9 @@ export default function AdminPanel() {
   const [refundPaymentIdInput, setRefundPaymentIdInput] = useState('');
   const [refundAmountInput, setRefundAmountInput] = useState('');
   const [refundReasonInput, setRefundReasonInput] = useState('Demora en encargue de proveedor / Solicitud del cliente');
+  const [orderToConfirmPayment, setOrderToConfirmPayment] = useState(null);
+  const [confirmTotalInput, setConfirmTotalInput] = useState('');
+  const [confirmPriceNoteInput, setConfirmPriceNoteInput] = useState('');
   const [targetMergeCategoryId, setTargetMergeCategoryId] = useState('');
   const [confirmClearCompleted, setConfirmClearCompleted] = useState(false);
 
@@ -1925,6 +1928,82 @@ export default function AdminPanel() {
     setRefundReasonInput('Demora en encargue de proveedor / Solicitud del cliente');
   };
 
+  const openConfirmPaymentModal = (order) => {
+    const noteMatch = String(order.notes || '').match(/\[NOTA_PRECIO:([^\]]+)\]/i);
+    setOrderToConfirmPayment(order);
+    setConfirmTotalInput(String(Math.round(Number(order.total_estimated || 0))));
+    setConfirmPriceNoteInput(noteMatch ? noteMatch[1].trim() : '');
+  };
+
+  const handleConfirmOrderStockAndPrice = async (e, notifyWhatsApp = false) => {
+    if (e) e.preventDefault();
+    if (!orderToConfirmPayment) return;
+
+    const finalTotal = Math.round(parseFloat(confirmTotalInput) || 0);
+    if (finalTotal <= 0) {
+      showNotification('Ingresá un importe total verificado mayor a $0', 'error');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const { data: freshOrder } = await supabase
+        .from('orders')
+        .select('id, notes')
+        .eq('id', orderToConfirmPayment.id)
+        .single();
+
+      let baseNotes = String(freshOrder ? freshOrder.notes : orderToConfirmPayment.notes || '')
+        .replace(/\s*\[PAGO_HABILITADO\]/gi, '')
+        .replace(/\s*\[NOTA_PRECIO:[^\]]+\]/gi, '')
+        .trim();
+
+      const cleanNote = confirmPriceNoteInput.trim().replace(/\]/g, '');
+      baseNotes = `${baseNotes}\n[PAGO_HABILITADO]${cleanNote ? ` [NOTA_PRECIO:${cleanNote}]` : ''}`.trim();
+
+      const currentMsgs = parseAdminChatMessages(baseNotes);
+      const autoChatMsg = {
+        id: `${Date.now()}_seller_confirm`,
+        sender: 'seller',
+        senderName: 'D.A.P.A. Repuestos (Vendedor)',
+        text: `✅ ¡Hola ${orderToConfirmPayment.customer_name}! Confirmamos disponibilidad de stock para tu Pedido #${orderToConfirmPayment.id}. El importe total verificado es de $${finalTotal.toLocaleString('es-AR')}.${cleanNote ? ` Detalle: ${cleanNote}.` : ''} Ya tenés habilitado el botón de pago (Mercado Pago / Tarjeta o Transferencia) aquí mismo en la ventana "Mis Pedidos".`,
+        createdAt: new Date().toISOString()
+      };
+      const finalNotes = injectAdminChatMessages(baseNotes, [...currentMsgs, autoChatMsg]);
+      const newStatus = 'Confirmado - Listo para Pagar';
+
+      const { error } = await supabase
+        .from('orders')
+        .update({
+          status: newStatus,
+          total_estimated: finalTotal,
+          notes: finalNotes
+        })
+        .eq('id', orderToConfirmPayment.id);
+
+      if (error) throw error;
+
+      const updatedOrderObj = {
+        ...orderToConfirmPayment,
+        status: newStatus,
+        total_estimated: finalTotal,
+        notes: finalNotes
+      };
+
+      setOrders((prev) => prev.map((o) => (o.id === orderToConfirmPayment.id ? updatedOrderObj : o)));
+      showNotification(`¡Stock y precio final ($${finalTotal.toLocaleString('es-AR')}) confirmados! Pago habilitado para el cliente.`, 'success');
+      setOrderToConfirmPayment(null);
+
+      if (notifyWhatsApp) {
+        handleSendOrderWhatsApp(updatedOrderObj, 'payment_confirmed');
+      }
+    } catch (err) {
+      showNotification('Error al confirmar stock y precio: ' + err.message, 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleSendOrderWhatsApp = (order, messageType = 'status') => {
     const cleanPhone = String(order.customer_phone || '').replace(/\D/g, '');
     if (!cleanPhone || cleanPhone.length < 6) {
@@ -1935,7 +2014,11 @@ export default function AdminPanel() {
     const totalFormatted = Number(order.total_estimated || 0).toLocaleString('es-AR');
 
     let text;
-    if (messageType === 'encargue_delay') {
+    if (messageType === 'payment_confirmed') {
+      const noteMatch = String(order.notes || '').match(/\[NOTA_PRECIO:([^\]]+)\]/i);
+      const priceNote = noteMatch ? `\n📌 *Detalle:* ${noteMatch[1].trim()}` : '';
+      text = `¡Hola ${order.customer_name}! Te escribimos de *D.A.P.A. Repuestos Molle*.\n\n✅ Te confirmamos que tenemos *stock disponible* de tu *Pedido #${order.id}* y el *importe total verificado* es de *$${totalFormatted}*${priceNote}.\n\nYa podés abonar ingresando a la sección *"Mis Pedidos"* en nuestra web (con Mercado Pago / Tarjeta o Transferencia Bancaria). ¡Cualquier consulta estamos a tu disposición!`;
+    } else if (messageType === 'encargue_delay') {
       text = `¡Hola ${order.customer_name}! Te escribimos de *D.A.P.A. Repuestos Molle* por tu *Pedido #${order.id}*.\n\nTe informamos que las piezas solicitadas se traen *por encargue directo de distribuidora*, por lo que el pedido tendrá una breve demora hasta ingresar a nuestro local.\n\nRecordá que si abonaste con tarjeta, Mercado Pago o transferencia y preferís no aguardar el plazo del encargue, *podemos reintegrarte el 100% de tu dinero de inmediato*.\n\n¿Confirmás que avancemos con el encargue?`;
     } else if (messageType === 'refund_confirmed') {
       text = `¡Hola ${order.customer_name}! Te escribimos de *D.A.P.A. Repuestos Molle*.\n\nTe confirmamos que ya gestionamos el *reintegro de dinero* correspondiente a tu *Pedido #${order.id}*${order.total_estimated > 0 ? ` por *$${totalFormatted}*` : ''}.\n\nSi abonaste con tarjeta o Mercado Pago, vas a ver la devolución reflejada en tu cuenta/resumen. ¡Cualquier duda estamos a tu disposición!`;
@@ -2067,6 +2150,8 @@ export default function AdminPanel() {
       .replace(/\[DESPACHO_FECHA:[^\]]+\]/gi, '')
       .replace(/\[MICORREO_IMPORTADO:[^\]]+\]/gi, '')
       .replace(/\[STOCK_DESCONTADO\]/gi, '')
+      .replace(/\[PAGO_HABILITADO\]/gi, '')
+      .replace(/\[NOTA_PRECIO:[^\]]+\]/gi, '')
       .replace(/FOTO REPUESTO:\s*https?:\/\/[^\s]+/gi, '')
       .replace(/FOTO CÉDULA \/ CHASIS:\s*https?:\/\/[^\s]+/gi, '')
       .trim();
@@ -2890,7 +2975,7 @@ export default function AdminPanel() {
   // =======================================================================
   const isOrderPending = (status) => {
     if (!status) return false;
-    return status.startsWith('Pendiente') || status === 'Cotización Web' || status === 'En encargue' || status === 'Revisado';
+    return status.startsWith('Pendiente') || status === 'Confirmado - Listo para Pagar' || status === 'Cotización Web' || status === 'En encargue' || status === 'Revisado';
   };
 
   const pendingOrdersCount = orders.filter(o => isOrderPending(o.status)).length;
@@ -3464,7 +3549,9 @@ export default function AdminPanel() {
                                 value={order.status} 
                                 onChange={(e) => updateOrderStatus(order.id, e.target.value)} 
                                 className={`text-xs font-bold uppercase tracking-wider px-3 py-1.5 rounded-lg outline-none cursor-pointer border ${
-                                  isOrderPending(order.status) 
+                                  order.status === 'Confirmado - Listo para Pagar'
+                                    ? 'bg-blue-100 text-blue-800 border-blue-300'
+                                    : isOrderPending(order.status) 
                                     ? 'bg-orange-100 text-orange-700 border-orange-200' 
                                     : order.status === 'Facturado' 
                                     ? 'bg-green-100 text-green-700 border-green-200' 
@@ -3477,6 +3564,7 @@ export default function AdminPanel() {
                               >
                                 <option value="Pendiente">Pendiente</option>
                                 <option value="Pendiente (Vía Web)">Pendiente (Vía Web)</option>
+                                <option value="Confirmado - Listo para Pagar">💳 Confirmado - Listo para Pagar</option>
                                 <option value="Pendiente (Pagado MP)">✅ Pagado MP (Por despachar)</option>
                                 <option value="En encargue">⏳ En encargue (Proveedor)</option>
                                 <option value="Pendiente (Vía WhatsApp)">Pendiente (Vía WhatsApp)</option>
@@ -3515,14 +3603,35 @@ export default function AdminPanel() {
                               )}
                             </div>
 
-                            <div className="flex items-center gap-3 ml-auto">
+                            <div className="flex items-center gap-2 sm:gap-3 ml-auto" onClick={(e) => e.stopPropagation()}>
+                              {order.status !== 'Facturado' && order.status !== 'Cancelado' && order.status !== 'Reintegrado' && !String(order.status || '').includes('Pagado') && (
+                                <button
+                                  type="button"
+                                  onClick={() => openConfirmPaymentModal(order)}
+                                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-sm transition-colors ${
+                                    order.status === 'Confirmado - Listo para Pagar' || String(order.notes || '').includes('[PAGO_HABILITADO]')
+                                      ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border border-emerald-300'
+                                      : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                                  }`}
+                                  title="Confirmar stock, verificar/ajustar el precio final y habilitar el pago al cliente"
+                                >
+                                  <CheckCircle className="w-3.5 h-3.5" />
+                                  {order.status === 'Confirmado - Listo para Pagar' || String(order.notes || '').includes('[PAGO_HABILITADO]')
+                                    ? 'Ajustar Precio Confirmado'
+                                    : 'Confirmar Stock y Precio'}
+                                </button>
+                              )}
                               <span className="text-sm sm:text-base font-bold font-exo text-slate-900 dark:text-white">
                                 ${Number(order.total_estimated || 0).toLocaleString('es-AR')}
                               </span>
-                              <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-1 border border-blue-200 dark:border-blue-800/50">
+                              <button
+                                type="button"
+                                onClick={() => toggleOrderExpand(order.id)}
+                                className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-1 border border-blue-200 dark:border-blue-800/50"
+                              >
                                 {isExpanded ? 'Ocultar' : 'Ver detalle'}
                                 <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
-                              </span>
+                              </button>
                             </div>
                           </div>
                         </div>
@@ -3571,6 +3680,33 @@ export default function AdminPanel() {
                                 </div>
                               )}
 
+                              {(order.status === 'Confirmado - Listo para Pagar' || String(order.notes || '').includes('[PAGO_HABILITADO]')) && (() => {
+                                const priceNoteMatch = String(order.notes || '').match(/\[NOTA_PRECIO:([^\]]+)\]/i);
+                                return (
+                                  <div className="mb-3">
+                                      <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/70 rounded-xl p-3 flex items-center justify-between gap-2">
+                                        <div>
+                                          <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-700 dark:text-emerald-300 block">
+                                            ✅ Pago habilitado al cliente por ${Number(order.total_estimated || 0).toLocaleString('es-AR')}
+                                          </span>
+                                          {priceNoteMatch && (
+                                            <span className="text-[11px] text-slate-600 dark:text-slate-300 block mt-0.5">
+                                              Nota enviada: {priceNoteMatch[1].trim()}
+                                            </span>
+                                          )}
+                                        </div>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleSendOrderWhatsApp(order, 'payment_confirmed')}
+                                          className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold uppercase tracking-wider flex-shrink-0"
+                                        >
+                                          Avisar WhatsApp
+                                        </button>
+                                      </div>
+                                  </div>
+                                );
+                              })()}
+
                               {order.notes && (() => {
                                 // Extraemos URLs de imágenes de las notas automáticamente
                                 const urlRegex = /(https?:\/\/[^\s]+)/g;
@@ -3583,7 +3719,9 @@ export default function AdminPanel() {
                                   .replace(/\[DIM_CA:[^\]]+\]/gi, '')
                                   .replace(/\[PESO_CA:[^\]]+\]/gi, '')
                                   .replace(/\[ZONA_CA:[^\]]+\]/gi, '')
-                                  .replace(/\[STOCK_DESCONTADO\]/gi, '');
+                                  .replace(/\[STOCK_DESCONTADO\]/gi, '')
+                                  .replace(/\[PAGO_HABILITADO\]/gi, '')
+                                  .replace(/\[NOTA_PRECIO:[^\]]+\]/gi, '');
                                 imageLinks.forEach(link => {
                                   cleanNotes = cleanNotes.replace(link, '').replace(/FOTO REPUESTO:\s*/gi, '').replace(/FOTO CÉDULA \/ CHASIS:\s*/gi, '');
                                 });
@@ -3631,6 +3769,14 @@ export default function AdminPanel() {
                               <div className="flex flex-wrap gap-1.5">
                                 <button
                                   type="button"
+                                  onClick={() => openConfirmPaymentModal(order)}
+                                  className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-sm transition-colors"
+                                  title="Confirmar disponibilidad de stock, definir precio final verificado y habilitar el pago al cliente"
+                                >
+                                  <CheckCircle className="w-3.5 h-3.5" /> Confirmar Stock y Precio
+                                </button>
+                                <button
+                                  type="button"
                                   onClick={() => openShippingLabelModal(order)}
                                   className="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-sm transition-colors"
                                   title="Generar e imprimir etiqueta Correo Argentino (Formato Mercado Libre 2 hojas) y cargar código de seguimiento"
@@ -3640,12 +3786,12 @@ export default function AdminPanel() {
                                 <button
                                   type="button"
                                   onClick={() => openSellerChatModal(order)}
-                                  className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-sm transition-colors relative"
+                                  className="px-2.5 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-sm transition-colors relative"
                                   title="Abrir chat directo con el comprador de este pedido"
                                 >
                                   <MessageSquare className="w-3.5 h-3.5" /> Chat Comprador
                                   {chatMessagesCount > 0 && (
-                                    <span className="ml-0.5 px-1.5 py-0.2 rounded-full bg-white text-emerald-700 font-black text-[9px]">
+                                    <span className="ml-0.5 px-1.5 py-0.2 rounded-full bg-white text-teal-700 font-black text-[9px]">
                                       {chatMessagesCount}
                                     </span>
                                   )}
@@ -3685,7 +3831,11 @@ export default function AdminPanel() {
                             </div>
 
                             <div className="p-5 bg-slate-50 dark:bg-slate-900 border-t border-slate-100 dark:border-slate-700 flex justify-between items-center">
-                              <span className="text-xs font-bold uppercase tracking-widest text-slate-500">Total Cotizado</span>
+                              <span className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                                {order.status === 'Confirmado - Listo para Pagar' || String(order.notes || '').includes('[PAGO_HABILITADO]')
+                                  ? 'Total Final Verificado'
+                                  : 'Total Estimado en Solicitud'}
+                              </span>
                               <span className="text-xl font-bold font-exo text-slate-900 dark:text-white">
                                 ${Number(order.total_estimated || 0).toLocaleString('es-AR')}
                               </span>
@@ -5216,6 +5366,118 @@ export default function AdminPanel() {
                 )}
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CONFIRMAR STOCK Y PRECIO FINAL (HABILITA EL PAGO AL CLIENTE) */}
+      {orderToConfirmPayment && (
+        <div className="fixed inset-0 bg-slate-900/60 z-[120] flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 max-h-[90vh]">
+            <div className="p-5 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-emerald-50 dark:bg-emerald-950/30">
+              <div>
+                <h2 className="text-sm font-bold uppercase tracking-widest text-slate-800 dark:text-white flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-emerald-600" /> Confirmar Stock y Precio Final
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Pedido #{orderToConfirmPayment.id} • {orderToConfirmPayment.customer_name}
+                </p>
+              </div>
+              <button type="button" onClick={() => setOrderToConfirmPayment(null)}>
+                <X className="w-5 h-5 text-slate-400 hover:text-slate-700" />
+              </button>
+            </div>
+
+            <form onSubmit={(e) => handleConfirmOrderStockAndPrice(e, false)} className="p-6 space-y-5 overflow-y-auto">
+              {orderToConfirmPayment.order_items?.length > 0 && (
+                <div className="bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-xl p-3">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">
+                    Repuestos solicitados (precio de catálogo)
+                  </span>
+                  <ul className="space-y-1.5 text-xs">
+                    {orderToConfirmPayment.order_items.map((item, idx) => (
+                      <li key={idx} className="flex justify-between gap-3 text-slate-700 dark:text-slate-300">
+                        <span>
+                          <strong>{item.quantity}x</strong> {item.product?.name || 'Repuesto'}{' '}
+                          <span className="text-slate-400 font-mono">({item.product?.sku_code || 'S/C'})</span>
+                        </span>
+                        <span className="font-bold whitespace-nowrap">
+                          ${(Number(item.unit_price || 0) * Number(item.quantity || 1)).toLocaleString('es-AR')}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="flex justify-between mt-2 pt-2 border-t border-slate-200 dark:border-slate-700 text-xs text-slate-500">
+                    <span>Total estimado en la solicitud</span>
+                    <span className="font-bold">
+                      ${Number(orderToConfirmPayment.total_estimated || 0).toLocaleString('es-AR')}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                  Importe total final verificado (ARS) *
+                </label>
+                <input
+                  required
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={confirmTotalInput}
+                  onChange={(e) => setConfirmTotalInput(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-xl text-lg font-bold font-exo text-slate-900 dark:text-white outline-none focus:border-emerald-500"
+                />
+                <p className="text-[11px] text-slate-400">
+                  Este es el monto exacto que el cliente va a pagar (incluí el envío si corresponde).
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                  Nota para el cliente (Opcional)
+                </label>
+                <textarea
+                  rows="2"
+                  maxLength={200}
+                  value={confirmPriceNoteInput}
+                  onChange={(e) => setConfirmPriceNoteInput(e.target.value)}
+                  placeholder="Ej: Precio actualizado por lista de proveedor. Incluye envío a domicilio."
+                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:border-emerald-500 resize-none"
+                />
+              </div>
+
+              <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/60 rounded-xl p-3 text-[11px] text-blue-800 dark:text-blue-200 leading-relaxed">
+                Al confirmar, el pedido pasa a <strong>"Confirmado - Listo para Pagar"</strong>, se envía un mensaje automático
+                al chat del pedido y el cliente ve el botón para pagar en <strong>"Mis Pedidos"</strong>.
+              </div>
+
+              <div className="flex flex-col sm:flex-row justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setOrderToConfirmPayment(null)}
+                  className="px-5 py-2.5 rounded-xl font-bold uppercase text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={(e) => handleConfirmOrderStockAndPrice(e, true)}
+                  className="px-5 py-2.5 rounded-xl bg-green-600 hover:bg-green-500 text-white font-bold uppercase text-xs flex items-center justify-center gap-2 disabled:opacity-60"
+                >
+                  <MessageSquare className="w-4 h-4" /> Confirmar y avisar por WhatsApp
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold uppercase text-xs flex items-center justify-center gap-2 shadow-lg disabled:opacity-60"
+                >
+                  <CheckCircle className="w-4 h-4" /> {isSubmitting ? 'Guardando...' : 'Confirmar y habilitar pago'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

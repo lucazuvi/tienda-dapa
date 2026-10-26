@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react';
 import { 
-  MapPin, Phone, Target, ShieldCheck, TrendingUp, Truck, ChevronRight,
+  MapPin, Target, ShieldCheck, TrendingUp, Truck, ChevronRight,
   Menu, X, MessageSquare, CreditCard, Package, HelpCircle, CheckCircle,
   ChevronDown, Send, Settings, Search, ArrowLeft, ChevronLeft, ShoppingCart,
   User, Plus, Minus, Trash2, LogOut, PhoneCall, ArrowUp, Filter, Sun, Moon, Clock, Camera, RotateCcw
@@ -200,9 +200,10 @@ const CustomFacebook = ({ className }) => (
 const CONTACT_INFO = {
   address: "Lamadrid 65",
   city: "Arrecifes, Buenos Aires",
-  phone: "+54 9 2478 512620",
+  phone: "+54 9 2478 499545",
+  phoneDisplay: "+54 9 2478 49-9545",
   landline: "02478 452775",
-  whatsappLink: "https://wa.me/5492478512620",
+  whatsappLink: "https://wa.me/5492478499545",
   instagramLink: "https://instagram.com/autopartesmolle",
   facebookLink: "https://www.facebook.com/"
 };
@@ -313,20 +314,24 @@ function TiltCard({ children, className = "" }) {
 /* ==========================================================================
    COMPONENTES DE PRODUCTO Y MODALES (Tienda Pública)
    ========================================================================== */
-function ProductImage({ sku, imageUrl, alt, categoryName = "", className = "" }) {
+function ProductImage({ sku, imageUrl, alt, categoryName = "", category = null, className = "" }) {
   const [imgError, setImgError] = useState(false);
 
   useEffect(() => {
     setImgError(false);
-  }, [imageUrl, sku]);
+  }, [imageUrl, sku, category?.id, category?.description, categoryName]);
 
-  // Si el producto tiene foto propia y no dio error de carga, usamos esa;
-  // de lo contrario, asignamos automáticamente la imagen genérica según su categoría o nombre
-  const fallbackCategoryImg = getCategoryVisualImage({
-    name: `${categoryName || ''} ${alt || ''}`
-  });
+  // Todos los productos pertenecientes a una categoría (actual o futura) utilizan
+  // exactamente la misma imagen de portada de su categoría (incluyendo fotos propias subidas al panel).
+  const resolvedCategoryObj =
+    category && !category.isSearchResult
+      ? category
+      : categoryName
+      ? { name: categoryName }
+      : { name: alt || '' };
 
-  const finalSrc = !imageUrl || imgError ? fallbackCategoryImg : imageUrl;
+  const categoryCoverImg = getCategoryVisualImage(resolvedCategoryObj);
+  const finalSrc = !imgError && categoryCoverImg ? categoryCoverImg : imageUrl || categoryCoverImg;
 
   return (
     <img
@@ -360,6 +365,7 @@ function QuickViewModal({ product, categoryName, isOpen, onClose, onAddToCart })
             sku={product.sku_code}
             imageUrl={product.image_url}
             alt={product.name}
+            category={product.category}
             categoryName={resolvedCategory}
             className="w-full h-full object-cover"
           />
@@ -370,9 +376,14 @@ function QuickViewModal({ product, categoryName, isOpen, onClose, onAddToCart })
 
         <div className="w-full md:w-1/2 p-6 md:p-8 flex flex-col">
           <h2 className="text-xl md:text-2xl font-bold text-slate-900 dark:text-white mb-2 leading-tight pr-6">{product.name}</h2>
-          <p className="text-xl font-bold font-exo text-blue-600 dark:text-blue-400 mb-4">
-            {product.price > 0 ? `$${Number(product.price).toLocaleString('es-AR')}` : 'Consultar Precio'}
-          </p>
+          <div className="mb-4">
+            <p className="text-xl font-bold font-exo text-blue-600 dark:text-blue-400">
+              {product.price > 0 ? `$${Number(product.price).toLocaleString('es-AR')}` : 'Consultar Precio'}
+            </p>
+            <p className="text-[11px] font-medium text-amber-600 dark:text-amber-400 mt-0.5">
+              * Precio orientativo sujeto a cambios / desactualización. Se confirma el total exacto antes de abonar.
+            </p>
+          </div>
           
           <div className="bg-slate-50 dark:bg-slate-900/50 rounded-none p-4 mb-4 border border-slate-100 dark:border-slate-700/50">
             <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-3 flex items-center gap-2">
@@ -1043,10 +1054,10 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
         detalleEntrega = `CORREO ARGENTINO A DOMICILIO ($${shippingCost.toLocaleString('es-AR')})\nDirección: ${formData.calle} ${formData.numero} ${formData.piso ? 'Piso/Dpto: ' + formData.piso : ''}\nLocalidad: ${formData.ciudad}, ${formData.provincia} (CP: ${formData.cp})`;
       }
 
-      const notas = `TIPO DE VENTA: Checkout Web Automático
-        MÉTODO DE PAGO: ${formData.metodoPago.toUpperCase()}
+      const notas = `TIPO DE VENTA: Solicitud Web (Confirmar Stock y Precio Final)
+        MÉTODO DE PAGO ELEGIDO: ${formData.metodoPago.toUpperCase()}
         MODALIDAD DE ENVÍO: ${getShippingLabel()}
-        COSTO DE ENVÍO: $${shippingCost.toLocaleString('es-AR')}
+        COSTO DE ENVÍO ESTIMADO: $${shippingCost.toLocaleString('es-AR')}
         ---------------------------------
         DATOS DEL CLIENTE:
         Nombre: ${formData.nombre} ${formData.apellido}
@@ -1097,31 +1108,6 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
         customer_phone: formData.telefono,
         items: cart.map(i => ({ sku: i.product.sku_code, name: i.product.name, qty: i.quantity }))
       });
-
-      if (formData.metodoPago === 'mercadopago') {
-        const response = await fetch('/api/createPreference', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            orderId: newOrder.id,
-            items: cart,
-            shippingCost,
-            shippingTitle: getShippingLabel(),
-            metodoEnvio: formData.metodoEnvio,
-            cpDestino: formData.cp
-          })
-        });
-        
-        const data = await response.json();
-        
-        if (data.init_point) {
-          if (onSuccess) onSuccess(true, newOrder.id);
-          window.location.href = data.init_point;
-          return;
-        } else {
-          throw new Error("No se pudo conectar con Mercado Pago");
-        }
-      }
 
       try {
         sessionStorage.removeItem('dapa_checkout_draft');
@@ -1432,22 +1418,28 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
 
           {step === 2 && (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
-              <h3 className="font-bold text-lg text-slate-800 dark:text-white uppercase">Método de Pago</h3>
+              <h3 className="font-bold text-lg text-slate-800 dark:text-white uppercase">Preferencia de Pago</h3>
+              <div className="p-3.5 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/60 text-xs text-slate-700 dark:text-slate-200 leading-relaxed">
+                <strong className="text-blue-700 dark:text-blue-300 uppercase tracking-wider block mb-0.5">
+                  ¿Cómo funciona el pago? (Sin cobro anticipado)
+                </strong>
+                Como los precios pueden variar, <strong>primero enviás la solicitud de tu pedido sin abonar nada ahora</strong>. Apenas confirmemos el stock y el importe final actualizado desde nuestro panel, se habilitará el botón de pago en tu sección <strong>Mis Pedidos</strong>.
+              </div>
               
               <div className="space-y-3">
                 <label className={`flex items-center gap-4 p-4 rounded-none border cursor-pointer transition-colors ${formData.metodoPago === 'mercadopago' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800'}`}>
                   <input type="radio" name="metodoPago" value="mercadopago" checked={formData.metodoPago === 'mercadopago'} onChange={handleChange} className="w-5 h-5 text-blue-600" />
                   <div>
-                    <span className="font-bold text-slate-900 dark:text-white block">Mercado Pago</span>
-                    <span className="text-xs text-slate-500">Tarjetas de crédito, débito o dinero en cuenta (con reintegro automático 100% garantizado si preferís no esperar un encargue)</span>
+                    <span className="font-bold text-slate-900 dark:text-white block">Mercado Pago (Tarjetas / Dinero en cuenta)</span>
+                    <span className="text-xs text-slate-500">Se habilitará el botón de pago oficial en "Mis Pedidos" apenas confirmemos stock y total verificado</span>
                   </div>
                 </label>
                 
                 <label className={`flex items-center gap-4 p-4 rounded-none border cursor-pointer transition-colors ${formData.metodoPago === 'transferencia' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800'}`}>
                   <input type="radio" name="metodoPago" value="transferencia" checked={formData.metodoPago === 'transferencia'} onChange={handleChange} className="w-5 h-5 text-blue-600" />
                   <div>
-                    <span className="font-bold text-slate-900 dark:text-white block">Transferencia Bancaria</span>
-                    <span className="text-xs text-slate-500">Alias o CBU (Coordinamos por WhatsApp luego de confirmar disponibilidad)</span>
+                    <span className="font-bold text-slate-900 dark:text-white block">Transferencia / Depósito Bancario</span>
+                    <span className="text-xs text-slate-500">Te habilitaremos el Alias/CBU y el monto exacto verificado al confirmar disponibilidad</span>
                   </div>
                 </label>
                 
@@ -1455,7 +1447,7 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
                   <input type="radio" name="metodoPago" value="acordar" checked={formData.metodoPago === 'acordar'} onChange={handleChange} className="w-5 h-5 text-blue-600" />
                   <div>
                     <span className="font-bold text-slate-900 dark:text-white block">Acordar en el local</span>
-                    <span className="text-xs text-slate-500">Pagás en efectivo o tarjeta al retirar en mostrador</span>
+                    <span className="text-xs text-slate-500">Pagás en efectivo o tarjeta al retirar en mostrador una vez confirmado</span>
                   </div>
                 </label>
               </div>
@@ -1471,7 +1463,7 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
 
           {step === 3 && (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
-              <h3 className="font-bold text-lg text-slate-800 dark:text-white uppercase">Revisión Final</h3>
+              <h3 className="font-bold text-lg text-slate-800 dark:text-white uppercase">Revisión de tu Solicitud</h3>
               
               <div className="bg-white dark:bg-slate-800 p-6 rounded-none border border-slate-200 dark:border-slate-700 space-y-4">
                 <div>
@@ -1493,8 +1485,11 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
                   )}
                 </div>
                 <div className="border-t border-slate-100 dark:border-slate-700 pt-4">
-                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Método de pago:</h4>
-                  <p className="text-slate-900 dark:text-white font-medium capitalize">{formData.metodoPago.replace('mercadopago', 'Mercado Pago')}</p>
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Medio de pago seleccionado:</h4>
+                  <p className="text-slate-900 dark:text-white font-medium capitalize">{formData.metodoPago.replace('mercadopago', 'Mercado Pago (Tarjeta / Cuenta MP)')}</p>
+                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                    * Primero confirmaremos stock y el precio final actualizado. Luego podrás abonar desde <strong>Mis Pedidos</strong>.
+                  </p>
                 </div>
               </div>
 
@@ -1507,37 +1502,20 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
                   Volver
                 </button>
                 
-                {formData.metodoPago === 'mercadopago' ? (
-                  <button 
-                    onClick={handleSubmit} 
-                    disabled={isSubmitting} 
-                    className="w-full sm:w-2/3 bg-[#009EE3] hover:bg-[#008ACA] text-white font-bold py-4 rounded-none flex items-center justify-center gap-3 transition-colors shadow-lg shadow-[#009EE3]/30 focus:outline-none focus:ring-4 focus:ring-[#009EE3]/50 disabled:opacity-70"
-                  >
-                    {isSubmitting ? (
-                      <Settings className="w-5 h-5 animate-spin" />
-                    ) : (
-                      <div className="flex items-center gap-2 justify-center">
-                        <svg viewBox="0 0 100 100" className="w-6 h-6 flex-shrink-0 fill-current"><path d="M50 0C22.4 0 0 22.4 0 50s22.4 50 50 50 50-22.4 50-50S77.6 0 50 0zm0 82.5c-17.9 0-32.5-14.6-32.5-32.5S32.1 17.5 50 17.5 82.5 32.1 82.5 50 72.1 82.5 50 82.5zM67.3 43.1c-1.3-1.3-3.4-1.3-4.7 0l-12.8 12.8-5.7-5.7c-1.3-1.3-3.4-1.3-4.7 0-1.3 1.3-1.3 3.4 0 4.7l8 8c.6.6 1.5.9 2.3.9.8 0 1.7-.3 2.3-.9l15.2-15.2c1.4-1.2 1.4-3.3.1-4.6z"/></svg>
-                        <span className="uppercase tracking-widest text-sm">Pagar ${finalTotal.toLocaleString('es-AR')} con Mercado Pago</span>
-                      </div>
-                    )}
-                  </button>
-                ) : (
-                  <button 
-                    onClick={handleSubmit} 
-                    disabled={isSubmitting} 
-                    className="w-full sm:w-2/3 bg-green-500 hover:bg-green-600 text-white font-bold uppercase tracking-widest py-4 rounded-none flex items-center justify-center gap-3 transition-colors shadow-lg shadow-green-500/30 focus:outline-none focus:ring-4 focus:ring-green-500/50 disabled:opacity-70"
-                  >
-                    {isSubmitting ? (
-                      <Settings className="w-5 h-5 animate-spin" />
-                    ) : (
-                      <>
-                        <CheckCircle className="w-5 h-5" />
-                        Confirmar Pedido
-                      </>
-                    )}
-                  </button>
-                )}
+                <button 
+                  onClick={handleSubmit} 
+                  disabled={isSubmitting} 
+                  className="w-full sm:w-2/3 bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-widest py-4 px-4 rounded-none flex items-center justify-center gap-3 transition-colors shadow-lg shadow-blue-600/30 focus:outline-none focus:ring-4 focus:ring-blue-500/50 disabled:opacity-70 text-xs sm:text-sm"
+                >
+                  {isSubmitting ? (
+                    <Settings className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <>
+                      <CheckCircle className="w-5 h-5 flex-shrink-0" />
+                      <span>Solicitar Repuesto y Confirmar Precio Final</span>
+                    </>
+                  )}
+                </button>
               </div>
             </div>
           )}
@@ -1545,7 +1523,7 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
 
         <div className="lg:w-96 flex-shrink-0">
           <div className="bg-slate-100 dark:bg-slate-800 p-6 rounded-none sticky top-24 border border-slate-200 dark:border-slate-700">
-            <h3 className="font-bold text-slate-900 dark:text-white uppercase mb-4">Resumen de Compra</h3>
+            <h3 className="font-bold text-slate-900 dark:text-white uppercase mb-4">Resumen de Solicitud</h3>
             <div className="space-y-3 mb-6 max-h-[36vh] overflow-y-auto custom-scrollbar pr-2">
               {cart.map(item => (
                 <div key={item.product.sku_code} className="flex justify-between items-start gap-4">
@@ -1564,7 +1542,7 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
 
             <div className="border-t border-slate-300 dark:border-slate-700 pt-4 space-y-2 text-sm">
               <div className="flex justify-between text-slate-600 dark:text-slate-400">
-                <span>Subtotal repuestos</span>
+                <span>Subtotal estimado</span>
                 <span className="font-semibold">${cartTotal.toLocaleString('es-AR')}</span>
               </div>
               <div className="flex justify-between text-slate-600 dark:text-slate-400">
@@ -1578,9 +1556,12 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
                 </span>
               </div>
               <div className="border-t border-slate-300 dark:border-slate-700 pt-3 flex justify-between items-end">
-                <span className="font-bold text-slate-700 dark:text-slate-300">TOTAL</span>
+                <span className="font-bold text-slate-700 dark:text-slate-300">TOTAL ESTIMADO</span>
                 <span className="text-2xl font-bold text-slate-900 dark:text-white">${finalTotal.toLocaleString('es-AR')}</span>
               </div>
+              <p className="text-[11px] text-amber-600 dark:text-amber-400 pt-1">
+                * Precio sujeto a cambios / actualización. Abonás recién cuando confirmemos stock y el total verificado.
+              </p>
             </div>
 
             <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-700 text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-2">
@@ -1594,7 +1575,7 @@ function CheckoutModal({ isOpen, onClose, cart, cartTotal, onSuccess, currentUse
   );
 }
 
-function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, currentUser, clearCart }) {
+function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, currentUser, clearCart, onOpenOrders }) {
   const [checkoutMode, setCheckoutMode] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
@@ -1697,17 +1678,11 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, current
         cartTotal={cartTotal}
         currentUser={currentUser}
         onClose={() => setShowWebCheckout(false)}
-        onSuccess={(isMp, createdOrderId) => {
+        onSuccess={(_isMp, createdOrderId) => {
           if (createdOrderId) setLastCreatedOrderId(createdOrderId);
-          if (isMp) {
-            // No vaciamos el carrito antes de redirigir a Mercado Pago por si el usuario vuelve atrás;
-            // TiendaPublica vacía el carrito automáticamente cuando regresa con mp_status=approved.
-            setShowWebCheckout(false);
-          } else {
-            setOrderSuccess(true);
-            setShowWebCheckout(false);
-            if (clearCart) clearCart();
-          }
+          setOrderSuccess(true);
+          setShowWebCheckout(false);
+          if (clearCart) clearCart();
         }}
       />  
     );
@@ -1734,15 +1709,30 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, current
               <div className="w-20 h-20 bg-green-100 dark:bg-green-900/30 rounded-none flex items-center justify-center mb-6">
                 <CheckCircle className="w-10 h-10 text-green-600 dark:text-green-400" />
               </div>
-              <h3 className="text-2xl font-bold uppercase tracking-widest mb-2 dark:text-white">¡Pedido Registrado!</h3>
+              <h3 className="text-2xl font-bold uppercase tracking-widest mb-2 dark:text-white">¡Solicitud Enviada!</h3>
               {lastCreatedOrderId && (
                 <span className="text-xs font-bold uppercase tracking-widest bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-3 py-1 mb-4">
                   Pedido #{lastCreatedOrderId}
                 </span>
               )}
-              <p className="text-slate-500 dark:text-slate-400 font-light mb-6 px-4 text-sm">
-                Ya guardamos tu solicitud. A la brevedad uno de nuestros asesores verificará la disponibilidad o demora del encargue y se comunicará con vos.
+              <p className="text-slate-600 dark:text-slate-300 font-normal mb-3 px-4 text-sm leading-relaxed">
+                Ya recibimos tu pedido de repuestos. <strong>Nuestro equipo verificará el stock y el precio final actualizado</strong> desde el panel de administración.
               </p>
+              <p className="text-slate-500 dark:text-slate-400 font-light mb-6 px-4 text-xs leading-relaxed">
+                Apenas te confirmemos la disponibilidad y el total exacto, vas a poder abonar con <strong>Mercado Pago, Tarjeta o Transferencia</strong> ingresando en <strong>Mis Pedidos</strong>.
+              </p>
+              {onOpenOrders && (
+                <button
+                  onClick={() => {
+                    setOrderSuccess(false);
+                    setCheckoutMode(false);
+                    onOpenOrders();
+                  }}
+                  className="w-full max-w-xs mb-4 bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-widest text-xs py-3.5 px-5 rounded-none shadow-md transition-colors"
+                >
+                  Ver Estado en Mis Pedidos
+                </button>
+              )}
               <button onClick={resetAndClose} className="text-sm font-bold uppercase tracking-widest text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400 pb-1 hover:text-slate-900 dark:hover:text-white transition-colors focus:outline-none">
                 Seguir viendo el catálogo
               </button>
@@ -1808,13 +1798,13 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, current
               <div className="flex items-start gap-2">
                 <Clock className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
                 <span>
-                  <strong>Aviso por encargue:</strong> La mayoría de los artículos se traen directamente de distribuidora <strong>por encargue</strong> y tu pedido puede demorar. Te confirmaremos el plazo exacto al procesarlo.
+                  <strong>Precios y stock sujetos a confirmación:</strong> Los precios del catálogo pueden estar sujetos a cambios o actualización. Primero solicitás el repuesto y, al confirmarte disponibilidad y el total exacto, se habilita el pago.
                 </span>
               </div>
               <div className="flex items-start gap-2 pt-1 border-t border-amber-200/60 dark:border-slate-700">
                 <ShieldCheck className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
                 <span>
-                  <strong>Reintegro garantizado:</strong> Si pagás con tarjeta o medio directo y decidís no esperar, te reintegramos el 100% del dinero.
+                  <strong>Reintegro garantizado:</strong> Si pagás con tarjeta o medio directo y decidís no esperar un encargue, te reintegramos el 100% del dinero.
                 </span>
               </div>
             </div>
@@ -1822,9 +1812,14 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, current
             {drawerError && <div className="mb-3 p-3 rounded-none bg-red-50 dark:bg-red-900/25 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 text-xs font-bold text-center">{drawerError}</div>}
             
             <div className="flex justify-between items-center mb-4 pb-3 border-b border-slate-100 dark:border-slate-700">
-              <span className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
-                Subtotal Estimado
-              </span>
+              <div>
+                <span className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 block">
+                  Subtotal Estimado
+                </span>
+                <span className="text-[10px] text-amber-600 dark:text-amber-400">
+                  Sujeto a verificación de precio
+                </span>
+              </div>
               <span className="text-xl font-bold font-exo text-slate-900 dark:text-white">
                 ${cartTotal.toLocaleString('es-AR')}
               </span>
@@ -1846,7 +1841,7 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, current
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-widest py-3 rounded-none transition-colors flex items-center justify-center gap-3 shadow-lg shadow-blue-600/20 focus:outline-none"
                 >
                   <Send className="w-4 h-4" /> 
-                  Por la Página Web 
+                  Solicitar por la Página Web 
                 </button>
                 <button 
                   onClick={() => setCheckoutMode(false)}
@@ -1860,7 +1855,7 @@ function CartDrawer({ isOpen, onClose, cart, updateQuantity, removeItem, current
                 onClick={() => setCheckoutMode(true)}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-widest py-4 rounded-none transition-colors flex items-center justify-center gap-3 shadow-lg shadow-blue-600/20 focus:outline-none focus:ring-4 focus:ring-blue-300"
               >
-                Solicitar Cotización / Comprar
+                Solicitar Repuesto / Confirmar Stock
               </button>
             )}
           </div>
@@ -1889,6 +1884,36 @@ function CustomerOrdersModal({ isOpen, onClose, currentUser }) {
   const [isSendingChat, setIsSendingChat] = useState(false);
   const [chatError, setChatError] = useState('');
   const chatBottomRef = useRef(null);
+
+  // Estados para Pago de Pedidos Confirmados (Mercado Pago / Transferencia)
+  const [payingOrderId, setPayingOrderId] = useState(null);
+  const [showTransferDetailsId, setShowTransferDetailsId] = useState(null);
+  const [paymentError, setPaymentError] = useState('');
+
+  const handlePayConfirmedOrder = async (ord) => {
+    if (!ord?.id) return;
+    setPayingOrderId(ord.id);
+    setPaymentError('');
+    try {
+      const response = await fetch('/api/createPreference', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderId: ord.id,
+          useVerifiedOrderTotal: true
+        })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.init_point) {
+        throw new Error(data.error || 'No se pudo iniciar el pago con Mercado Pago. Intentá nuevamente.');
+      }
+      window.location.assign(data.init_point);
+    } catch (err) {
+      setPaymentError(err.message || 'Error al conectar con Mercado Pago.');
+    } finally {
+      setPayingOrderId(null);
+    }
+  };
 
   const loadOrders = useCallback(async () => {
     if (!currentUser) {
@@ -2429,9 +2454,29 @@ function CustomerOrdersModal({ isOpen, onClose, currentUser }) {
                 </div>
               ) : (
                 <div className="space-y-4">
+                  {paymentError && (
+                    <div className="p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-300 text-xs font-bold">
+                      {paymentError}
+                    </div>
+                  )}
                   {orders.map((ord) => {
-                    const isRefunded = String(ord.status || '').toLowerCase().includes('reintegrado');
-                    const isCancelled = String(ord.status || '').toLowerCase().includes('cancelado');
+                    const statusLower = String(ord.status || '').toLowerCase();
+                    const notesStr = String(ord.notes || '');
+                    const isRefunded = statusLower.includes('reintegrado');
+                    const isCancelled = statusLower.includes('cancelado');
+                    const isAlreadyPaid =
+                      statusLower.includes('pagado') ||
+                      ord.status === 'Facturado' ||
+                      notesStr.includes('Pago MP #');
+                    const isPaymentEnabled =
+                      !isRefunded &&
+                      !isCancelled &&
+                      !isAlreadyPaid &&
+                      (ord.status === 'Confirmado - Listo para Pagar' || notesStr.includes('[PAGO_HABILITADO]'));
+
+                    const priceNoteMatch = notesStr.match(/\[NOTA_PRECIO:([^\]]+)\]/i);
+                    const verifiedPriceNote = priceNoteMatch && priceNoteMatch[1] ? priceNoteMatch[1].trim() : '';
+
                     const trackMeta = extractOrderTrackingMeta(ord.notes);
                     const orderMsgs = parseOrderChatMessages(ord.notes);
                     const lastMsg = orderMsgs.length > 0 ? orderMsgs[orderMsgs.length - 1] : null;
@@ -2455,6 +2500,10 @@ function CustomerOrdersModal({ isOpen, onClose, currentUser }) {
                               ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300'
                               : isCancelled
                               ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                              : isAlreadyPaid
+                              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                              : isPaymentEnabled
+                              ? 'bg-amber-400 text-slate-950 font-black'
                               : 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
                           }`}>
                             {ord.status || 'En revisión'}
@@ -2464,9 +2513,80 @@ function CustomerOrdersModal({ isOpen, onClose, currentUser }) {
                         <div className="flex flex-wrap justify-between items-center text-xs text-slate-600 dark:text-slate-300">
                           <span>Cliente: <strong>{ord.customer_name || currentUser.name}</strong></span>
                           <span className="text-sm font-bold font-exo text-slate-900 dark:text-white">
-                            Total: ${Number(ord.total_estimated || 0).toLocaleString('es-AR')}
+                            {isPaymentEnabled || isAlreadyPaid ? 'Total Final Verificado:' : 'Total Estimado:'}{' '}
+                            ${Number(ord.total_estimated || 0).toLocaleString('es-AR')}
                           </span>
                         </div>
+
+                        {/* SECCIÓN DE PAGO HABILITADO TRAS CONFIRMACIÓN DEL ADMIN */}
+                        {isPaymentEnabled ? (
+                          <div className="p-3.5 bg-emerald-50/90 dark:bg-emerald-950/35 border border-emerald-300 dark:border-emerald-700/70 space-y-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300 font-bold text-xs uppercase tracking-wider">
+                                <CheckCircle className="w-4 h-4 flex-shrink-0 text-emerald-600 dark:text-emerald-400" />
+                                <span>¡Stock y Precio Final Confirmados! Ya podés abonar</span>
+                              </div>
+                              <span className="text-base font-black font-exo text-emerald-700 dark:text-emerald-300">
+                                ${Number(ord.total_estimated || 0).toLocaleString('es-AR')}
+                              </span>
+                            </div>
+
+                            {verifiedPriceNote && (
+                              <p className="text-xs text-slate-700 dark:text-slate-200 bg-white/80 dark:bg-slate-900/70 p-2.5 border border-emerald-200 dark:border-emerald-800/50">
+                                <strong>Nota de D.A.P.A.:</strong> {verifiedPriceNote}
+                              </p>
+                            )}
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              <button
+                                type="button"
+                                disabled={payingOrderId === ord.id}
+                                onClick={() => handlePayConfirmedOrder(ord)}
+                                className="py-3 px-4 bg-[#009EE3] hover:bg-[#008ACA] disabled:opacity-60 text-white text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 shadow-md transition-colors"
+                              >
+                                <CreditCard className="w-4 h-4 flex-shrink-0" />
+                                <span>
+                                  {payingOrderId === ord.id
+                                    ? 'Redirigiendo a Mercado Pago...'
+                                    : `Pagar $${Number(ord.total_estimated || 0).toLocaleString('es-AR')} con Mercado Pago`}
+                                </span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => setShowTransferDetailsId(showTransferDetailsId === ord.id ? null : ord.id)}
+                                className="py-3 px-4 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-white border border-slate-300 dark:border-slate-600 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors"
+                              >
+                                <span>{showTransferDetailsId === ord.id ? 'Ocultar Transferencia / Depósito' : '🏦 Pagar por Transferencia / Depósito'}</span>
+                              </button>
+                            </div>
+
+                            {showTransferDetailsId === ord.id && (
+                              <div className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-300 space-y-1.5 animate-in fade-in">
+                                <p className="font-bold text-slate-900 dark:text-white uppercase tracking-wider text-[11px]">
+                                  Datos para Transferencia o Depósito Bancario:
+                                </p>
+                                <p>• <strong>Monto Exacto a Transferir:</strong> <span className="font-bold text-emerald-600 dark:text-emerald-400">${Number(ord.total_estimated || 0).toLocaleString('es-AR')}</span></p>
+                                <p>• <strong>Concepto / Referencia:</strong> Pedido #{ord.id}</p>
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400 pt-1">
+                                  Solicitá o verificá el Alias/CBU actualizado e informá tu comprobante haciendo clic en <strong>Chat Vendedor</strong> o por WhatsApp al <strong>{CONTACT_INFO.phoneDisplay}</strong>.
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        ) : !isAlreadyPaid && !isRefunded && !isCancelled ? (
+                          <div className="p-3 bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 text-xs text-slate-700 dark:text-slate-300 flex items-start gap-2.5">
+                            <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                            <div>
+                              <strong className="text-amber-900 dark:text-amber-300 block">
+                                Aguardando confirmación de stock y precio final actualizado
+                              </strong>
+                              <span>
+                                Nuestro equipo está verificando la disponibilidad del repuesto y el importe final. En cuanto lo confirmemos, se habilitará aquí mismo el botón para pagar con <strong>Mercado Pago, Tarjeta o Transferencia</strong>.
+                              </span>
+                            </div>
+                          </div>
+                        ) : null}
 
                         {trackMeta.trackingCode && (
                           <div className="p-2.5 bg-blue-50 dark:bg-slate-800 border border-blue-200 dark:border-slate-700 flex items-center justify-between text-xs">
@@ -2658,9 +2778,16 @@ function FloatingActions() {
       <button onClick={scrollToTop} className={`pointer-events-auto bg-slate-800 dark:bg-slate-700 text-white p-3 rounded-none shadow-xl hover:bg-slate-700 dark:hover:bg-slate-600 transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-slate-300 ${showTopBtn ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`} aria-label="Volver arriba">
         <ArrowUp className="w-5 h-5" />
       </button>
-      <a href={CONTACT_INFO.whatsappLink} target="_blank" rel="noopener noreferrer" aria-label="Contactar por WhatsApp" className="pointer-events-auto bg-green-500 text-white p-4 rounded-none shadow-2xl hover:bg-green-600 hover:scale-110 transition-all group flex items-center justify-center focus:outline-none focus:ring-4 focus:ring-green-300 relative">
-        <span className="absolute inset-0 rounded-none bg-green-500 animate-ping opacity-50"></span>
-        <Phone className="w-6 h-6 md:w-8 md:h-8 relative z-10" aria-hidden="true" />
+      <a
+        href={CONTACT_INFO.whatsappLink}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="Contactar por WhatsApp"
+        className="whatsapp-round-btn pointer-events-auto bg-[#25D366] text-white w-14 h-14 md:w-16 md:h-16 rounded-full shadow-2xl hover:bg-[#1ebe5d] hover:scale-105 transition-all flex items-center justify-center focus:outline-none focus:ring-4 focus:ring-green-300"
+      >
+        <svg viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8 md:w-9 md:h-9" aria-hidden="true">
+          <path d="M12.031 2c-5.506 0-9.989 4.478-9.99 9.984a9.964 9.964 0 0 0 1.333 4.993L2 22l5.233-1.237a9.994 9.994 0 0 0 4.799 1.217h.004c5.505 0 9.988-4.478 9.989-9.984 0-2.669-1.037-5.176-2.922-7.062A9.935 9.935 0 0 0 12.031 2zm0 18.288h-.003a8.296 8.296 0 0 1-4.231-1.158l-.303-.18-3.146.743.76-3.068-.198-.314a8.29 8.29 0 0 1-1.273-4.427c.002-4.575 3.726-8.298 8.305-8.298 2.218 0 4.302.864 5.87 2.433a8.25 8.25 0 0 1 2.43 5.869c-.002 4.576-3.726 8.3-8.211 8.3zm4.552-6.21c-.25-.125-1.477-.729-1.706-.812-.229-.083-.395-.125-.562.125-.166.25-.645.812-.791.979-.146.166-.291.187-.541.062-.25-.125-1.055-.389-2.009-1.239-.743-.662-1.244-1.481-1.39-1.731-.146-.25-.015-.385.11-.51.112-.112.25-.291.375-.437.125-.146.166-.25.25-.416.083-.167.042-.312-.021-.437-.062-.125-.562-1.354-.77-1.854-.203-.487-.409-.421-.562-.429l-.479-.008c-.166 0-.437.062-.666.312-.229.25-.874.854-.874 2.083s.895 2.416 1.02 2.583c.125.166 1.761 2.689 4.267 3.77.596.257 1.061.411 1.424.526.598.19 1.143.163 1.573.099.48-.072 1.477-.604 1.685-1.187.208-.583.208-1.083.146-1.187-.063-.104-.229-.166-.479-.291z" />
+        </svg>
       </a>
     </div>
   );
@@ -2705,43 +2832,67 @@ function getCategoryVisualImage(category) {
 
   // 1. Cristales, Parabrisas y Lunetas
   if (rawName.includes('cristal') || rawName.includes('parabrisa') || rawName.includes('luneta') || rawName.includes('puerta delantera') || rawName.includes('puerta trasera') || rawName.includes('aleta')) {
-    return 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=900&q=80';
+    return 'https://dlhlwqgzaitwdvlmunqc.supabase.co/storage/v1/object/public/repuestos/cat-117-1792586748422.jfif';
   }
   // 2. Ópticas, Faros e Iluminación
-  if (rawName.includes('optica') || rawName.includes('lente') || rawName.includes('faro') || rawName.includes('iluminacion') || rawName.includes('lampara') || rawName.includes('led') || rawName.includes('luz')) {
-    return 'https://images.unsplash.com/photo-1544829099-b9a0c07fad1a?auto=format&fit=crop&w=900&q=80';
+  if (rawName.includes('optica')) {
+    return 'https://dlhlwqgzaitwdvlmunqc.supabase.co/storage/v1/object/public/repuestos/cat-119-1792588314951.jfif';
+  }
+  if (rawName.includes('lente') || rawName.includes('faro') || rawName.includes('iluminacion') || rawName.includes('lampara') || rawName.includes('led') || rawName.includes('luz')) {
+    return 'https://dlhlwqgzaitwdvlmunqc.supabase.co/storage/v1/object/public/repuestos/cat-121-1792588598259.jfif';
   }
   // 3. Espejos y Lunas
   if (rawName.includes('espejo') || rawName.includes('retrovisor') || rawName.includes('luna') || rawName.includes('cacha')) {
-    return 'https://images.unsplash.com/photo-1502877338535-766e1452684a?auto=format&fit=crop&w=900&q=80';
+    return 'https://dlhlwqgzaitwdvlmunqc.supabase.co/storage/v1/object/public/repuestos/cat-123-1792586310636.jfif';
   }
   // 4. Cerraduras, Cerrajería, Manijas y Alzacristales
-  if (rawName.includes('cerraj') || rawName.includes('cerradur') || rawName.includes('cilindro') || rawName.includes('manij') || rawName.includes('tirador') || rawName.includes('alzacristal') || rawName.includes('levantavidrio') || rawName.includes('maquina') || rawName.includes('coliza')) {
-    return 'https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?auto=format&fit=crop&w=900&q=80';
+  if (rawName.includes('alzacristal') || rawName.includes('levantavidrio') || rawName.includes('maquina') || rawName.includes('coliza')) {
+    return 'https://dlhlwqgzaitwdvlmunqc.supabase.co/storage/v1/object/public/repuestos/cat-132-1792589913491.jfif';
+  }
+  if (rawName.includes('manij') || rawName.includes('tirador')) {
+    return 'https://dlhlwqgzaitwdvlmunqc.supabase.co/storage/v1/object/public/repuestos/cat-129-1792586185323.jfif';
+  }
+  if (rawName.includes('cerraj') || rawName.includes('cerradur') || rawName.includes('cilindro')) {
+    return 'https://dlhlwqgzaitwdvlmunqc.supabase.co/storage/v1/object/public/repuestos/cat-128-1792589393914.jfif';
   }
   // 5. Paragolpes, Parrillas, Molduras, Chapas y Carrocería
-  if (rawName.includes('chapa') || rawName.includes('carroceria') || rawName.includes('parag') || rawName.includes('parrill') || rawName.includes('capot') || rawName.includes('guardabarro') || rawName.includes('guard.') || rawName.includes('frente') || rawName.includes('moldura') || rawName.includes('pasarr')) {
-    return 'https://images.unsplash.com/photo-1618843479313-40f8afb4b4d8?auto=format&fit=crop&w=900&q=80';
+  if (rawName.includes('parag') || rawName.includes('parrill') || rawName.includes('moldura')) {
+    return 'https://dlhlwqgzaitwdvlmunqc.supabase.co/storage/v1/object/public/repuestos/cat-120-1792588560573.jfif';
+  }
+  if (rawName.includes('chapa') || rawName.includes('carroceria') || rawName.includes('capot') || rawName.includes('guardabarro') || rawName.includes('guard.') || rawName.includes('frente') || rawName.includes('pasarr')) {
+    return 'https://dlhlwqgzaitwdvlmunqc.supabase.co/storage/v1/object/public/repuestos/cat-118-1792586767642.jfif';
   }
   // 6. Tazas de Rueda, Insignias y Emblemas
   if (rawName.includes('taza') || rawName.includes('insigni') || rawName.includes('emblem') || rawName.includes('llanta')) {
-    return 'https://images.unsplash.com/photo-1611859266238-4b98091d9d9b?auto=format&fit=crop&w=900&q=80';
+    return 'https://dlhlwqgzaitwdvlmunqc.supabase.co/storage/v1/object/public/repuestos/cat-126-1792586560948.jfif';
   }
   // 7. Alfombras, Tapicería e Interior
   if (rawName.includes('alfombr') || rawName.includes('interior') || rawName.includes('habitaculo') || rawName.includes('cubre baul') || rawName.includes('tapiz') || rawName.includes('cofia') || rawName.includes('pomo')) {
-    return 'https://images.unsplash.com/photo-1511919884226-fd3cad34687c?auto=format&fit=crop&w=900&q=80';
+    return 'https://dlhlwqgzaitwdvlmunqc.supabase.co/storage/v1/object/public/repuestos/cat-130-1792586122865.jfif';
   }
   // 8. Refrigeración, Motor, Frenos, Suspensión y Fijaciones
-  if (rawName.includes('radiador') || rawName.includes('refrigeracion') || rawName.includes('motor') || rawName.includes('freno') || rawName.includes('amortiguador') || rawName.includes('bisagr') || rawName.includes('grampa') || rawName.includes('abrazadera') || rawName.includes('cable')) {
-    return 'https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=900&q=80';
+  if (rawName.includes('bisagr') || rawName.includes('amortiguador')) {
+    return 'https://dlhlwqgzaitwdvlmunqc.supabase.co/storage/v1/object/public/repuestos/cat-125-1792586490628.jfif';
+  }
+  if (rawName.includes('grampa') || rawName.includes('fijacion') || rawName.includes('bulon') || rawName.includes('abrazadera')) {
+    return 'https://dlhlwqgzaitwdvlmunqc.supabase.co/storage/v1/object/public/repuestos/cat-134-1792279612654.jpg';
+  }
+  if (rawName.includes('cable') || rawName.includes('electric')) {
+    return 'https://dlhlwqgzaitwdvlmunqc.supabase.co/storage/v1/object/public/repuestos/cat-131-1792586061057.jfif';
+  }
+  if (rawName.includes('radiador') || rawName.includes('refrigeracion') || rawName.includes('tanque') || rawName.includes('motor') || rawName.includes('freno')) {
+    return 'https://dlhlwqgzaitwdvlmunqc.supabase.co/storage/v1/object/public/repuestos/cat-124-1792586379103.jfif';
   }
   // 9. Estética, Limpiaparabrisas y Burletes
-  if (rawName.includes('toxic') || rawName.includes('shine') || rawName.includes('limpia') || rawName.includes('escobill') || rawName.includes('burlet') || rawName.includes('goma')) {
-    return 'https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?auto=format&fit=crop&w=900&q=80';
+  if (rawName.includes('burlet') || rawName.includes('goma')) {
+    return 'https://dlhlwqgzaitwdvlmunqc.supabase.co/storage/v1/object/public/repuestos/cat-127-1792586621208.jfif';
+  }
+  if (rawName.includes('toxic') || rawName.includes('shine') || rawName.includes('limpia') || rawName.includes('escobill')) {
+    return 'https://dlhlwqgzaitwdvlmunqc.supabase.co/storage/v1/object/public/repuestos/cat-133-1792279869246.jpg';
   }
 
   // Fallback general automotriz
-  return 'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=900&q=80';
+  return 'https://dlhlwqgzaitwdvlmunqc.supabase.co/storage/v1/object/public/repuestos/cat-122-1792588716399.jfif';
 }
 
 /* ==========================================================================
@@ -3049,7 +3200,7 @@ function Navbar({ activePage, navigateTo, currentUser, cartCount, onOpenCart, on
                                       style={{ backgroundColor: '#0f172a' }}
                                     >
                                       <div className="w-11 h-11 rounded-none bg-slate-950 border border-slate-800 overflow-hidden flex-shrink-0 flex items-center justify-center" style={{ backgroundColor: '#020617' }}>
-                                        <ProductImage sku={prod.sku_code} imageUrl={prod.image_url} alt={prod.name} className="w-full h-full object-cover" />
+                                        <ProductImage sku={prod.sku_code} imageUrl={prod.image_url} alt={prod.name} category={prod.category || activeMegaCat} className="w-full h-full object-cover" />
                                       </div>
                                       <div className="min-w-0 flex-1">
                                         <div className="text-[9px] font-bold text-amber-400 uppercase tracking-wider truncate">
@@ -3461,49 +3612,70 @@ function HeroSection({ navigateTo }) {
 }
 
 /* ==========================================================================
-   DESTACADOS D.A.P.A (BANNERS A ANCHO COMPLETO + CINTA AUTOMÁTICA DE PRODUCTOS Y VIDEOS DE INSTAGRAM)
-   ==========================================================================
-   CÓMO AGREGAR TUS FOTOS REALES Y VIDEOS DESCARGADOS DE INSTAGRAM:
-   1) Guardá tus fotos (ej: 'optica-hilux.jpg') o videos de Instagram (ej: 'reel-1.mp4')
-      dentro de la carpeta `catalogo/public/`.
-   2) En `SHOWCASE_GALLERY_ITEMS` (abajo), cambiá `src` por `'/optica-hilux.jpg'` o `'/reel-1.mp4'`
-      y usá `type: 'image'` para fotos o `type: 'video'` para los reels de Instagram.
+   DESTACADOS D.A.P.A (DISEÑO EDITORIAL PROPIO Y EXCLUSIVO DE D.A.P.A. REPUESTOS MOLLE)
    ========================================================================== */
 const SHOWCASE_BANNERS = [
   {
     id: 'banner-1',
-    layout: 'chevron-split',
-    leftImg: '/local-dapa.jpg',
-    rightImg: 'https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=1200&q=80',
-    headlineTop: '¡TODO LO QUE',
-    headlineBottom: 'TU AUTO NECESITA!',
-    subtitle: 'Calidad, variedad y confianza en un solo lugar.',
-    ctaText: 'Ver Catálogo Completo',
+    layout: 'dapa-flagship',
+    mainImg: '/local-dapa.jpg',
+    secondaryImg: 'https://dlhlwqgzaitwdvlmunqc.supabase.co/storage/v1/object/public/repuestos/cat-120-1792588560573.jfif',
+    kicker: 'CASA CENTRAL • LAMADRID 65, ARRECIFES',
+    headlineTop: 'CONOCIMIENTO Y ASESORAMIENTO EN',
+    headlineHighlight: 'AUTOPARTES MULTIMARCA',
+    subtitle: 'Más de 50 años proveyendo carrocería, cristales, iluminación y cerrajería automotriz a talleres, aseguradoras y particulares de todo el país.',
+    metrics: [
+      { value: '+50 AÑOS', label: 'Trayectoria en el rubro' },
+      { value: '+4.000', label: 'Artículos en catálogo' },
+      { value: 'TODO EL PAÍS', label: 'Despachos por Correo Argentino' }
+    ],
+    ctaText: 'Explorar Catálogo Online',
     ctaAction: 'catalogo'
   },
   {
     id: 'banner-2',
-    layout: 'welcome-emblem',
-    leftImg: 'https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?auto=format&fit=crop&w=1200&q=80',
-    rightImg: 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=1200&q=80',
-    headline: '¡¡BIENVENIDOS!!',
-    brandTitle: 'D.A.P.A',
-    brandSub: 'REPUESTOS MOLLE',
-    subtitle: 'Más de 50 años de trayectoria en Arrecifes • Envíos a todo el país',
-    ctaText: 'Consultar por WhatsApp',
+    layout: 'dapa-lines-grid',
+    bgImg: 'https://dlhlwqgzaitwdvlmunqc.supabase.co/storage/v1/object/public/repuestos/cat-117-1792586748422.jfif',
+    kicker: 'DIVISIÓN TÉCNICA D.A.P.A. REPUESTOS MOLLE',
+    headlineTop: 'SOLUCIONES DIRECTAS',
+    headlineHighlight: 'PARA CADA VEHÍCULO',
+    subtitle: 'Verificamos compatibilidad exacta por modelo o chasis y confirmamos stock y precio actualizado antes de que abones.',
+    cards: [
+      {
+        tag: 'CRISTALES',
+        title: 'Parabrisas, Lunetas y Laterales',
+        desc: 'Línea completa nacional e importada',
+        img: 'https://dlhlwqgzaitwdvlmunqc.supabase.co/storage/v1/object/public/repuestos/cat-117-1792586748422.jfif'
+      },
+      {
+        tag: 'ILUMINACIÓN',
+        title: 'Ópticas, Faros y Lentes',
+        desc: 'Tecnología halógena y LED homologada',
+        img: 'https://dlhlwqgzaitwdvlmunqc.supabase.co/storage/v1/object/public/repuestos/cat-119-1792588314951.jfif'
+      },
+      {
+        tag: 'CARROCERÍA',
+        title: 'Paragolpes, Capot y Guardabarros',
+        desc: 'Calce original y terminación de fábrica',
+        img: 'https://dlhlwqgzaitwdvlmunqc.supabase.co/storage/v1/object/public/repuestos/cat-120-1792588560573.jfif'
+      }
+    ],
+    ctaText: 'Consultar Disponibilidad por WhatsApp',
     ctaAction: 'whatsapp'
   },
   {
     id: 'banner-3',
     layout: 'video-full',
-    // Reemplazá este link por tu video descargado de Instagram en public/ (ej: '/reel-local.mp4')
-    videoSrc: 'https://assets.mixkit.co/videos/preview/mixkit-mechanic-working-on-a-car-engine-41612-large.mp4',
+    videos: [
+      { src: '/escapes.mp4', title: 'Escapes y Silenciadores' },
+      { src: '/parabrisasylunetas.mp4', title: 'Parabrisas y Lunetas' }
+    ],
     poster: '/local-dapa.jpg',
-    badge: 'INSTAGRAM @AUTOPARTESMOLLE',
-    headlineTop: 'NOVEDADES Y REPUESTOS',
-    headlineBottom: 'EN NUESTRO LOCAL',
-    subtitle: 'Ópticas, parabrisas, chapería, frenos y accesorios multimarca directo a tu taller o domicilio.',
-    ctaText: 'Cotizar mi Repuesto',
+    badge: 'VIDEOS DESTACADOS • @AUTOPARTESMOLLE',
+    headlineTop: 'CONOCÉ NUESTROS PRODUCTOS',
+    headlineBottom: 'EN ACCIÓN Y STOCK PERMANENTE',
+    subtitle: 'Mirá nuestros videos de escapes, parabrisas y lunetas. Solicitá tu pieza en la web sin pagar por adelantado y te confirmamos stock y precio actualizado en el día.',
+    ctaText: 'Solicitar Cotización Ahora',
     ctaAction: 'contacto'
   }
 ];
@@ -3511,61 +3683,54 @@ const SHOWCASE_BANNERS = [
 const SHOWCASE_GALLERY_ITEMS = [
   {
     id: 101,
-    type: 'image', // Cambiá src por '/tu-foto-1.jpg' cuando subas fotos reales del local
-    src: 'https://images.unsplash.com/photo-1544829099-b9a0c07fad1a?auto=format&fit=crop&w=800&q=80',
-    tag: 'ILUMINACIÓN',
-    title: 'Ópticas Delanteras y Faros LED'
+    src: '/carousel/parabrisas-lunetas.jpg',
+    alt: 'Venta y colocación de parabrisas y lunetas'
   },
   {
     id: 102,
-    type: 'video', // Podés reemplazar src por tu video descargado de Instagram: ej. '/instagram-reel-1.mp4'
-    src: 'https://assets.mixkit.co/videos/preview/mixkit-mechanic-working-on-a-car-engine-41612-large.mp4',
-    poster: 'https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?auto=format&fit=crop&w=800&q=80',
-    tag: 'REEL INSTAGRAM',
-    title: 'Asesoramiento Técnico y Repuestos'
+    src: '/carousel/cubre-volantes.jpg',
+    alt: 'Variedad en cubre volantes'
   },
   {
     id: 103,
-    type: 'image',
-    src: '/local-dapa.jpg',
-    tag: 'CASA CENTRAL',
-    title: 'Stock Permanente en Lamadrid 65'
+    src: '/carousel/luces-led.jpg',
+    alt: 'Luces LED para una mejor visión en el camino'
   },
   {
     id: 104,
-    type: 'image',
-    src: 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=800&q=80',
-    tag: 'CRISTALES',
-    title: 'Parabrisas y Lunetas todas las marcas'
+    src: '/carousel/cubre-autos.jpg',
+    alt: 'Cubre autos bicapa y multicapa para todos los talles de vehículos'
   },
   {
     id: 105,
-    type: 'image',
-    src: 'https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=800&q=80',
-    tag: 'FRENOS',
-    title: 'Discos, Pastillas y Campanas'
+    src: '/carousel/cubre-asientos.jpg',
+    alt: 'Juegos completos de cubre asientos universales'
   },
   {
     id: 106,
-    type: 'image',
-    src: 'https://images.unsplash.com/photo-1618843479313-40f8afb4b4d8?auto=format&fit=crop&w=800&q=80',
-    tag: 'CARROCERÍA',
-    title: 'Paragolpes, Capot y Guardabarros'
+    src: '/carousel/criques-carritos.jpg',
+    alt: 'Criques carritos hasta 2 toneladas'
   },
   {
     id: 107,
-    type: 'image',
-    src: 'https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?auto=format&fit=crop&w=800&q=80',
-    tag: 'ESTÉTICA VEHICULAR',
-    title: 'Línea Completa de Cuidado Automotor'
+    src: '/carousel/linea-walker.jpg',
+    alt: 'Deja tu vehículo reluciente y como nuevo con la línea Walker'
+  },
+  {
+    id: 108,
+    src: '/carousel/alfombras-universales.jpg',
+    alt: 'Alfombras universales'
   }
 ];
 
-function MediaShowcaseSection({ navigateTo }) {
+function MediaShowcaseSection({ navigateTo, categories = [], onOpenCategory }) {
   const [currentBanner, setCurrentBanner] = useState(0);
+  const [currentVideoIdx, setCurrentVideoIdx] = useState(0);
   const [isMuted, setIsMuted] = useState(true);
   const [isPaused, setIsPaused] = useState(false);
   const sectionRef = useRef(null);
+  const mainVideoRef = useRef(null);
+  const bgVideoRef = useRef(null);
 
   const handleNextBanner = useCallback(() => {
     setCurrentBanner((prev) => (prev + 1) % SHOWCASE_BANNERS.length);
@@ -3575,7 +3740,7 @@ function MediaShowcaseSection({ navigateTo }) {
     setCurrentBanner((prev) => (prev - 1 + SHOWCASE_BANNERS.length) % SHOWCASE_BANNERS.length);
   };
 
-  // Pausar videos y carrusel cuando la sección no está visible en pantalla (ahorro de CPU/GPU en todos los SO)
+  // Pausar videos cuando la sección no está visible en pantalla (ahorro de CPU/GPU en todos los SO)
   useEffect(() => {
     const el = sectionRef.current;
     if (!el || typeof IntersectionObserver === 'undefined') return;
@@ -3596,12 +3761,27 @@ function MediaShowcaseSection({ navigateTo }) {
     return () => observer.disconnect();
   }, []);
 
-  // Desplazamiento automático de los banners a pantalla completa cada 5.5 segundos
+  // Reproducir desde el inicio al cambiar entre los videos o al entrar al slide de video
+  useEffect(() => {
+    if (SHOWCASE_BANNERS[currentBanner]?.layout === 'video-full') {
+      if (mainVideoRef.current) {
+        mainVideoRef.current.currentTime = 0;
+        mainVideoRef.current.play?.().catch(() => {});
+      }
+      if (bgVideoRef.current) {
+        bgVideoRef.current.currentTime = 0;
+        bgVideoRef.current.play?.().catch(() => {});
+      }
+    }
+  }, [currentBanner, currentVideoIdx]);
+
+  // Desplazamiento automático de los banners estáticos cada 6 segundos (el slide de video avanza al terminar los videos)
   useEffect(() => {
     if (isPaused) return;
-    const timer = setInterval(handleNextBanner, 5500);
+    if (SHOWCASE_BANNERS[currentBanner]?.layout === 'video-full') return;
+    const timer = setInterval(handleNextBanner, 6000);
     return () => clearInterval(timer);
-  }, [isPaused, handleNextBanner]);
+  }, [isPaused, currentBanner, handleNextBanner]);
 
   const handleBannerAction = (action) => {
     if (action === 'whatsapp') {
@@ -3616,36 +3796,24 @@ function MediaShowcaseSection({ navigateTo }) {
   return (
     <section
       ref={sectionRef}
-      className="pt-20 pb-28 md:pt-28 md:pb-36 relative z-20 text-white overflow-hidden w-full"
+      className="pt-20 pb-24 md:pt-28 md:pb-32 relative z-20 text-white overflow-hidden w-full"
       style={{ background: 'linear-gradient(135deg, #061536 0%, #0d2f75 50%, #05112b 100%)' }}
     >
-      {/* Divisor diagonal superior (Subida de izquierda a derecha) */}
+      {/* Divisor diagonal superior */}
       <div className="absolute top-0 left-0 w-full overflow-hidden leading-none pointer-events-none z-30 -mt-[1px]">
         <svg viewBox="0 0 1440 90" preserveAspectRatio="none" className="w-full h-10 sm:h-14 md:h-20 block">
           <polygon points="0,0 1440,0 0,90" className="fill-white dark:fill-slate-900 transition-colors duration-300" />
         </svg>
       </div>
 
-      {/* Triángulos geométricos decorativos */}
-      <div
-        className="hidden sm:block absolute top-12 md:top-16 right-6 md:right-16 w-10 h-10 md:w-12 md:h-12 bg-amber-400 pointer-events-none z-30 shadow-lg"
-        style={{ clipPath: 'polygon(0 0, 100% 0, 100% 100%)' }}
-        aria-hidden="true"
-      ></div>
-      <div
-        className="hidden sm:block absolute bottom-10 md:bottom-14 left-0 w-24 md:w-36 h-12 md:h-16 bg-amber-400 pointer-events-none z-30"
-        style={{ clipPath: 'polygon(0 0, 100% 100%, 0 100%)' }}
-        aria-hidden="true"
-      ></div>
-
       {/* Encabezado de la sección */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-8 relative z-20 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
           <span className="inline-block border border-amber-400 text-amber-400 text-[10px] font-black uppercase tracking-[0.2em] px-3.5 py-1 -skew-x-12 mb-2.5">
-            <span className="inline-block skew-x-12">Destacados D.A.P.A</span>
+            <span className="inline-block skew-x-12">Respaldo D.A.P.A. Repuestos Molle</span>
           </span>
           <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold font-exo uppercase tracking-wider text-white">
-            Productos y Novedades en Acción
+            Especialistas en Autopartes y Accesorios
           </h2>
         </div>
 
@@ -3659,201 +3827,314 @@ function MediaShowcaseSection({ navigateTo }) {
         </a>
       </div>
 
-      {/* 1) CARRUSEL PANORÁMICO A TODO EL ANCHO DE LA PÁGINA (Estilo Imágenes 3 y 4) */}
-      <div
-        className="relative w-full overflow-hidden border-y-2 border-blue-500/40 shadow-[0_20px_50px_rgba(0,0,0,0.6)] mb-12"
-        onMouseEnter={() => setIsPaused(true)}
-        onMouseLeave={() => setIsPaused(false)}
-      >
+      {/* BANNER PANORÁMICO A LO ANCHO DE TODA LA PANTALLA (FULL-WIDTH EDGE-TO-EDGE) */}
+      <div className="w-full relative z-20">
         <div
-          className="flex transition-transform duration-700 ease-out w-full"
-          style={{ transform: `translateX(-${currentBanner * 100}%)` }}
+          className="relative w-full overflow-hidden border-y-[3px] border-blue-500 shadow-[0_24px_60px_rgba(0,0,0,0.65)] bg-[#040b1d]"
+          onMouseEnter={() => setIsPaused(true)}
+          onMouseLeave={() => setIsPaused(false)}
         >
-          {SHOWCASE_BANNERS.map((slide) => (
-            <div key={slide.id} className="w-full flex-shrink-0 relative h-[320px] sm:h-[380px] md:h-[440px] bg-[#040c21] overflow-hidden">
-              
-              {slide.layout === 'chevron-split' && (
-                <>
-                  {/* Imagen izquierda y derecha a pantalla completa */}
-                  <div className="absolute inset-y-0 left-0 w-1/2 overflow-hidden">
-                    <img src={slide.leftImg} alt="" className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-slate-950/25" />
-                  </div>
-                  <div className="absolute inset-y-0 right-0 w-1/2 overflow-hidden">
-                    <img src={slide.rightImg} alt="" className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-slate-950/25" />
-                  </div>
-
-                  {/* Escudo central azul geométrico en punta (Estilo Imagen 3) */}
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    {/* Borde luminoso azul exterior */}
-                    <div
-                      className="w-[92%] sm:w-[70%] md:w-[58%] lg:w-[50%] h-full bg-gradient-to-r from-blue-400 via-blue-500 to-blue-400 p-[6px] shadow-[0_0_50px_rgba(37,99,235,0.9)]"
-                      style={{ clipPath: 'polygon(0 0, 86% 0, 100% 50%, 86% 100%, 0 100%, 14% 50%)' }}
-                    >
-                      <div
-                        className="w-full h-full flex flex-col items-center justify-center text-center px-8 sm:px-14 md:px-20 pointer-events-auto"
-                        style={{
-                          background: 'linear-gradient(135deg, #031242 0%, #082578 55%, #020c2e 100%)',
-                          clipPath: 'polygon(0 0, 86% 0, 100% 50%, 86% 100%, 0 100%, 14% 50%)'
-                        }}
-                      >
-                        <h3 className="text-2xl sm:text-4xl md:text-5xl font-black font-exo uppercase tracking-tight text-white leading-none mb-1 drop-shadow-md">
-                          {slide.headlineTop}
-                        </h3>
-                        <p className="text-lg sm:text-2xl md:text-3xl font-light font-exo uppercase tracking-wide text-white mb-4">
-                          {slide.headlineBottom}
-                        </p>
-                        <div className="w-4/5 max-w-xs h-[2px] bg-gradient-to-r from-transparent via-cyan-400 to-transparent mb-4" />
-                        <p className="text-xs sm:text-base md:text-lg text-slate-200 font-light max-w-md mb-6">
-                          {slide.subtitle}
-                        </p>
-                        <button
-                          onClick={() => handleBannerAction(slide.ctaAction)}
-                          className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-black uppercase tracking-widest text-[11px] sm:text-xs px-6 py-3 transition-all shadow-lg"
-                          style={{ clipPath: 'polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px)' }}
-                        >
-                          {slide.ctaText}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {slide.layout === 'welcome-emblem' && (
-                <>
-                  {/* Imagen izquierda y derecha */}
-                  <div className="absolute inset-y-0 left-0 w-1/2 overflow-hidden">
-                    <img src={slide.leftImg} alt="" className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-slate-950/30" />
-                  </div>
-                  <div className="absolute inset-y-0 right-0 w-1/2 overflow-hidden">
-                    <img src={slide.rightImg} alt="" className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-slate-950/30" />
-                  </div>
-
-                  {/* Trapecio central azul con bienvenida y emblema (Estilo Imagen 4) */}
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div
-                      className="w-[94%] sm:w-[75%] md:w-[64%] lg:w-[56%] h-full bg-gradient-to-r from-blue-500 via-cyan-400 to-blue-500 p-[6px] shadow-[0_0_50px_rgba(37,99,235,0.9)]"
-                      style={{ clipPath: 'polygon(10% 0, 90% 0, 100% 100%, 0% 100%)' }}
-                    >
-                      <div
-                        className="w-full h-full flex flex-col items-center justify-center text-center px-6 sm:px-12 pointer-events-auto"
-                        style={{
-                          background: 'linear-gradient(180deg, #03154a 0%, #072370 60%, #031038 100%)',
-                          clipPath: 'polygon(10% 0, 90% 0, 100% 100%, 0% 100%)'
-                        }}
-                      >
-                        <h3 className="text-2xl sm:text-4xl md:text-5xl font-black font-exo uppercase tracking-widest text-white mb-4 drop-shadow-[0_4px_12px_rgba(0,0,0,0.6)]">
-                          {slide.headline}
-                        </h3>
-
-                        {/* Emblema central blanco estilo engranaje/insignia automotriz */}
-                        <div className="bg-white text-slate-950 px-7 py-4 sm:px-10 sm:py-5 rounded-none shadow-2xl border-4 border-blue-500/40 mb-4 flex flex-col items-center">
-                          <span className="font-michroma font-bold text-xl sm:text-3xl tracking-tighter text-blue-800 leading-none">
-                            {slide.brandTitle}
-                          </span>
-                          <span className="font-exo font-black text-[10px] sm:text-xs tracking-[0.25em] text-slate-700 uppercase mt-1">
-                            {slide.brandSub}
+          <div
+            className="flex transition-transform duration-700 ease-out w-full"
+            style={{ transform: `translateX(-${currentBanner * 100}%)` }}
+          >
+            {SHOWCASE_BANNERS.map((slide) => (
+              <div
+                key={slide.id}
+                className="w-full flex-shrink-0 relative min-h-[430px] sm:min-h-[470px] md:min-h-[520px] bg-[#040b1d] overflow-hidden flex items-stretch"
+              >
+                {/* DISEÑO 1: EDITORIAL ASIMÉTRICO CASA CENTRAL + FICHA TÉCNICA */}
+                {slide.layout === 'dapa-flagship' && (
+                  <div className="w-full grid grid-cols-1 lg:grid-cols-12 relative">
+                    {/* Columna de contenido e indicadores */}
+                    <div className="lg:col-span-7 py-10 pb-16 px-6 sm:px-14 lg:pl-20 xl:pl-28 lg:pr-12 flex flex-col justify-between relative z-10 bg-gradient-to-r from-[#030917] via-[#061534] to-[#061534]/95">
+                      <div>
+                        <div className="inline-flex items-center gap-2 bg-blue-950/90 border-l-4 border-amber-400 px-3.5 py-1.5 mb-4">
+                          <span className="w-2 h-2 bg-amber-400 animate-pulse" />
+                          <span className="text-[10px] sm:text-xs font-bold font-exo uppercase tracking-[0.18em] text-amber-300">
+                            {slide.kicker}
                           </span>
                         </div>
 
-                        <p className="text-xs sm:text-sm text-blue-100 font-light max-w-md mb-4">
+                        <h3 className="text-2xl sm:text-4xl md:text-5xl font-black font-exo uppercase tracking-tight text-white leading-[1.05]">
+                          {slide.headlineTop}
+                          <span className="block text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-amber-400 to-cyan-300 mt-1">
+                            {slide.headlineHighlight}
+                          </span>
+                        </h3>
+
+                        <p className="text-xs sm:text-sm md:text-base text-slate-300 font-light leading-relaxed mt-4 max-w-2xl">
                           {slide.subtitle}
                         </p>
+                      </div>
+
+                      <div className="mt-6 pt-5 border-t border-white/10 max-w-2xl">
+                        <div className="grid grid-cols-3 gap-3 sm:gap-4 mb-6">
+                          {slide.metrics.map((m, idx) => (
+                            <div key={idx} className="bg-slate-900/80 border border-blue-500/25 p-3">
+                              <span className="block font-exo font-black text-sm sm:text-lg md:text-xl text-amber-400 leading-none">
+                                {m.value}
+                              </span>
+                              <span className="block text-[10px] sm:text-xs text-slate-300 mt-1 leading-tight">
+                                {m.label}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-4">
+                          <button
+                            onClick={() => handleBannerAction(slide.ctaAction)}
+                            className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-black uppercase tracking-widest text-xs px-7 py-3.5 transition-all shadow-lg flex items-center gap-2"
+                          >
+                            <span>{slide.ctaText}</span>
+                            <ChevronRight className="w-4 h-4" />
+                          </button>
+                          <span className="text-[11px] text-slate-400 font-mono">
+                            D.A.P.A. REPUESTOS MOLLE • DESDE 1974
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Columna visual con composición a sangre hasta el borde derecho */}
+                    <div className="lg:col-span-5 relative min-h-[260px] lg:min-h-full overflow-hidden">
+                      <img
+                        src={slide.mainImg}
+                        alt="Casa Central D.A.P.A. Repuestos Molle"
+                        className="absolute inset-0 w-full h-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t lg:bg-gradient-to-r from-[#061534] via-[#061534]/35 to-transparent" />
+
+                      {/* Tarjeta flotante inferior derecha */}
+                      <div className="absolute bottom-14 right-6 left-6 sm:left-auto sm:right-14 sm:max-w-[280px] bg-slate-950/90 backdrop-blur-md border border-amber-400/50 p-3.5 shadow-2xl">
+                        <div className="flex items-center gap-2 text-amber-400 text-[10px] font-black uppercase tracking-widest mb-1">
+                          <ShieldCheck className="w-4 h-4 flex-shrink-0" />
+                          <span>Compra Verificada</span>
+                        </div>
+                        <p className="text-[11px] text-slate-200 leading-snug">
+                          Confirmamos stock y precio actualizado en el día antes de que realices el pago.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* DISEÑO 2: SPOTLIGHT DE RUBROS PRINCIPALES D.A.P.A. */}
+                {slide.layout === 'dapa-lines-grid' && (
+                  <div className="w-full relative py-10 pb-16 px-6 sm:px-14 lg:px-20 flex flex-col justify-between">
+                    <img
+                      src={slide.bgImg}
+                      alt=""
+                      className="absolute inset-0 w-full h-full object-cover opacity-20"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-br from-[#030b1e]/95 via-[#071c47]/90 to-[#030917]/95" />
+
+                    <div className="relative z-10 max-w-7xl mx-auto w-full flex flex-col justify-between h-full gap-6">
+                      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
+                        <div>
+                          <span className="text-amber-400 font-exo font-bold text-[10px] sm:text-xs uppercase tracking-[0.2em] block mb-1.5">
+                            {slide.kicker}
+                          </span>
+                          <h3 className="text-2xl sm:text-4xl font-black font-exo uppercase text-white leading-tight">
+                            {slide.headlineTop}{' '}
+                            <span className="text-cyan-300">{slide.headlineHighlight}</span>
+                          </h3>
+                          <p className="text-xs sm:text-sm text-slate-300 max-w-2xl mt-2 font-light">
+                            {slide.subtitle}
+                          </p>
+                        </div>
+
                         <button
                           onClick={() => handleBannerAction(slide.ctaAction)}
-                          className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-black uppercase tracking-widest text-[11px] px-6 py-2.5 transition-all shadow-lg"
-                          style={{ clipPath: 'polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px)' }}
+                          className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black uppercase tracking-widest text-xs px-6 py-3.5 transition-all shadow-lg flex-shrink-0 w-fit"
                         >
                           {slide.ctaText}
                         </button>
                       </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+                        {slide.cards.map((card, idx) => {
+                          const matchedCat = categories.find((c) => {
+                            const n = (c.name || '').toLowerCase();
+                            if (card.tag === 'CRISTALES') return n.includes('cristal') || n.includes('parabrisa');
+                            if (card.tag === 'ILUMINACIÓN') return n.includes('optica') || n.includes('óptica') || n.includes('faro');
+                            if (card.tag === 'CARROCERÍA') return n.includes('paragolpe') || n.includes('carrocer');
+                            return false;
+                          });
+                          const cardImg = matchedCat ? getCategoryVisualImage(matchedCat) : card.img;
+
+                          return (
+                            <div
+                              key={idx}
+                              onClick={() => {
+                                if (matchedCat && onOpenCategory) {
+                                  onOpenCategory(matchedCat);
+                                } else {
+                                  navigateTo('inicio', 'catálogo');
+                                }
+                              }}
+                              className="group relative h-44 sm:h-52 overflow-hidden border border-white/15 hover:border-amber-400 bg-slate-950 cursor-pointer transition-all"
+                            >
+                              <img
+                                src={cardImg}
+                                alt={card.title}
+                                className="absolute inset-0 w-full h-full object-cover opacity-75 group-hover:scale-105 transition-transform duration-500"
+                              />
+                              <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/50 to-transparent" />
+                              <div className="relative z-10 h-full p-4 flex flex-col justify-between">
+                                <span className="bg-amber-400 text-slate-950 text-[9px] font-black uppercase tracking-widest px-2.5 py-0.5 w-fit">
+                                  {card.tag}
+                                </span>
+                                <div>
+                                  <h4 className="font-exo font-bold text-sm sm:text-base text-white uppercase group-hover:text-amber-300 transition-colors">
+                                    {card.title}
+                                  </h4>
+                                  <p className="text-[11px] text-slate-300 font-light mt-0.5">
+                                    {card.desc}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
-                </>
-              )}
+                )}
 
-              {slide.layout === 'video-full' && (
-                <>
-                  <video
-                    src={slide.videoSrc}
-                    poster={slide.poster}
-                    muted={isMuted}
-                    loop
-                    playsInline
-                    autoPlay
-                    className="absolute inset-0 w-full h-full object-cover"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-r from-[#040e29]/95 via-[#061947]/80 to-transparent" />
-                  <div className="relative z-10 h-full max-w-7xl mx-auto px-6 sm:px-10 flex flex-col justify-center items-start">
-                    <span className="bg-amber-400 text-slate-950 text-[10px] font-black uppercase tracking-widest px-3 py-1 -skew-x-12 mb-3">
-                      <span className="inline-block skew-x-12">{slide.badge}</span>
-                    </span>
-                    <h3 className="text-2xl sm:text-4xl md:text-5xl font-black font-exo uppercase text-white leading-tight">
-                      {slide.headlineTop} <br />
-                      <span className="text-cyan-300">{slide.headlineBottom}</span>
-                    </h3>
-                    <p className="text-xs sm:text-base text-slate-200 max-w-xl mt-3 mb-6 font-light">
-                      {slide.subtitle}
-                    </p>
-                    <div className="flex flex-wrap items-center gap-3">
-                      <button
-                        onClick={() => handleBannerAction(slide.ctaAction)}
-                        className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-black uppercase tracking-widest text-xs px-7 py-3.5 transition-all shadow-lg"
-                        style={{ clipPath: 'polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px)' }}
-                      >
-                        {slide.ctaText}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setIsMuted(!isMuted)}
-                        className="bg-slate-900/80 hover:bg-slate-900 text-white text-xs font-bold uppercase tracking-wider px-4 py-3.5 rounded-none border border-white/20 backdrop-blur-sm transition-colors"
-                      >
-                        {isMuted ? '🔇 Activar sonido' : '🔊 Silenciar'}
-                      </button>
+                {/* DISEÑO 3: VIDEO SECUENCIAL (ESCAPES -> PARABRISAS Y LUNETAS) */}
+                {slide.layout === 'video-full' && (
+                  <div className="w-full relative py-8 pb-16 px-6 sm:px-14 lg:px-20 flex items-center overflow-hidden">
+                    <video
+                      ref={bgVideoRef}
+                      key={`bg-${slide.videos[currentVideoIdx]?.src}`}
+                      src={slide.videos[currentVideoIdx]?.src}
+                      poster={slide.poster}
+                      muted
+                      playsInline
+                      autoPlay
+                      className="absolute inset-0 w-full h-full object-cover opacity-35 blur-md scale-110 pointer-events-none"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-r from-[#030917]/95 via-[#061840]/90 to-[#030917]/80" />
+
+                    <div className="relative z-10 max-w-7xl mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+                      <div className="lg:col-span-7">
+                        <span className="inline-block bg-amber-400 text-slate-950 text-[10px] font-black uppercase tracking-widest px-3 py-1 mb-3">
+                          {slide.badge}
+                        </span>
+                        <h3 className="text-2xl sm:text-4xl md:text-5xl font-black font-exo uppercase text-white leading-tight">
+                          {slide.headlineTop} <br />
+                          <span className="text-cyan-300">{slide.headlineBottom}</span>
+                        </h3>
+                        <p className="text-xs sm:text-base text-slate-200 mt-3 mb-5 font-light leading-relaxed max-w-xl">
+                          {slide.subtitle}
+                        </p>
+
+                        {/* Selector de video en reproducción secuencial */}
+                        <div className="flex flex-wrap items-center gap-2 mb-5">
+                          {slide.videos.map((vid, vIdx) => (
+                            <button
+                              key={vid.src}
+                              type="button"
+                              onClick={() => setCurrentVideoIdx(vIdx)}
+                              className={`px-3.5 py-2 text-[11px] font-bold uppercase tracking-wider border transition-all flex items-center gap-2 ${
+                                currentVideoIdx === vIdx
+                                  ? 'bg-blue-600 border-amber-400 text-white shadow-md'
+                                  : 'bg-slate-900/70 border-white/20 text-slate-300 hover:text-white hover:border-white/40'
+                              }`}
+                            >
+                              <span
+                                className={`w-2 h-2 rounded-full ${
+                                  currentVideoIdx === vIdx ? 'bg-amber-400 animate-pulse' : 'bg-slate-500'
+                                }`}
+                              />
+                              <span>
+                                {vIdx + 1}. {vid.title}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-3">
+                          <button
+                            onClick={() => handleBannerAction(slide.ctaAction)}
+                            className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-black uppercase tracking-widest text-xs px-7 py-3.5 transition-all shadow-lg"
+                          >
+                            {slide.ctaText}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setIsMuted(!isMuted)}
+                            className="bg-slate-900/80 hover:bg-slate-900 text-white text-xs font-bold uppercase tracking-wider px-4 py-3.5 rounded-none border border-white/20 backdrop-blur-sm transition-colors"
+                          >
+                            {isMuted ? '🔇 Activar sonido' : '🔊 Silenciar'}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="lg:col-span-5 flex justify-center">
+                        <div className="relative w-full max-w-[440px] h-[280px] sm:h-[340px] md:h-[380px] bg-slate-950/90 border-2 border-amber-400/70 shadow-[0_20px_50px_rgba(0,0,0,0.85)] overflow-hidden flex items-center justify-center">
+                          <video
+                            ref={mainVideoRef}
+                            key={slide.videos[currentVideoIdx]?.src}
+                            src={slide.videos[currentVideoIdx]?.src}
+                            poster={slide.poster}
+                            muted={isMuted}
+                            playsInline
+                            autoPlay
+                            onEnded={() => {
+                              setCurrentVideoIdx((prev) => (prev + 1) % slide.videos.length);
+                            }}
+                            className="w-full h-full object-contain"
+                          />
+                          <div className="absolute top-2.5 left-2.5 bg-slate-950/85 border border-white/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-300 pointer-events-none">
+                            ▶ Reproduciendo {currentVideoIdx + 1}/{slide.videos.length}: {slide.videos[currentVideoIdx]?.title}
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </>
-              )}
+                )}
+              </div>
+            ))}
+          </div>
 
-            </div>
-          ))}
-        </div>
+          {/* Flechas laterales flotantes en los extremos de la pantalla */}
+          <button
+            onClick={handlePrevBanner}
+            className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-30 p-2.5 sm:p-3 bg-slate-950/75 hover:bg-amber-400 text-white hover:text-slate-950 border border-white/15 transition-colors shadow-lg"
+            aria-label="Anterior"
+          >
+            <ChevronLeft className="w-5 h-5" />
+          </button>
 
-        {/* Flechas laterales sobre el banner a todo ancho */}
-        <button
-          onClick={handlePrevBanner}
-          className="absolute left-3 sm:left-6 top-1/2 -translate-y-1/2 z-20 p-2.5 sm:p-3 rounded-none bg-slate-950/70 hover:bg-amber-400 text-white hover:text-slate-950 border border-white/20 transition-all"
-          aria-label="Banner anterior"
-        >
-          <ChevronLeft className="w-5 h-5" />
-        </button>
-        <button
-          onClick={handleNextBanner}
-          className="absolute right-3 sm:right-6 top-1/2 -translate-y-1/2 z-20 p-2.5 sm:p-3 rounded-none bg-slate-950/70 hover:bg-amber-400 text-white hover:text-slate-950 border border-white/20 transition-all"
-          aria-label="Siguiente banner"
-        >
-          <ChevronRight className="w-5 h-5" />
-        </button>
+          <button
+            onClick={handleNextBanner}
+            className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-30 p-2.5 sm:p-3 bg-slate-950/75 hover:bg-amber-400 text-white hover:text-slate-950 border border-white/15 transition-colors shadow-lg"
+            aria-label="Siguiente"
+          >
+            <ChevronRight className="w-5 h-5" />
+          </button>
 
-        {/* Indicadores inferiores */}
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 bg-slate-950/60 px-3 py-1.5 rounded-none backdrop-blur-sm">
-          {SHOWCASE_BANNERS.map((b, i) => (
-            <button
-              key={b.id}
-              onClick={() => setCurrentBanner(i)}
-              className={`h-2 rounded-none transition-all ${currentBanner === i ? 'w-7 bg-amber-400' : 'w-2 bg-white/40 hover:bg-white/70'}`}
-              aria-label={`Ir al banner ${i + 1}`}
-            />
-          ))}
+          {/* Indicadores inferiores centrados flotantes */}
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 bg-slate-950/80 backdrop-blur-md px-3.5 py-2 border border-white/10 flex items-center gap-2">
+            {SHOWCASE_BANNERS.map((b, i) => (
+              <button
+                key={b.id}
+                onClick={() => setCurrentBanner(i)}
+                className={`h-2 rounded-none transition-all ${
+                  currentBanner === i ? 'w-7 bg-amber-400' : 'w-2 bg-white/35 hover:bg-white/60'
+                }`}
+                aria-label={`Ir al destacado ${i + 1}`}
+              />
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* 2) CINTA DE DESPLAZAMIENTO AUTOMÁTICO A TODO LO ANCHO (FOTOS DE PRODUCTOS + VIDEOS DE INSTAGRAM) */}
-      <div className="w-full overflow-hidden pause-on-hover relative z-20">
+      {/* CINTA CARRUSEL DE IMÁGENES DE PRODUCTOS DESTACADOS */}
+      <div className="w-full overflow-hidden pause-on-hover relative z-20 mt-8 sm:mt-10">
         <div className="marquee-container animate-marquee-left">
           {[0, 1].map((copyIdx) => (
             <div
@@ -3865,37 +4146,14 @@ function MediaShowcaseSection({ navigateTo }) {
                 <div
                   key={`${copyIdx}-${item.id}-${idx}`}
                   onClick={() => navigateTo('inicio', 'catálogo')}
-                  className="w-[270px] sm:w-[320px] md:w-[360px] h-[220px] sm:h-[250px] flex-shrink-0 relative rounded-none overflow-hidden border border-blue-400/30 hover:border-amber-400 group cursor-pointer shadow-xl bg-slate-950"
+                  className="w-[280px] sm:w-[340px] md:w-[380px] aspect-[1024/764] flex-shrink-0 relative rounded-none overflow-hidden border-2 border-blue-400/35 hover:border-amber-400 group cursor-pointer shadow-2xl bg-[#041432] transition-colors"
                 >
-                  {item.type === 'video' ? (
-                    <video
-                      src={item.src}
-                      poster={item.poster}
-                      muted
-                      loop
-                      playsInline
-                      autoPlay
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-                    />
-                  ) : (
-                    <img
-                      src={item.src}
-                      alt={item.title}
-                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-                      loading="lazy"
-                    />
-                  )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/25 to-transparent" />
-                  <span className="absolute top-3 left-3 bg-amber-400 text-slate-950 text-[9px] font-black uppercase tracking-widest px-2.5 py-1 -skew-x-12">
-                    <span className="inline-block skew-x-12">
-                      {item.type === 'video' ? `▶ ${item.tag}` : item.tag}
-                    </span>
-                  </span>
-                  <div className="absolute bottom-3 left-4 right-4">
-                    <h4 className="text-sm sm:text-base font-bold font-exo uppercase tracking-wide text-white group-hover:text-amber-300 transition-colors">
-                      {item.title}
-                    </h4>
-                  </div>
+                  <img
+                    src={item.src}
+                    alt={item.alt}
+                    className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
+                    loading="lazy"
+                  />
                 </div>
               ))}
             </div>
@@ -4364,6 +4622,8 @@ function CategoryDetailSection({ category, allProducts, isLoadingData, onBack, o
                       sku={viewingProduct.sku_code} 
                       imageUrl={viewingProduct.image_url} 
                       alt={viewingProduct.name} 
+                      category={!category.isSearchResult ? category : viewingProduct.category}
+                      categoryName={viewingProduct.category?.name || (!category.isSearchResult ? category.name : '')}
                       className="w-full h-full object-contain"
                     />
                   </div>
@@ -4421,8 +4681,13 @@ function CategoryDetailSection({ category, allProducts, isLoadingData, onBack, o
                   {viewingProduct.name}
                 </h1>
 
-                <div className="text-3xl sm:text-4xl font-bold font-exo text-blue-600 dark:text-blue-400 mb-6 pb-6 border-b border-slate-100 dark:border-slate-700">
-                  {viewingProduct.price > 0 ? `$${Number(viewingProduct.price).toLocaleString('es-AR')}` : 'Consultar Precio'}
+                <div className="mb-6 pb-6 border-b border-slate-100 dark:border-slate-700">
+                  <div className="text-3xl sm:text-4xl font-bold font-exo text-blue-600 dark:text-blue-400">
+                    {viewingProduct.price > 0 ? `$${Number(viewingProduct.price).toLocaleString('es-AR')}` : 'Consultar Precio'}
+                  </div>
+                  <p className="text-xs font-medium text-amber-600 dark:text-amber-400 mt-1.5">
+                    * Precio orientativo sujeto a cambios / desactualización. Primero solicitás el repuesto y recién abonás cuando te confirmemos stock y el importe final actualizado.
+                  </p>
                 </div>
 
                 <div className="mb-6">
@@ -4625,7 +4890,14 @@ function CategoryDetailSection({ category, allProducts, isLoadingData, onBack, o
                         className="bg-white dark:bg-slate-800 rounded-none border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm hover:shadow-lg transition-all duration-300 flex flex-col group cursor-pointer"
                       >
                         <div className="h-44 relative bg-slate-100 dark:bg-slate-900 overflow-hidden flex items-center justify-center">
-                          <ProductImage sku={prod.sku_code} imageUrl={prod.image_url} alt={prod.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                          <ProductImage
+                            sku={prod.sku_code}
+                            imageUrl={prod.image_url}
+                            alt={prod.name}
+                            category={!category.isSearchResult ? category : prod.category}
+                            categoryName={prod.category?.name || (!category.isSearchResult ? category.name : '')}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          />
                           <div className="absolute top-3 left-3 bg-slate-900/80 backdrop-blur-sm text-white text-[9px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-none">
                             {prod.brand?.name || 'Genérico'}
                           </div>
@@ -4666,8 +4938,11 @@ function CategoryDetailSection({ category, allProducts, isLoadingData, onBack, o
                             <h3 className="font-bold text-slate-800 dark:text-white text-sm leading-snug mb-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors line-clamp-2" title={prod.name}>
                               {prod.name}
                             </h3>
-                            <p className="text-lg font-bold font-exo text-blue-600 dark:text-blue-400 mb-3">
+                            <p className="text-lg font-bold font-exo text-blue-600 dark:text-blue-400">
                               {prod.price > 0 ? `$${Number(prod.price).toLocaleString('es-AR')}` : 'Consultar'}
+                            </p>
+                            <p className="text-[10px] font-medium text-amber-600 dark:text-amber-400 mb-2.5">
+                              * Precio sujeto a cambios / actualización
                             </p>
                           </div>
                           
@@ -4770,7 +5045,7 @@ function CategoryDetailSection({ category, allProducts, isLoadingData, onBack, o
   );
 }
 
-function ProcessSection({ setTutorialOpen }) {
+function ProcessSection() {
   const steps = [
     { id: 1, title: 'Elegí', desc: 'Agregá los repuestos al carrito.', icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-8 h-8 md:w-10 md:h-10 text-slate-400 group-hover:text-blue-600 transition-colors duration-500"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" className="group-hover:stroke-blue-600"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12" className="group-hover:stroke-blue-600"/><circle cx="12" cy="5" r="1" fill="currentColor" className="opacity-0 group-hover:animate-drop-1 text-blue-500"/><circle cx="10" cy="4" r="1" fill="currentColor" className="opacity-0 group-hover:animate-drop-2 text-blue-500"/><circle cx="14" cy="4" r="1" fill="currentColor" className="opacity-0 group-hover:animate-drop-3 text-blue-500"/></svg> },
     { id: 2, title: 'Cotizá', desc: 'Enviá el carrito por WhatsApp o via web.', icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-8 h-8 md:w-10 md:h-10 text-slate-400 group-hover:text-green-500 transition-colors duration-500"><rect width="14" height="20" x="5" y="2" rx="2" ry="2" className="group-hover:stroke-green-600"/><path d="M12 18h.01M8 6h8" className="group-hover:stroke-green-600"/><path d="M12 10.5c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zm0 6c2.5 0 4.5-2 4.5-4.5S14.5 7.5 12 7.5c-2.3 0-4.1 1.7-4.4 3.9-.1.6.4 1.1 1 .9 1.1-.3 2.1 1.1 1.5 2.1-.2.4.1.9.6.9.3 0 .6.2.7.5.1.3.1.6 0 1-.3.8-.4 1.7-.1 2.5.3.8 1.1 1.2 2 1.2z" fill="none" className="opacity-0 group-hover:animate-fade-in text-green-500"/><path d="M8 10h3M8 12h5" className="opacity-0 group-hover:animate-data-load text-slate-300"/></svg> },
@@ -4798,10 +5073,7 @@ function ProcessSection({ setTutorialOpen }) {
           <div className="text-center mb-12 md:mb-20">
             <PremiumTitle dark={true} className="text-2xl sm:text-3xl md:text-4xl font-bold mb-2 uppercase tracking-widest">Proceso de Compra</PremiumTitle>
             <div className="w-12 h-1 bg-amber-400 mx-auto my-3 rounded-none"></div>
-            <p className="text-sm md:text-lg text-slate-500 dark:text-slate-400 font-light mb-6">Cotización inteligente desde la web. Envíos a todo el país.</p>
-            <button onClick={() => setTutorialOpen(true)} className="inline-flex items-center gap-2 px-6 py-3 bg-blue-50 dark:bg-slate-800 text-blue-600 dark:text-blue-400 font-bold uppercase tracking-widest text-xs md:text-sm rounded-none border border-blue-200 dark:border-slate-700 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-500 dark:hover:text-white hover:border-transparent transition-all shadow-sm hover:shadow-lg focus:outline-none group">
-              <HelpCircle className="w-5 h-5 group-hover:rotate-12 transition-transform" /> Ver Instructivo Paso a Paso
-            </button>
+            <p className="text-sm md:text-lg text-slate-500 dark:text-slate-400 font-light">Cotización inteligente desde la web. Envíos a todo el país.</p>
           </div>
         </RevealOnScroll>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-10 md:gap-12 relative">
@@ -5143,17 +5415,7 @@ function ContactSection() {
 
 function Footer({ navigateTo }) {
   return (
-    <footer className="bg-[#0b1120] text-slate-400 pt-24 pb-16 md:pt-32 md:pb-16 relative z-10 overflow-hidden">
-      {/* Divisor diagonal superior desde la sección anterior */}
-      <div className="absolute top-0 left-0 w-full overflow-hidden leading-none pointer-events-none z-20 -mt-[1px]">
-        <svg viewBox="0 0 1440 80" preserveAspectRatio="none" className="w-full h-10 sm:h-14 md:h-20 block">
-          <polygon points="0,0 1440,0 0,72" className="fill-white dark:fill-slate-900 transition-colors duration-300" />
-          <polygon points="0,70 1440,0 1440,8 0,78" className="fill-blue-600/80" />
-        </svg>
-      </div>
-
-      {/* Detalle geométrico decorativo en esquina superior derecha */}
-      <div className="hidden md:block absolute top-8 right-8 w-8 h-8 bg-amber-400/90 pointer-events-none z-20" style={{ clipPath: 'polygon(100% 0, 0 20%, 75% 100%)' }}></div>
+    <footer className="bg-[#0b1120] text-slate-400 pt-16 pb-16 border-t-2 border-blue-600/80 relative z-10 overflow-hidden">
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 md:grid-cols-3 gap-12 items-start relative z-10">
         <div className="text-center md:text-left flex flex-col items-center md:items-start">
@@ -5333,11 +5595,6 @@ function FAQSection() {
         </svg>
       </div>
 
-      {/* Triángulo amarillo en esquina superior izquierda sobre el corte diagonal */}
-      <div className="hidden md:block absolute top-4 left-0 w-24 h-16 bg-amber-400 pointer-events-none z-20 shadow-md" style={{ clipPath: 'polygon(0 0, 100% 35%, 0 100%)' }}></div>
-      {/* Triángulo flotante amarillo en sector derecho */}
-      <div className="hidden md:block absolute top-24 right-12 w-10 h-10 bg-amber-400 pointer-events-none z-20 drop-shadow-md" style={{ clipPath: 'polygon(0 25%, 100% 0, 65% 100%)' }}></div>
-
       {/* Bandas diagonales decorativas de fondo */}
       <div className="hidden lg:block absolute inset-y-0 left-8 w-32 bg-white/[0.03] -skew-x-12 pointer-events-none"></div>
       <div className="hidden lg:block absolute inset-y-0 right-16 w-44 bg-blue-400/[0.06] -skew-x-12 pointer-events-none"></div>
@@ -5392,9 +5649,6 @@ function FAQSection() {
           ))}
         </div>
       </div>
-
-      {/* Cuña amarilla decorativa en esquina inferior derecha */}
-      <div className="hidden md:block absolute bottom-3 right-0 w-36 h-12 bg-amber-400 pointer-events-none z-20" style={{ clipPath: 'polygon(100% 0, 0 100%, 100% 100%)' }}></div>
 
       {/* Divisor diagonal inferior (subida hacia ContactSection) */}
       <div className="absolute bottom-0 left-0 w-full overflow-hidden leading-none pointer-events-none z-20 -mb-[1px]">
@@ -5532,7 +5786,7 @@ function TiendaPublica() {
         while (true) {
           const { data: batch, error } = await supabase
             .from('products')
-            .select(`*, brand:brands(name), category:categories(name)`)
+            .select(`*, brand:brands(name), category:categories(*)`)
             .eq('is_active', true)
             .range(from, from + step - 1);
 
@@ -5778,8 +6032,12 @@ const handleAddToCart = (product, qty = 1) => {
               onProductSearchSelect={handleProductSearchSelect}
               onSearchSubmit={handleFullSearch}
             />
-            <MediaShowcaseSection navigateTo={navigateTo} />
-            <ProcessSection setTutorialOpen={setTutorialOpen} />
+            <MediaShowcaseSection
+              navigateTo={navigateTo}
+              categories={dbCategories}
+              onOpenCategory={handleOpenCategory}
+            />
+            <ProcessSection />
             <FAQSection />
             <ContactSection />
           </>
@@ -5822,6 +6080,7 @@ const handleAddToCart = (product, qty = 1) => {
         removeItem={removeItem}
         currentUser={currentUser}
         clearCart={() => { setCart([]); localStorage.removeItem('dapa_cart'); }}
+        onOpenOrders={() => { setCartOpen(false); setOrdersModalOpen(true); }}
       />
 
       <CustomerOrdersModal

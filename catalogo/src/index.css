@@ -249,10 +249,14 @@ body {
 .rounded-2xl,
 .rounded-3xl,
 .rounded-none,
-.rounded-full:not(.animate-spin),
+.rounded-full:not(.animate-spin):not(.whatsapp-round-btn),
 input:not([type="radio"]),
 select,
 textarea,
 button {
   border-radius: 0px !important;
+}
+
+.whatsapp-round-btn {
+  border-radius: 9999px !important;
 }

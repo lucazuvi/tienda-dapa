@@ -1,5 +1,7 @@
 const DEFAULT_ORIGIN = 'https://tienda-dapa-6hoc.vercel.app';
 const ALLOWED_ORIGINS = [
+  'https://daparepuestos.com.ar',
+  'https://www.daparepuestos.com.ar',
   'https://tienda-dapa-6hoc.vercel.app',
   'http://localhost:5173',
   'http://localhost:4173',

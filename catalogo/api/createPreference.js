@@ -1,6 +1,8 @@
 // catalogo/api/createPreference.js
 const DEFAULT_ORIGIN = 'https://tienda-dapa-6hoc.vercel.app';
 const ALLOWED_ORIGINS = [
+  'https://daparepuestos.com.ar',
+  'https://www.daparepuestos.com.ar',
   'https://tienda-dapa-6hoc.vercel.app',
   'http://localhost:5173',
   'http://localhost:4173',
@@ -70,11 +72,12 @@ export default async function handler(req, res) {
       shippingCost = 0,
       shippingTitle = 'Costo de envío',
       metodoEnvio,
-      cpDestino
+      cpDestino,
+      useVerifiedOrderTotal
     } = req.body || {};
 
-    if (!orderId || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ error: 'Datos de orden o carrito inválidos' });
+    if (!orderId) {
+      return res.status(400).json({ error: 'Falta el número de pedido (orderId)' });
     }
 
     const accessToken = process.env.MP_ACCESS_TOKEN;
@@ -85,73 +88,130 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Faltan credenciales en el servidor' });
     }
 
-    // 2. Consultar precios reales en Supabase obligatoriamente
-    const productIds = items.map(i => Number(i.product?.id)).filter(id => !isNaN(id) && id > 0);
-    if (productIds.length !== items.length) {
-      return res.status(400).json({ error: 'Uno o más productos tienen un ID inválido' });
-    }
-
-    const sbRes = await fetch(
-      `${supabaseUrl}/rest/v1/products?id=in.(${productIds.join(',')})&select=id,price,name,sku_code`,
-      {
-        headers: {
-          apikey: supabaseKey,
-          Authorization: `Bearer ${supabaseKey}`
-        }
-      }
-    );
-
-    if (!sbRes.ok) {
-      return res.status(500).json({ error: 'No se pudieron verificar los precios en la base de datos' });
-    }
-
-    const dbProducts = await sbRes.json();
-    const dbPricesMap = {};
-    dbProducts.forEach(p => { dbPricesMap[p.id] = p; });
-
-    // 3. Armar ítems validados (rechaza si algún producto no existe o tiene precio <= 0)
     const mpItems = [];
-    let totalUnits = 0;
-    for (const item of items) {
-      const dbProd = dbPricesMap[item.product?.id];
-      if (!dbProd || Number(dbProd.price) <= 0) {
-        return res.status(422).json({
-          error: `El producto ${item.product?.name || ''} no tiene un precio válido en base de datos.`
+
+    // Caso A: Pedido ya confirmado por el administrador en el panel (stock y precio final verificado)
+    if (useVerifiedOrderTotal) {
+      const cleanOrderId = Number(orderId);
+      if (!Number.isFinite(cleanOrderId) || cleanOrderId <= 0) {
+        return res.status(400).json({ error: 'ID de pedido inválido' });
+      }
+
+      const orderRes = await fetch(
+        `${supabaseUrl}/rest/v1/orders?id=eq.${cleanOrderId}&select=id,total_estimated,status,notes,customer_name`,
+        {
+          headers: {
+            apikey: supabaseKey,
+            Authorization: `Bearer ${supabaseKey}`
+          }
+        }
+      );
+
+      if (!orderRes.ok) {
+        return res.status(500).json({ error: 'No se pudo verificar el pedido en la base de datos' });
+      }
+
+      const orderRows = await orderRes.json();
+      const orderRow = Array.isArray(orderRows) ? orderRows[0] : null;
+      if (!orderRow) {
+        return res.status(404).json({ error: 'No se encontró el pedido solicitado' });
+      }
+
+      const isEnabled =
+        orderRow.status === 'Confirmado - Listo para Pagar' ||
+        String(orderRow.notes || '').includes('[PAGO_HABILITADO]');
+
+      if (!isEnabled) {
+        return res.status(400).json({
+          error: 'Este pedido aún está pendiente de confirmación de stock y precio final por parte de D.A.P.A. Repuestos.'
         });
       }
 
-      const safeQuantity = Math.max(1, parseInt(item.quantity, 10) || 1);
-      totalUnits += safeQuantity;
-      mpItems.push({
-        id: String(dbProd.id),
-        title: dbProd.name,
-        description: dbProd.sku_code || '',
-        quantity: safeQuantity,
-        currency_id: 'ARS',
-        unit_price: Number(dbProd.price)
-      });
-    }
-
-    // 4. Validar el costo de envío en el servidor para evitar manipulación desde el navegador
-    let verifiedShipping = Math.max(0, Math.round(Number(shippingCost) || 0));
-    if (metodoEnvio === 'retiro' || metodoEnvio === 'acordar') {
-      verifiedShipping = 0;
-    } else if (metodoEnvio === 'correo_domicilio' || metodoEnvio === 'correo_sucursal') {
-      const minExpectedShipping = estimateFallbackShipping(cpDestino, totalUnits, metodoEnvio);
-      if (verifiedShipping < minExpectedShipping) {
-        verifiedShipping = minExpectedShipping;
+      const verifiedTotal = Math.round(Number(orderRow.total_estimated) * 100) / 100;
+      if (!Number.isFinite(verifiedTotal) || verifiedTotal <= 0) {
+        return res.status(422).json({ error: 'El total verificado del pedido no es válido.' });
       }
-    }
 
-    if (verifiedShipping > 0) {
       mpItems.push({
-        id: 'ENVIO',
-        title: String(shippingTitle).slice(0, 120),
-        description: 'Servicio de entrega',
+        id: `PEDIDO-${orderRow.id}`,
+        title: `Pedido Confirmado #${orderRow.id} - D.A.P.A. Repuestos Molle`,
+        description: `Cliente: ${orderRow.customer_name || 'Cliente Web'}`,
         quantity: 1,
         currency_id: 'ARS',
-        unit_price: verifiedShipping
+        unit_price: verifiedTotal
       });
+    } else {
+      if (!Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ error: 'Datos de orden o carrito inválidos' });
+      }
+
+      // 2. Consultar precios reales en Supabase obligatoriamente
+      const productIds = items.map(i => Number(i.product?.id)).filter(id => !isNaN(id) && id > 0);
+      if (productIds.length !== items.length) {
+        return res.status(400).json({ error: 'Uno o más productos tienen un ID inválido' });
+      }
+
+      const sbRes = await fetch(
+        `${supabaseUrl}/rest/v1/products?id=in.(${productIds.join(',')})&select=id,price,name,sku_code`,
+        {
+          headers: {
+            apikey: supabaseKey,
+            Authorization: `Bearer ${supabaseKey}`
+          }
+        }
+      );
+
+      if (!sbRes.ok) {
+        return res.status(500).json({ error: 'No se pudieron verificar los precios en la base de datos' });
+      }
+
+      const dbProducts = await sbRes.json();
+      const dbPricesMap = {};
+      dbProducts.forEach(p => { dbPricesMap[p.id] = p; });
+
+      // 3. Armar ítems validados (rechaza si algún producto no existe o tiene precio <= 0)
+      let totalUnits = 0;
+      for (const item of items) {
+        const dbProd = dbPricesMap[item.product?.id];
+        if (!dbProd || Number(dbProd.price) <= 0) {
+          return res.status(422).json({
+            error: `El producto ${item.product?.name || ''} no tiene un precio válido en base de datos.`
+          });
+        }
+
+        const safeQuantity = Math.max(1, parseInt(item.quantity, 10) || 1);
+        totalUnits += safeQuantity;
+        mpItems.push({
+          id: String(dbProd.id),
+          title: dbProd.name,
+          description: dbProd.sku_code || '',
+          quantity: safeQuantity,
+          currency_id: 'ARS',
+          unit_price: Number(dbProd.price)
+        });
+      }
+
+      // 4. Validar el costo de envío en el servidor para evitar manipulación desde el navegador
+      let verifiedShipping = Math.max(0, Math.round(Number(shippingCost) || 0));
+      if (metodoEnvio === 'retiro' || metodoEnvio === 'acordar') {
+        verifiedShipping = 0;
+      } else if (metodoEnvio === 'correo_domicilio' || metodoEnvio === 'correo_sucursal') {
+        const minExpectedShipping = estimateFallbackShipping(cpDestino, totalUnits, metodoEnvio);
+        if (verifiedShipping < minExpectedShipping) {
+          verifiedShipping = minExpectedShipping;
+        }
+      }
+
+      if (verifiedShipping > 0) {
+        mpItems.push({
+          id: 'ENVIO',
+          title: String(shippingTitle).slice(0, 120),
+          description: 'Servicio de entrega',
+          quantity: 1,
+          currency_id: 'ARS',
+          unit_price: verifiedShipping
+        });
+      }
     }
 
     const webhookBaseUrl = process.env.PUBLIC_SITE_URL || (safeOrigin.startsWith('https://') ? safeOrigin : DEFAULT_ORIGIN);
